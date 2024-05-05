@@ -65,7 +65,7 @@ int SoundEnabled()
 
 #define DEFAULT_PITCH 1.0f
 
-static FRandom pr_soundpitch ("SoundPitch");
+static FRandom pr_soundpitch ("SoundPitch", true);
 SoundEngine* soundEngine;
 
 //==========================================================================
