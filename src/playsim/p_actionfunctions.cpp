@@ -5396,7 +5396,7 @@ enum ESetAnimationFlags
 	SAF_NOOVERRIDE = 1 << 2,
 };
 
-extern double getCurrentFrame(const AnimOverride &anim, double tic);
+extern double getCurrentFrame(const AnimOverride &anim, double tic, bool *looped);
 
 void SetAnimationInternal(AActor * self, FName animName, double framerate, int startFrame, int loopFrame, int endFrame, int interpolateTics, int flags, double ticFrac)
 {
@@ -5486,7 +5486,13 @@ void SetAnimationInternal(AActor * self, FName animName, double framerate, int s
 
 	if(!(flags & SAF_INSTANT))
 	{
-		self->modelData->prevAnim.startFrame = getCurrentFrame(self->modelData->prevAnim, tic);
+		bool looped = false;
+		self->modelData->prevAnim.startFrame = getCurrentFrame(self->modelData->prevAnim, tic, &looped);
+		
+		if(!looped)
+		{
+			self->modelData->prevAnim.flags &= ~ANIMOVERRIDE_LOOP;
+		}
 		
 		int startTic = floor(tic) + interpolateTics;
 		self->modelData->curAnim.startTic = startTic;
@@ -5540,7 +5546,7 @@ void SetAnimationFrameRateInternal(AActor * self, double framerate, double ticFr
 		return;
 	}
 
-	double frame = getCurrentFrame(self->modelData->curAnim, tic);
+	double frame = getCurrentFrame(self->modelData->curAnim, tic, nullptr);
 
 	self->modelData->curAnim.startFrame = frame;
 	self->modelData->curAnim.startTic = tic;
