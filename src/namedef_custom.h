@@ -674,6 +674,7 @@ xx(Missilecross)
 xx(Anycross)
 xx(Monsteruse)
 xx(Monsterpush)
+xx(Walking)
 
 xx(ZDoom)
 xx(ZDoomTranslated)
