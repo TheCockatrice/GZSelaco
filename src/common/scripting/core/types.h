@@ -38,6 +38,7 @@ enum
 	VARF_ClearScope		= (1<<23),  // [ZZ] clearscope: this method ignores the member access chain that leads to it and is always plain data.
 	VARF_Abstract		= (1<<24),  // [Player701] Function does not have a body and must be overridden in subclasses
 	VARF_Unit			= (1<<25),	// @Cockatrice Function is limited to the container in which it is defined
+	VARF_SafeConst		= (1<<26),  // [Jay] properly-working const function/unsafe clearscope field
 };
 
 // Basic information shared by all types ------------------------------------
@@ -745,7 +746,8 @@ extern PStruct* TypeFQuaternion;
 extern PStruct *TypeColorStruct;
 extern PStruct *TypeStringStruct;
 
-extern PStruct *TypeSoundHandleStruct;extern PStruct* TypeQuaternionStruct;
+extern PStruct *TypeSoundHandleStruct;
+extern PStruct* TypeQuaternionStruct;
 extern PStatePointer *TypeState;
 extern PPointer *TypeFont;
 extern PStateLabel *TypeStateLabel;

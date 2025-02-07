@@ -398,7 +398,7 @@ public:
 
 	FxIdentifier(FName i, const FScriptPosition &p);
 	FxExpression *Resolve(FCompileContext&);
-	FxExpression *ResolveMember(FCompileContext&, PContainerType*, FxExpression*&, PContainerType*);
+	FxExpression *ResolveMember(FCompileContext&, PContainerType*, FxExpression*&, PContainerType*, bool isConst = false);
 };
 
 
@@ -1492,8 +1492,9 @@ class FxStructMember : public FxMemberBase
 {
 public:
 	FxExpression *classx;
+	bool IsConst;
 
-	FxStructMember(FxExpression*, PField*, const FScriptPosition&);
+	FxStructMember(FxExpression*, PField*, const FScriptPosition&, bool isConst = false);
 	~FxStructMember();
 	FxExpression *Resolve(FCompileContext&);
 	bool RequestAddress(FCompileContext &ctx, bool *writable);
@@ -1511,7 +1512,7 @@ class FxClassMember : public FxStructMember
 {
 public:
 
-	FxClassMember(FxExpression*, PField*, const FScriptPosition&);
+	FxClassMember(FxExpression*, PField*, const FScriptPosition&, bool isConst = false);
 };
 
 //==========================================================================

@@ -1483,8 +1483,8 @@ bool ZCCCompiler::CompileFields(PContainerType *type, TArray<ZCC_VarDeclarator *
 
 		// For structs only allow 'deprecated', for classes exclude function qualifiers.
 		int notallowed = forstruct? 
-			ZCC_Latent | ZCC_Final | ZCC_Action | ZCC_Static | ZCC_FuncConst | ZCC_Abstract | ZCC_Virtual | ZCC_Override | ZCC_Meta | ZCC_Extension | ZCC_VirtualScope | ZCC_ClearScope :
-			ZCC_Latent | ZCC_Final | ZCC_Action | ZCC_Static | ZCC_FuncConst | ZCC_Abstract | ZCC_Virtual | ZCC_Override | ZCC_Extension | ZCC_VirtualScope | ZCC_ClearScope;
+			ZCC_Latent | ZCC_Final | ZCC_Action | ZCC_Static | ZCC_FuncConst | ZCC_FuncConstUnsafe | ZCC_Abstract | ZCC_Virtual | ZCC_Override | ZCC_Meta | ZCC_Extension | ZCC_VirtualScope | ZCC_ClearScope :
+			ZCC_Latent | ZCC_Final | ZCC_Action | ZCC_Static | ZCC_FuncConst | ZCC_FuncConstUnsafe | ZCC_Abstract | ZCC_Virtual | ZCC_Override | ZCC_Extension | ZCC_VirtualScope | ZCC_ClearScope;
 
 		// Some internal fields need to be set to clearscope.
 		if (fileSystem.GetFileContainer(Lump) == 0) notallowed &= ~ZCC_ClearScope;
@@ -2459,7 +2459,9 @@ void ZCCCompiler::CompileFunction(ZCC_StructWork *c, ZCC_FuncDeclarator *f, bool
 		if (f->Flags & ZCC_Abstract) varflags |= VARF_Abstract;
 		if (f->Flags & ZCC_Unit) varflags |= VARF_Unit;
 		if (f->Flags & ZCC_VarArg) varflags |= VARF_VarArg;
-		if (f->Flags & ZCC_FuncConst) varflags |= VARF_ReadOnly; // FuncConst method is internally marked as VARF_ReadOnly
+		if (f->Flags & ZCC_FuncConst) varflags |= (mVersion >= MakeVersion(4, 15, 0) ? VARF_ReadOnly | VARF_SafeConst : VARF_ReadOnly); // FuncConst method is internally marked as VARF_ReadOnly
+		if (f->Flags & ZCC_FuncConstUnsafe) varflags |= VARF_ReadOnly;
+
 
 		// @Cockatrice: This is truly some bullshit and if you came looking for this and found it, feel free to hate me
 		if (c->NodeName() == NAME_StatDatabase &&
