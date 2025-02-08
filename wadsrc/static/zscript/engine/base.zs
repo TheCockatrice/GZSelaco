@@ -800,6 +800,8 @@ class Object native
 	private native static Object BuiltinClassCast(Object inptr, Class<Object> test);
 	private native static Function<void> BuiltinFunctionPtrCast(Function<void> inptr, voidptr newtype);
 	
+	native static Name ValidateNameIndex(int index);
+
 	native static uint MSTime();
 	native static double MSTimeF();
 	native vararg static void ThrowAbortException(String fmt, ...);
