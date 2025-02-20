@@ -805,6 +805,7 @@ class Object native
 	private native static Function<void> BuiltinFunctionPtrCast(Function<void> inptr, voidptr newtype);
 	
 	native static Name ValidateNameIndex(int index);
+	static class<Object> FindClass(Name cls, class<Object> baseType = null) { return BuiltinNameToClass(cls, baseType); }
 
 	native static uint MSTime();
 	native static double MSTimeF();
