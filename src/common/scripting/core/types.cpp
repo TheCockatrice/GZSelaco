@@ -365,6 +365,7 @@ void PType::StaticInit()
 	TypeVector2->RegType = REGT_FLOAT;
 	TypeVector2->RegCount = 2;
 	TypeVector2->isOrdered = true;
+	TypeVector2->mDescriptiveName = "Vector2";
 
 	TypeVector3 = new PStruct(NAME_Vector3, nullptr);
 	TypeVector3->AddField(NAME_X, TypeFloat64);
@@ -379,6 +380,7 @@ void PType::StaticInit()
 	TypeVector3->RegType = REGT_FLOAT;
 	TypeVector3->RegCount = 3;
 	TypeVector3->isOrdered = true;
+	TypeVector3->mDescriptiveName = "Vector3";
 
 	TypeVector4 = new PStruct(NAME_Vector4, nullptr);
 	TypeVector4->AddField(NAME_X, TypeFloat64);
@@ -395,6 +397,7 @@ void PType::StaticInit()
 	TypeVector4->RegType = REGT_FLOAT;
 	TypeVector4->RegCount = 4;
 	TypeVector4->isOrdered = true;
+	TypeVector4->mDescriptiveName = "Vector4";
 
 
 	TypeFVector2 = new PStruct(NAME_FVector2, nullptr);
@@ -407,6 +410,7 @@ void PType::StaticInit()
 	TypeFVector2->RegType = REGT_FLOAT;
 	TypeFVector2->RegCount = 2;
 	TypeFVector2->isOrdered = true;
+	TypeFVector2->mDescriptiveName = "FVector2";
 	TypeFVector2->SetLocalType(TypeVector2);
 
 	TypeFVector3 = new PStruct(NAME_FVector3, nullptr);
@@ -422,6 +426,7 @@ void PType::StaticInit()
 	TypeFVector3->RegType = REGT_FLOAT;
 	TypeFVector3->RegCount = 3;
 	TypeFVector3->isOrdered = true;
+	TypeFVector3->mDescriptiveName = "FVector3";
 	TypeFVector3->SetLocalType(TypeVector3);
 
 	TypeFVector4 = new PStruct(NAME_FVector4, nullptr);
@@ -439,6 +444,7 @@ void PType::StaticInit()
 	TypeFVector4->RegType = REGT_FLOAT;
 	TypeFVector4->RegCount = 4;
 	TypeFVector4->isOrdered = true;
+	TypeFVector4->mDescriptiveName = "FVector4";
 	TypeFVector4->SetLocalType(TypeVector4);
 
 
@@ -456,6 +462,7 @@ void PType::StaticInit()
 	TypeQuaternion->moveOp = OP_MOVEV4;
 	TypeQuaternion->RegType = REGT_FLOAT;
 	TypeQuaternion->RegCount = 4;
+	TypeQuaternion->mDescriptiveName = "Quat";
 	TypeQuaternion->isOrdered = true;
 
 	TypeFQuaternion = new PStruct(NAME_FQuat, nullptr);
@@ -473,6 +480,7 @@ void PType::StaticInit()
 	TypeFQuaternion->RegType = REGT_FLOAT;
 	TypeFQuaternion->RegCount = 4;
 	TypeFQuaternion->isOrdered = true;
+	TypeFQuaternion->mDescriptiveName = "FQuat";
 	TypeFQuaternion->SetLocalType(TypeQuaternion);
 
 
