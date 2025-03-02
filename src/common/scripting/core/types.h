@@ -111,6 +111,8 @@ public:
 	EScopeFlags ScopeFlags = (EScopeFlags)0;
 	bool            SizeKnown = true;
 
+	bool			TypeInternal = false;
+
 	PType * LocalType = nullptr;
 
 	PType * SetLocalType(PType * LocalType) { this->LocalType = LocalType; return this; }
