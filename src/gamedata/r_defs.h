@@ -1513,6 +1513,7 @@ struct linebase_t
 struct line_t : public linebase_t
 {
 	uint32_t	flags, flags2;
+	uint32_t	blockBits;	// @Cockatrice - Compared to actor for collision
 	uint32_t	activation;	// activation type
 	int			special;
 	int			args[5];	// <--- hexen-style arguments (expanded to ZDoom's full width)

@@ -27,9 +27,6 @@ class PClassType;
 struct FNamespaceManager;
 class PSymbol;
 class PField;
-class PObjectPointer;
-class PDynArray;
-class PMap;
 
 enum
 {
@@ -46,9 +43,9 @@ public:
 	void InitializeSpecials(void* addr, void* defaults, TArray<FTypeAndOffset> PClass::* Inits);
 	void WriteAllFields(FSerializer &ar, const void *addr) const;
 	bool ReadAllFields(FSerializer &ar, void *addr) const;
-	int FindVirtualIndex(FName name, PFunction::Variant *variant, PFunction *parentfunc, bool exactReturnType, bool ignorePointerReadOnly);
+	int FindVirtualIndex(FName name, PFunction::Variant *variant, PFunction *parentfunc, bool exactReturnType);
 	PSymbol *FindSymbol(FName symname, bool searchparents) const;
-	PField *AddField(FName name, PType *type, uint32_t flags, int fileno = 0);
+	PField *AddField(FName name, PType *type, uint32_t flags);
 	void InitializeDefaults();
 
 	static void StaticInit();
@@ -56,32 +53,25 @@ public:
 
 	// Per-class information -------------------------------------
 	PClass				*ParentClass = nullptr;	// the class this class derives from
-	const size_t * Pointers = nullptr;			// native object pointers defined by this class *only*
-
-	mutable size_t FlatPointersSize = 0;
-	mutable const std::pair<size_t, PObjectPointer*> * FlatPointers = nullptr;	// object pointers defined by this class and all its superclasses; not initialized by default.
-	mutable size_t ArrayPointersSize = 0;
-	mutable const std::pair<size_t, PDynArray *> * ArrayPointers = nullptr;	// dynamic arrays containing object pointers.
-	mutable size_t MapPointersSize = 0;
-	mutable const std::pair<size_t, PMap *>	* MapPointers = nullptr;	// maps containing object pointers.
-
+	const size_t		*Pointers = nullptr;		// object pointers defined by this class *only*
+	const size_t		*FlatPointers = nullptr;	// object pointers defined by this class and all its superclasses; not initialized by default
+	const size_t		*ArrayPointers = nullptr;	// dynamic arrays containing object pointers.
 	uint8_t				*Defaults = nullptr;
 	uint8_t				*Meta = nullptr;			// Per-class static script data
 	unsigned			 Size = sizeof(DObject);
 	unsigned			 MetaSize = 0;
 	FName				 TypeName = NAME_None;
 	FName				 SourceLumpName = NAME_None;
+	int					 SourceLump = -1;
 	bool				 bRuntimeClass = false;	// class was defined at run-time, not compile-time
 	bool				 bDecorateClass = false;	// may be subject to some idiosyncracies due to DECORATE backwards compatibility
 	bool				 bAbstract = false;
-	bool				 bSealed = false;
-	bool				 bFinal = false;
+	bool				 bUnitOnly = false;
 	bool				 bOptional = false;
 	TArray<VMFunction*>	 Virtuals;	// virtual function table
 	TArray<FTypeAndOffset> MetaInits;
 	TArray<FTypeAndOffset> SpecialInits;
 	TArray<PField *> Fields;
-	TArray<FName> SealedRestriction;
 	PClassType			*VMType = nullptr;
 
 	void (*ConstructNative)(void *);
@@ -91,14 +81,11 @@ public:
 	~PClass();
 	void InsertIntoHash(bool native);
 	DObject *CreateNew();
-	PClass *CreateDerivedClass(FName name, unsigned int size, bool *newlycreated = nullptr, int fileno = 0);
+	PClass *CreateDerivedClass(FName name, unsigned int size, bool *newlycreated = nullptr);
 
 	void InitializeActorInfo();
-
-	void BuildFlatPointers() const;
-	void BuildArrayPointers() const;
-	void BuildMapPointers() const;
-
+	void BuildFlatPointers();
+	void BuildArrayPointers();
 	void DestroySpecials(void *addr);
 	void DestroyMeta(void *addr);
 	const PClass *NativeClass() const;

@@ -1,0 +1,36 @@
+// Must be sorted in identification order (easiest to recognize first!)
+
+IWad
+{
+	Name = "Selaco Debug"
+	Autoname = "selaco.aos.debug"
+	Game = "Doom"
+	Config = "Selaco"
+	IWADName = "selaco.wad"
+
+	BannerColors = "32 54 43", "c6 dc d1"
+}
+
+IWad
+{
+	Name = "Selaco Demo"
+	Autoname = "selaco.aos.demo"
+	Game = "Doom"
+	Config = "Selaco"
+	IWADName = "selaco.ipk3"
+
+	BannerColors = "32 54 43", "c6 dc d1"
+}
+
+
+Names
+{
+	"selaco.wad"
+	"selaco.ipk3"
+}
+
+Order	// Order in the IWAD selection box
+{
+	"Selaco Debug",
+	"Selaco Demo"
+}

@@ -1,6 +1,5 @@
 #pragma once
 #include <stdint.h>
-#include <memory>
 #include "vectors.h"
 #include "floatrect.h"
 #include "refcounted.h"
@@ -8,6 +7,7 @@
 #include "palentry.h"
 #include "zstring.h"
 #include "textureid.h"
+#include "printf.h"
 
 // 15 because 0th texture is our texture
 #define MAX_CUSTOM_HW_SHADER_TEXTURES 15
@@ -61,20 +61,7 @@ enum EGameTexFlags
 	GTexf_AutoMaterialsAdded = 256,			// AddAutoMaterials has been called on this texture.
 	GTexf_OffsetsNotForFont = 512,			// The offsets must be ignored when using this texture in a font.
 	GTexf_NoTrim = 1024,					// Don't perform trimming on this texture.
-	GTexf_Seen = 2048,						// Set to true when the texture is being used for rendering. Must be cleared manually if the check is needed.
-	GTexf_NoMipmap = 4096,					// Disable mipmapping for this texture
-};
-
-struct FMaterialLayers
-{
-	RefCountedPtr<FTexture> Detailmap;
-	RefCountedPtr<FTexture> Glowmap;
-	RefCountedPtr<FTexture> Normal;							// Normal map texture
-	RefCountedPtr<FTexture> Specular;						// Specular light texture for the diffuse+normal+specular light model
-	RefCountedPtr<FTexture> Metallic;						// Metalness texture for the physically based rendering (PBR) light model
-	RefCountedPtr<FTexture> Roughness;						// Roughness texture for PBR
-	RefCountedPtr<FTexture> AmbientOcclusion;				// Ambient occlusion texture for PBR
-	RefCountedPtr<FTexture> CustomShaderTextures[MAX_CUSTOM_HW_SHADER_TEXTURES]; // Custom texture maps for custom hardware shaders
+	GTexf_NoMips = 2048						// Mipmaps are not required for this texture. Should be in FTexture, but for practicality purposes it is here now.
 };
 
 // Refactoring helper to allow piece by piece adjustment of the API
@@ -86,7 +73,14 @@ class FGameTexture
 	// Material layers. These are shared so reference counting is used.
 	RefCountedPtr<FTexture> Base;
 	RefCountedPtr<FTexture> Brightmap;
-	std::unique_ptr<FMaterialLayers> Layers;
+	RefCountedPtr<FTexture> Detailmap;
+	RefCountedPtr<FTexture> Glowmap;
+	RefCountedPtr<FTexture> Normal;							// Normal map texture
+	RefCountedPtr<FTexture> Specular;						// Specular light texture for the diffuse+normal+specular light model
+	RefCountedPtr<FTexture> Metallic;						// Metalness texture for the physically based rendering (PBR) light model
+	RefCountedPtr<FTexture> Roughness;						// Roughness texture for PBR
+	RefCountedPtr<FTexture> AmbientOcclusion;				// Ambient occlusion texture for PBR
+	RefCountedPtr<FTexture> CustomShaderTextures[MAX_CUSTOM_HW_SHADER_TEXTURES]; // Custom texture maps for custom hardware shaders
 
 	FString Name;
 	FTextureID id;
@@ -142,7 +136,10 @@ public:
 	void AddAutoMaterials();
 	bool ShouldExpandSprite();
 	void SetupSpriteData();
+	static void GenerateInitialSpriteData(SpritePositioningInfo *info, FBitmap *bmp, bool expandSprite = false, bool noTrimming = false);	// @Cockatrice - Generate the data with an already-loaded image in a thread
+	static void GenerateEmptySpriteData(SpritePositioningInfo* info, int width, int height);												// @Cockatrice - Generate basic data for images we can't work with
 	void SetSpriteRect();
+	void SetSpriteRect(SpritePositioningInfo *spi, bool raw = false);																		// @Cockatrice - Use this after loading spi in a thread
 
 	ETextureType GetUseType() const { return UseType; }
 	void SetUpscaleFlag(int what, bool manual = false) 
@@ -169,7 +166,9 @@ public:
 	bool useWorldPanning() const { return !!(flags & GTexf_WorldPanning);  }
 	void SetWorldPanning(bool on) { if (on) flags |= GTexf_WorldPanning; else flags &= ~GTexf_WorldPanning; }
 	void SetNoTrimming(bool on) { if (on) flags |= GTexf_NoTrim; else flags &= ~GTexf_NoTrim; }
+	void SetNoMipmaps(bool on) { if (on) flags |= GTexf_NoMips; else flags &= ~GTexf_NoMips; }
 	bool GetNoTrimming() { return !!(flags & GTexf_NoTrim); }
+	bool GetNoMipmaps() const { return !!(flags & GTexf_NoMips); }
 	bool allowNoDecals() const { return !!(flags & GTexf_NoDecals);	}
 	void SetNoDecals(bool on) { if (on) flags |= GTexf_NoDecals; else flags &= ~GTexf_NoDecals; }
 	void SetOffsetsNotForFont() { flags |= GTexf_OffsetsNotForFont; }
@@ -181,19 +180,17 @@ public:
 	bool isHardwareCanvas() const { return Base->isHardwareCanvas(); }	// There's two here so that this can deal with software canvases in the hardware renderer later.
 	bool isSoftwareCanvas() const { return Base->isCanvas(); }
 
+	// @Cockatrice - Supply some way for the rest of the engine to tell if all images are loaded for this texture
+	bool isHardwareCached() {
+		return false;
+	}
+
 	void SetTranslucent(bool on) { Base->bTranslucent = on; }
 	void SetUseType(ETextureType type) { UseType = type; }
 	int GetRotations() const { return Rotations; }
 	void SetRotations(int rot) { Rotations = int16_t(rot); }
 	void SetSkyOffset(int offs) { SkyOffset = offs; }
 	int GetSkyOffset() const { return SkyOffset; }
-	void setSeen() { flags |= GTexf_Seen; }
-	bool isSeen(bool reset) 
-	{ 
-		int v = flags & GTexf_Seen;   
-		if (reset) flags &= ~GTexf_Seen;
-		return v;
-	}
 
 	ISoftwareTexture* GetSoftwareTexture()
 	{
@@ -219,25 +216,14 @@ public:
 		if (lay.Glossiness > -1000) Glossiness = lay.Glossiness;
 		if (lay.SpecularLevel > -1000) SpecularLevel = lay.SpecularLevel;
 		if (lay.Brightmap) Brightmap = lay.Brightmap->GetTexture();
-
-		bool needlayers = (lay.Normal || lay.Specular || lay.Metallic || lay.Roughness || lay.AmbientOcclusion);
-		for (int i = 0; i < MAX_CUSTOM_HW_SHADER_TEXTURES && !needlayers; i++)
+		if (lay.Normal) Normal = lay.Normal->GetTexture();
+		if (lay.Specular) Specular = lay.Specular->GetTexture();
+		if (lay.Metallic) Metallic = lay.Metallic->GetTexture();
+		if (lay.Roughness) Roughness = lay.Roughness->GetTexture();
+		if (lay.AmbientOcclusion) AmbientOcclusion = lay.AmbientOcclusion->GetTexture();
+		for (int i = 0; i < MAX_CUSTOM_HW_SHADER_TEXTURES; i++)
 		{
-			if (lay.CustomShaderTextures[i]) needlayers = true;
-		}
-		if (needlayers)
-		{
-			Layers = std::make_unique<FMaterialLayers>();
-
-			if (lay.Normal) Layers->Normal = lay.Normal->GetTexture();
-			if (lay.Specular) Layers->Specular = lay.Specular->GetTexture();
-			if (lay.Metallic) Layers->Metallic = lay.Metallic->GetTexture();
-			if (lay.Roughness) Layers->Roughness = lay.Roughness->GetTexture();
-			if (lay.AmbientOcclusion) Layers->AmbientOcclusion = lay.AmbientOcclusion->GetTexture();
-			for (int i = 0; i < MAX_CUSTOM_HW_SHADER_TEXTURES; i++)
-			{
-				if (lay.CustomShaderTextures[i]) Layers->CustomShaderTextures[i] = lay.CustomShaderTextures[i]->GetTexture();
-			}
+			if (lay.CustomShaderTextures[i]) CustomShaderTextures[i] = lay.CustomShaderTextures[i]->GetTexture();
 		}
 	}
 	float GetGlossiness() const { return Glossiness; }
@@ -265,9 +251,6 @@ public:
 	void SetDisableFullbright(bool on) { if (on) flags |= GTexf_DisableFullbrightSprites; else flags &= ~GTexf_DisableFullbrightSprites; }
 	void SetGlowing(PalEntry color) { flags = (flags & ~GTexf_AutoGlowing) | GTexf_Glowing; GlowColor = color; }
 	void SetDisableBrightmap() { flags |= GTexf_BrightmapChecked; Brightmap = nullptr; }
-
-	bool isNoMipmap() const { return !!(flags & GTexf_NoMipmap); }
-	void SetNoMipmap(bool set) { if (set) flags |= GTexf_NoMipmap; else flags &= ~GTexf_NoMipmap; }
 
 	bool isUserContent() const;
 	int CheckRealHeight() { return xs_RoundToInt(Base->CheckRealHeight() / ScaleY); }
@@ -314,6 +297,7 @@ public:
 		DisplayHeight = TexelHeight / y;
 	}
 
+	bool HasSpritePositioning() { return spi != nullptr; }
 	const SpritePositioningInfo& GetSpritePositioning(int which) { if (spi == nullptr) SetupSpriteData(); return spi[which]; }
 	int GetAreas(FloatRect** pAreas) const;
 
@@ -335,20 +319,13 @@ public:
 	void GetLayers(TArray<FTexture*>& layers)
 	{
 		layers.Clear();
-		for (auto tex : { Base.get(), Brightmap.get() })
+		for (auto tex : { Base.get(), Brightmap.get(), Detailmap.get(), Glowmap.get(), Normal.get(), Specular.get(), Metallic.get(), Roughness.get(), AmbientOcclusion.get() })
 		{
 			if (tex != nullptr) layers.Push(tex);
 		}
-		if (Layers)
+		for (auto& tex : CustomShaderTextures)
 		{
-			for (auto tex : { Layers->Detailmap.get(), Layers->Glowmap.get(), Layers->Normal.get(), Layers->Specular.get(), Layers->Metallic.get(), Layers->Roughness.get(), Layers->AmbientOcclusion.get() })
-			{
-				if (tex != nullptr) layers.Push(tex);
-			}
-			for (auto& tex : Layers->CustomShaderTextures)
-			{
-				if (tex != nullptr) layers.Push(tex.get());
-			}
+			if (tex != nullptr) layers.Push(tex.get());
 		}
 	}
 
@@ -371,59 +348,28 @@ public:
 	}
 	FTexture* GetGlowmap()
 	{
-		if (!Layers) return nullptr;
-		return Layers->Glowmap.get();
+		return Glowmap.get();
 	}
 	FTexture* GetDetailmap()
 	{
-		if (!Layers) return nullptr;
-		return Layers->Detailmap.get();
-	}
-	FTexture* GetNormalmap()
-	{
-		if (!Layers) return nullptr;
-		return Layers->Normal.get();
-	}
-	FTexture* GetSpecularmap()
-	{
-		if (!Layers) return nullptr;
-		return Layers->Specular.get();
-	}
-	FTexture* GetMetallic()
-	{
-		if (!Layers) return nullptr;
-		return Layers->Metallic.get();
-	}
-	FTexture* GetRoughness()
-	{
-		if (!Layers) return nullptr;
-		return Layers->Roughness.get();
-	}
-	FTexture* GetAmbientOcclusion()
-	{
-		if (!Layers) return nullptr;
-		return Layers->AmbientOcclusion.get();
+		return Detailmap.get();
 	}
 
 	void SetGlowmap(FTexture *T)
 	{
-		if (!Layers) Layers = std::make_unique<FMaterialLayers>();
-		Layers->Glowmap = T;
+		Glowmap = T;
 	}
 	void SetDetailmap(FTexture* T)
 	{
-		if (!Layers) Layers = std::make_unique<FMaterialLayers>();
-		Layers->Detailmap = T;
+		Detailmap = T;
 	}
 	void SetNormalmap(FTexture* T)
 	{
-		if (!Layers) Layers = std::make_unique<FMaterialLayers>();
-		Layers->Normal = T;
+		Normal = T;
 	}
 	void SetSpecularmap(FTexture* T)
 	{
-		if (!Layers) Layers = std::make_unique<FMaterialLayers>();
-		Layers->Specular = T;
+		Specular = T;
 	}
 
 };
@@ -433,6 +379,7 @@ inline FGameTexture* MakeGameTexture(FTexture* tex, const char *name, ETextureTy
 	if (!tex) return nullptr;
 	auto t = new FGameTexture(tex, name);
 	t->SetUseType(useType);
+
 	return t;
 }
 

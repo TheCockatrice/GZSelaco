@@ -2464,8 +2464,9 @@ private:
 
     template <typename SourceAllocator>
     bool StringEqual(const GenericValue<Encoding, SourceAllocator>& rhs) const {
-        RAPIDJSON_ASSERT(IsString());
-        RAPIDJSON_ASSERT(rhs.IsString());
+        //RAPIDJSON_ASSERT(IsString());
+        //RAPIDJSON_ASSERT(rhs.IsString());
+        if (!IsString() || !rhs.IsString()) return false;
 
         const SizeType len1 = GetStringLength();
         const SizeType len2 = rhs.GetStringLength();

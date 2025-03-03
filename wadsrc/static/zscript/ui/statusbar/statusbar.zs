@@ -219,7 +219,7 @@ class BaseStatusBar : StatusBarCore native
 	native virtual void Tick ();
 	native virtual void Draw (int state, double TicFrac);
 	native virtual void ScreenSizeChanged ();
-	native virtual clearscope void ReceivedWeapon (Weapon weapn);
+	native virtual clearscope void ReceivedWeapon (WeaponBase weapn);
 	native virtual clearscope void SetMugShotState (String state_name, bool wait_till_done=false, bool reset=false);
 
 	clearscope virtual void FlashItem (class<Inventory> itemtype) { artiflashTick = 4; itemflashFade = 0.75; }
@@ -549,7 +549,7 @@ class BaseStatusBar : StatusBarCore native
 	//
 	//============================================================================
 
-	bool CheckWeaponSelected(class<Weapon> weap, bool checksister = true)
+	bool CheckWeaponSelected(class<WeaponBase> weap, bool checksister = true)
 	{
 		if (CPlayer == null) return false;
 		let w = CPlayer.ReadyWeapon;
@@ -577,7 +577,7 @@ class BaseStatusBar : StatusBarCore native
 	//
 	//============================================================================
 
-	int CheckWeaponPiece(class<Weapon> weap, int piecenum)
+	int CheckWeaponPiece(class<WeaponBase> weap, int piecenum)
 	{
 		if (CPlayer == null) return false;
 		for(let inv = CPlayer.mo.Inv; inv != NULL; inv = inv.Inv)
@@ -597,7 +597,7 @@ class BaseStatusBar : StatusBarCore native
 	//
 	//============================================================================
 
-	int GetWeaponPieceMask(class<Weapon> weap)
+	int GetWeaponPieceMask(class<WeaponBase> weap)
 	{
 		if (CPlayer == null) return false;
 		for(let inv = CPlayer.mo.Inv; inv != NULL; inv = inv.Inv)

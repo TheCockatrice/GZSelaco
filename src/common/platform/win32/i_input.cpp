@@ -140,6 +140,10 @@ static void I_CheckGUICapture ()
 		{
 			Keyboard->AllKeysUp();
 		}
+
+		if (wantCapt) {
+			buttonMap.ResetButtonStates();
+		}
 	}
 }
 
@@ -213,6 +217,10 @@ bool GUIWndProcHook(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam, LRESU
 			case VK_F11:			ev.data1 = GK_F11;		break;
 			case VK_F12:			ev.data1 = GK_F12;		break;
 			case VK_BROWSER_BACK:	ev.data1 = GK_BACK;		break;
+			case VK_CAPITAL:		ev.data1 = GK_CAPSLOCK;	break;	// @Cockatrice Added Capslock key for Selaco
+			case VK_SHIFT:			ev.data1 = GK_SHIFT;	break;	// Added SHIFT for Selaco
+			case VK_CONTROL:		ev.data1 = GK_CTRL;		break;	// Added CTRL for Selaco
+			case VK_MENU:			ev.data1 = GK_MENU;		break;	// Added MENU/ALT for Selaco
 			}
 			if (ev.data1 != 0)
 			{

@@ -1,5 +1,35 @@
-// These bindings are valid for all configurations
+// Selaco Specific
+shift +DashMode
+M printObjectives
+F Toggle_Flashlight
+G useGadget
+H switchGadget
+C crouch
+ctrl +crouch
+Q meleeButton
+R +reload
+Z useMeds
+Alt weaponWheel
+Mouse2 +altattack
+Mouse3 useability
+Mouse4 +reload
+capslock "codex"
+LeftBracket previousAbility
+RightBracket nextAbility
+[ previousAbility
+] nextAbility
 
+
+// Movement
+w +forward
+s +back
+a +moveleft
+d +moveright
+space +jump
+e +use
+mouse2 +altattack
+
+// Basic
 ` toggleconsole
 1 "slot 1"
 2 "slot 2"
@@ -11,38 +41,19 @@
 8 "slot 8"
 9 "slot 9"
 0 "slot 0"
-[ invprev
-] invnext
-mwheelleft invprev
-mwheelright invnext
-enter invuse
-- sizedown
-= sizeup
-shift +speed
 mouse1 +attack
-capslock "toggle cl_run"
-f1 menu_help
-f2 menu_save
-f3 menu_load
-f4 menu_options
-f5 menu_display
-f6 quicksave
-f7 menu_endgame
-f8 togglemessages
+f2 save_menu
+f3 load_menu
+f4 "openmenu SelacoOptionMenu"
+f6 quicksaveselaco
 f9 quickload
-f11 bumpgamma
 f10 menu_quit
 tab togglemap
-pause pause
 sysrq screenshot
-t messagemode
-\ +showscores
-f12 spynext
 mwheeldown weapnext
 mwheelup weapprev
 
-// Originally just for Heretic, Hexen, and Strife.
-// I can't see why they shouldn't be for Doom or Chex either.
+
 pgup +moveup
 ins +movedown
 home land
@@ -51,70 +62,48 @@ del +lookdown
 end centerview
 
 // Xbox 360 / PS2 controllers
-pad_a +use
-pad_y +jump
+pad_a +jump
+pad_b useGadget
+pad_x +usereload
+dpaddown Toggle_Flashlight
+pad_y usemeds
 rtrigger +attack
 ltrigger +altattack
-lshoulder weapprev
-rshoulder weapnext
-dpadleft invprev
-dpadright invnext
-dpaddown invuse
+lshoulder +DashMode
+rshoulder weaponWheel
+dpadleft printObjectives
+dpadright switchGadget
 dpadup togglemap
 pad_start menu_main
-pad_back pause
+pad_back codex
 lthumb crouch
+rthumb meleeButton
 
-// Generic gamepad bindings
-joy1 +use
-joy4 +jump
-axis6plus +attack
-axis3plus +altattack
-joy5 weapprev
-joy6 weapnext
-pov1left invprev
-pov1right invnext
-pov1down invuse
-pov1up togglemap
-joy8 menu_main
-joy7 pause
-joy10 crouch
 
 /* Default automap bindings */
-mapbind f am_togglefollow
-mapbind g am_togglegrid
 mapbind p am_toggletexture
-mapbind m am_setmark
 mapbind c am_clearmarks
-mapbind 0 am_gobig
+//mapbind r am_center
+mapbind o am_gobig
+mapbind l am_togglelegend
 mapbind rightarrow +am_panright
 mapbind leftarrow +am_panleft
 mapbind uparrow +am_panup
 mapbind downarrow +am_pandown
-mapbind - +am_zoomout
-mapbind = +am_zoomin
-mapbind kp- +am_zoomout
-mapbind kp+ +am_zoomin
+mapbind pgdn +am_zoomout
+mapbind pgup +am_zoomin
 mapbind mwheelup "am_zoom 1.2"
 mapbind mwheeldown "am_zoom -1.2"
-
-/* Automap bindings for controllers (bare minimum functionality) */
+// Controllers
+mapbind pad_b togglemap
+mapbind dpadup togglemap
+//mapbind dpaddown am_center
 mapbind pad_x am_togglefollow
-mapbind pad_a am_setmark
-mapbind pad_b am_clearmarks
-mapbind dpadright +am_panright
-mapbind dpadleft +am_panleft
-mapbind dpadup +am_panup
-mapbind dpaddown +am_pandown
+mapbind pad_y am_gobig
+mapbind pad_a am_togglelegend
+mapbind rstickright +am_panright
+mapbind rstickleft +am_panleft
+mapbind rstickup +am_panup
+mapbind rstickdown +am_pandown
 mapbind lshoulder +am_zoomout
 mapbind rshoulder +am_zoomin
-
-mapbind joy3 am_togglefollow
-mapbind joy1 am_setmark
-mapbind joy2 am_clearmarks
-mapbind pov1right +am_panright
-mapbind pov1left +am_panleft
-mapbind pov1up +am_panup
-mapbind pov1down +am_pandown
-mapbind joy5 +am_zoomout
-mapbind joy6 +am_zoomin

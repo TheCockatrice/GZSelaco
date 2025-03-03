@@ -36,7 +36,7 @@
 struct KeyBindings native version("2.4")
 {
 	native static String NameKeys(int k1, int k2);
-	native static String NameAllKeys(array<int> list, bool colors = true);
+	native static String NameAllKeys(array<int> list);
 
 	native int, int GetKeysForCommand(String cmd);
 	native void GetAllKeysForCommand(out array<int> list, String cmd);
@@ -74,6 +74,9 @@ struct JoystickConfig native version("2.4")
 	native float GetAxisScale(int axis);
 	native void SetAxisScale(int axis, float scale);
 
+	native float GetAxisAcceleration(int axis);
+	native void SetAxisAcceleration(int axis, float scale);
+
 	native float GetAxisDeadZone(int axis);
 	native void SetAxisDeadZone(int axis, float zone);
 
@@ -84,13 +87,27 @@ struct JoystickConfig native version("2.4")
 	native int GetNumAxes();
 	native String GetAxisName(int axis);
 
-	native bool GetEnabled();
-	native void SetEnabled(bool enabled);
+	native float GetAxis(int axis);		// @Cockatrice - Get current value of axis
+	native float GetRawAxis(int axis);	// Get axis value that has not been squared or processed with deadzone
 
-	native bool AllowsEnabledInBackground();
-	native bool GetEnabledInBackground();
-	native void SetEnabledInBackground(bool enabled);
+	native void RestoreDefaults();
+	native bool AddVibration(float l, float r);
+	native bool SetVibration(float l, float r);
 
+	native static int NumJoysticks();
+	native static JoystickConfig GetJoystick(int index);
+
+	static clearscope void AddVibe(float l, float r) {
+		for(int x = 0; x < NumJoysticks(); x++) {
+			GetJoystick(x).AddVibration(l, r);
+		}
+	}
+
+	static clearscope void SetVibe(float l, float r) {
+		for(int x = 0; x < NumJoysticks(); x++) {
+			GetJoystick(x).SetVibration(l, r);
+		}
+	}
 }
 
 class Menu : Object native ui version("2.4")
@@ -136,7 +153,9 @@ class Menu : Object native ui version("2.4")
 	native bool mBackbuttonSelected;
 	native bool DontDim;
 	native bool DontBlur;
+	native float BlurAmount;	// -1 = Ignored, > 0 = Force this much blur regardless of settings
 	native bool AnimatedTransition;
+	native bool ReceiveAllInputEvents;
 	native bool Animated;
 
 	native static int MenuTime();
@@ -160,7 +179,9 @@ class Menu : Object native ui version("2.4")
 		mBackbuttonSelected = false;
 		DontDim = false;
 		DontBlur = false;
+		BlurAmount = -1;
 		AnimatedTransition = false;
+		ReceiveAllInputEvents = false;
 		Animated = false;
 	}
 
@@ -353,16 +374,16 @@ class Menu : Object native ui version("2.4")
 		return OptionFont().GetHeight();
 	}
 
-	static int OptionWidth(String s, bool localize = true)
+	static int OptionWidth(String s)
 	{
-		return OptionFont().StringWidth(s, localize);
+		return OptionFont().StringWidth(s);
 	}
 
-	static void DrawOptionText(int x, int y, int color, String text, bool grayed = false, bool localize = true)
+	static void DrawOptionText(int x, int y, int color, String text, bool grayed = false)
 	{
-		String label = localize ? Stringtable.Localize(text) : text;
+		String label = Stringtable.Localize(text);
 		int overlay = grayed? Color(96,48,0,0) : 0;
-		screen.DrawText (OptionFont(), color, x, y, text, DTA_CleanNoMove_1, true, DTA_ColorOverlay, overlay, DTA_Localize, localize);
+		screen.DrawText (OptionFont(), color, x, y, text, DTA_CleanNoMove_1, true, DTA_ColorOverlay, overlay);
 	}
 
 

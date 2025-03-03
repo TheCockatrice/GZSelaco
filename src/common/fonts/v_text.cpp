@@ -116,7 +116,7 @@ TArray<FBrokenLines> V_BreakLines (FFont *font, int maxwidth, const uint8_t *str
 
 		nw = font->GetCharWidth (c);
 
-		if ((w > 0 && w + nw > maxwidth) || c == '\n')
+		if ((w > 0 && w + nw + kerning > maxwidth) || c == '\n')
 		{ // Time to break the line
 			if (!space)
 			{

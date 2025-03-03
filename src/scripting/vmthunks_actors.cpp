@@ -185,6 +185,21 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_PlaySound, A_PlaySound)
 	return 0;
 }
 
+DEFINE_ACTION_FUNCTION_NATIVE(AActor, StartSound, StartSound)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	PARAM_SOUND(soundid);
+	PARAM_INT(channel);
+	PARAM_INT(flags);
+	PARAM_FLOAT(volume);
+	PARAM_FLOAT(attenuation);
+	PARAM_FLOAT(pitch);
+	PARAM_FLOAT(startTime);
+	ACTION_RETURN_INT(StartSound(self, soundid, channel, flags, volume, attenuation, pitch, startTime));
+	return 1;
+}
+
+
 DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_StartSound, A_StartSound)
 {
 	PARAM_SELF_PROLOGUE(AActor);
@@ -1974,6 +1989,7 @@ DEFINE_FIELD_NAMED(AActor, Scale.Y, scaley)
 DEFINE_FIELD(AActor, RenderStyle)
 DEFINE_FIELD(AActor, picnum)
 DEFINE_FIELD(AActor, Alpha)
+DEFINE_FIELD(AActor, selfLighting)
 DEFINE_FIELD(AActor, fillcolor)
 DEFINE_FIELD_NAMED(AActor, Sector, CurSector)	// clashes with type 'sector'.
 DEFINE_FIELD(AActor, subsector)
@@ -2122,6 +2138,7 @@ DEFINE_FIELD(AActor, friendlyseeblocks)
 DEFINE_FIELD(AActor, SpawnTime)
 DEFINE_FIELD(AActor, InventoryID)
 DEFINE_FIELD(AActor, ThruBits)
+DEFINE_FIELD(AActor, lineBlockBits)
 DEFINE_FIELD(AActor, ViewPos)
 DEFINE_FIELD_NAMED(AActor, ViewAngles.Yaw, viewangle)
 DEFINE_FIELD_NAMED(AActor, ViewAngles.Pitch, viewpitch)

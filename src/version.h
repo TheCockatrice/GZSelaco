@@ -41,21 +41,21 @@ const char *GetVersionString();
 
 /** Lots of different version numbers **/
 
-#define VERSIONSTR "4.15pre"
+#define VERSIONSTR "4.8pre"
 
 // The version as seen in the Windows resource
-#define RC_FILEVERSION 4,14,9999,0
-#define RC_PRODUCTVERSION 4,14,9999,0
+#define RC_FILEVERSION 4,7,9999,0
+#define RC_PRODUCTVERSION 4,7,9999,0
 #define RC_PRODUCTVERSION2 VERSIONSTR
 // These are for content versioning.
 #define VER_MAJOR 4
-#define VER_MINOR 15
-#define VER_REVISION 1
+#define VER_MINOR 8
+#define VER_REVISION 0
 
 // This should always refer to the GZDoom version a derived port is based on and not reflect the derived port's version number!
 #define ENG_MAJOR 4
-#define ENG_MINOR 15
-#define ENG_REVISION 1
+#define ENG_MINOR 8
+#define ENG_REVISION 0
 
 // Version identifier for network games.
 // Bump it every time you do a release unless you're certain you
@@ -65,7 +65,7 @@ const char *GetVersionString();
 // Version stored in the ini's [LastRun] section.
 // Bump it if you made some configuration change that you want to
 // be able to migrate in FGameConfigFile::DoGlobalSetup().
-#define LASTRUNVERSION "225"
+#define LASTRUNVERSION "224"
 
 // Protocol version used in demos.
 // Bump it if you change existing DEM_ commands or add new ones.
@@ -88,25 +88,21 @@ const char *GetVersionString();
 
 // Use 4500 as the base git save version, since it's higher than the
 // SVN revision ever got.
-#define SAVEVER 4560
+#define SAVEVER 4559
 
 // This is so that derivates can use the same savegame versions without worrying about engine compatibility
-#define GAMESIG "GZDOOM"
+#define GAMESIG "SELACO"
 #define BASEWAD "gzdoom.pk3"
-// Set OPTIONALWAD to "" (null) to disable searching for it
 #define OPTIONALWAD "game_support.pk3"
 #define GZDOOM 1
 #define VR3D_ENABLED
 
 // More stuff that needs to be different for derivatives.
-#define GAMENAME "GZDoom"
-#define WGAMENAME L"GZDoom"
-#define GAMENAMELOWERCASE "gzdoom"
-#define QUERYIWADDEFAULT true
-#define FORUM_URL "http://forum.zdoom.org/"
-#define BUGS_FORUM_URL	"http://forum.zdoom.org/viewforum.php?f=2"
-// For QUERYIWADDEFAULT: Set to 'true' to always show dialog box on startup by default, 'false' to disable.
-// Should set to 'false' for standalone games, and set to 'true' for regular source port forks that are meant to run any game.
+#define GAMENAME "Selaco-EA"
+#define WGAMENAME L"Selaco-EA"
+#define GAMENAMELOWERCASE "selaco-ea"
+#define FORUM_URL "https://discord.gg/g4cg5t9tDZ"
+#define BUGS_FORUM_URL	"https://discord.gg/g4cg5t9tDZ"
 
 #if defined(__APPLE__) || defined(_WIN32)
 #define GAME_DIR GAMENAME
@@ -116,10 +112,10 @@ const char *GetVersionString();
 
 #define DEFAULT_DISCORD_APP_ID "951303644597325885"
 
-const int SAVEPICWIDTH = 216;
-const int SAVEPICHEIGHT = 162;
-const int VID_MIN_WIDTH = 320;
-const int VID_MIN_HEIGHT = 200;
+const int SAVEPICWIDTH = 1000;
+const int SAVEPICHEIGHT = 563;
+const int VID_MIN_WIDTH = 640;
+const int VID_MIN_HEIGHT = 480;
 
 
 #endif //__VERSION_H__

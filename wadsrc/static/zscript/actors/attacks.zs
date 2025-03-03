@@ -219,7 +219,8 @@ extend class Actor
 		}
 		if (!(flags & SXF_ORIGINATOR))
 		{
-			while (originator && (originator.bMissile || originator.default.bMissile))
+			int stopLooping = 0;	// @Cockatrice - Infinite loops suck, and we can't guarantee that is not going to happen
+			while (originator && (originator.bMissile || originator.default.bMissile) && originator.target != self && stopLooping++ < 20)
 			{
 				originator = originator.target;
 			}

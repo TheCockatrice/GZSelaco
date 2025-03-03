@@ -179,13 +179,13 @@ void DrawChar(F2DDrawer *drawer, FFont* font, int normalcolor, double x, double 
 		DrawParms parms;
 		Va_List tags;
 		va_start(tags.list, tag_first);
-		bool res = ParseDrawTextureTags(drawer, pic, x, y, tag_first, tags, &parms, DrawTexture_Normal);
+		bool res = ParseDrawTextureTags(drawer, pic, x, y, tag_first, tags, &parms, false);
 		va_end(tags.list);
 		if (!res)
 		{
 			return;
 		}
-		bool palettetrans = (normalcolor == CR_NATIVEPAL && parms.TranslationId != NO_TRANSLATION);
+		bool palettetrans = (normalcolor == CR_NATIVEPAL && parms.TranslationId != 0);
 		PalEntry color = 0xffffffff;
 		if (!palettetrans) parms.TranslationId = font->GetColorTranslation((EColorRange)normalcolor, &color);
 		parms.color = PalEntry((color.a * parms.color.a) / 255, (color.r * parms.color.r) / 255, (color.g * parms.color.g) / 255, (color.b * parms.color.b) / 255);
@@ -208,9 +208,9 @@ void DrawChar(F2DDrawer *drawer,  FFont *font, int normalcolor, double x, double
 	{
 		DrawParms parms;
 		uint32_t tag = ListGetInt(args);
-		bool res = ParseDrawTextureTags(drawer, pic, x, y, tag, args, &parms, DrawTexture_Normal);
+		bool res = ParseDrawTextureTags(drawer, pic, x, y, tag, args, &parms, false);
 		if (!res) return;
-		bool palettetrans = (normalcolor == CR_NATIVEPAL && parms.TranslationId != NO_TRANSLATION);
+		bool palettetrans = (normalcolor == CR_NATIVEPAL && parms.TranslationId != 0);
 		PalEntry color = 0xffffffff;
 		if (!palettetrans) parms.TranslationId = font->GetColorTranslation((EColorRange)normalcolor, &color);
 		parms.color = PalEntry((color.a * parms.color.a) / 255, (color.r * parms.color.r) / 255, (color.g * parms.color.g) / 255, (color.b * parms.color.b) / 255);
@@ -235,23 +235,6 @@ DEFINE_ACTION_FUNCTION(_Screen, DrawChar)
 	return 0;
 }
 
-DEFINE_ACTION_FUNCTION(FCanvas, DrawChar)
-{
-	PARAM_SELF_PROLOGUE(FCanvas);
-	PARAM_POINTER(font, FFont);
-	PARAM_INT(cr);
-	PARAM_FLOAT(x);
-	PARAM_FLOAT(y);
-	PARAM_INT(chr);
-
-	PARAM_VA_POINTER(va_reginfo)	// Get the hidden type information array
-
-	VMVa_List args = { param + 6, 0, numparam - 7, va_reginfo + 6 };
-	DrawChar(&self->Drawer, font, cr, x, y, chr, args);
-	self->Tex->NeedUpdate();
-	return 0;
-}
-
 //==========================================================================
 //
 // DrawText
@@ -260,8 +243,9 @@ DEFINE_ACTION_FUNCTION(FCanvas, DrawChar)
 //
 //==========================================================================
 
+
 // This is only needed as a dummy. The code using wide strings does not need color control.
-EColorRange V_ParseFontColor(const char32_t *&color_value, int normalcolor, int boldcolor) { return CR_UNTRANSLATED; }
+EColorRange V_ParseFontColor(const char32_t *&color_value, int normalcolor, int boldcolor) { return CR_UNTRANSLATED; } 
 
 template<class chartype>
 void DrawTextCommon(F2DDrawer *drawer, FFont *font, int normalcolor, double x, double y, const chartype *string, DrawParms &parms)
@@ -272,9 +256,9 @@ void DrawTextCommon(F2DDrawer *drawer, FFont *font, int normalcolor, double x, d
 	double 		cx;
 	double 		cy;
 	int			boldcolor;
-	FTranslationID			trans = INVALID_TRANSLATION;
+	int			trans = -1;
 	int			kerning;
-	FGameTexture *pic;
+	//FGameTexture *pic;
 
 	double scalex = parms.scalex * parms.patchscalex;
 	double scaley = parms.scaley * parms.patchscaley;
@@ -282,7 +266,7 @@ void DrawTextCommon(F2DDrawer *drawer, FFont *font, int normalcolor, double x, d
 	if (parms.celly == 0) parms.celly = font->GetHeight() + 1;
 	parms.celly = int (parms.celly * scaley);
 
-	bool palettetrans = (normalcolor == CR_NATIVEPAL && parms.TranslationId != NO_TRANSLATION);
+	bool palettetrans = (normalcolor == CR_NATIVEPAL && parms.TranslationId != 0);
 
 	if (normalcolor >= NumTextColors)
 		normalcolor = CR_UNTRANSLATED;
@@ -290,14 +274,14 @@ void DrawTextCommon(F2DDrawer *drawer, FFont *font, int normalcolor, double x, d
 
 	PalEntry colorparm = parms.color;
 	PalEntry color = 0xffffffff;
-	trans = palettetrans? INVALID_TRANSLATION : font->GetColorTranslation((EColorRange)normalcolor, &color);
+	trans = palettetrans? -1 : font->GetColorTranslation((EColorRange)normalcolor, &color);
 	parms.color = PalEntry(colorparm.a, (color.r * colorparm.r) / 255, (color.g * colorparm.g) / 255, (color.b * colorparm.b) / 255);
 
 	kerning = font->GetDefaultKerning();
 
 	ch = string;
 	cx = x;
-	cy = y;
+	cy = y + font->GetDisplacement();
 
 	if (parms.monospace == EMonospacing::CellCenter)
 		cx += parms.spacing / 2;
@@ -331,17 +315,41 @@ void DrawTextCommon(F2DDrawer *drawer, FFont *font, int normalcolor, double x, d
 			continue;
 		}
 
-		if (NULL != (pic = font->GetChar(c, currentcolor, &w)))
+		FFont::CharData chr = font->GetChar(c, currentcolor);
+		w = chr.XMove;
+		if (w == INT_MIN) w = font->GetSpaceWidth();
+
+		auto pic = chr.OriginalPic;
+		if (NULL != pic)
 		{
 			// if palette translation is used, font colors will be ignored.
 			if (!palettetrans) parms.TranslationId = trans;
-			SetTextureParms(drawer, &parms, pic, cx, cy);
+
+			double chWidth = 0, chHeight = 0;
+			if (chr.tCharW > -1) {
+				//const double delta = 0.000015;
+				double tw = pic->GetTexelWidth();
+				double th = pic->GetTexelHeight();
+				// TODO: The sizing calculations here are same for every texture, which means the same for almost every 
+				// character. Cache this in the font somewhere. 
+				parms.srcx = (chr.tCharX / tw);
+				parms.srcy = (chr.tCharY / th);
+				parms.srcwidth = (chr.tCharW / tw);
+				parms.srcheight = (chr.tCharH / th);
+				chWidth = chr.tCharW / pic->GetScaleX();
+				chHeight = chr.tCharH / pic->GetScaleY();
+			}
+
+			SetTextureParms(drawer, &parms, chr.OriginalPic, cx, cy, chWidth, chHeight);
+			
+			
 			if (parms.cellx)
 			{
 				w = parms.cellx;
 				parms.destwidth = parms.cellx;
 				parms.destheight = parms.celly;
 			}
+			
 			if (parms.monospace == EMonospacing::CellLeft)
 				parms.left = 0;
 			else if (parms.monospace == EMonospacing::CellCenter)
@@ -349,7 +357,7 @@ void DrawTextCommon(F2DDrawer *drawer, FFont *font, int normalcolor, double x, d
 			else if (parms.monospace == EMonospacing::CellRight)
 				parms.left = w;
 
-			drawer->AddTexture(pic, parms);
+			drawer->AddTexture(chr.OriginalPic, parms);
 		}
 		if (parms.monospace == EMonospacing::Off)
 		{
@@ -374,13 +382,12 @@ void DrawText(F2DDrawer *drawer, FFont* font, int normalcolor, double x, double 
 		return;
 
 	va_start(tags.list, tag_first);
-	bool res = ParseDrawTextureTags(drawer, nullptr, 0, 0, tag_first, tags, &parms, DrawTexture_Text);
+	bool res = ParseDrawTextureTags(drawer, nullptr, 0, 0, tag_first, tags, &parms, true);
 	va_end(tags.list);
 	if (!res)
 	{
 		return;
 	}
-	const char *txt = (parms.localize && string[0] == '$') ? GStrings.GetString(&string[1]) : string;
 	DrawTextCommon(drawer, font, normalcolor, x, y, (const uint8_t*)string, parms);
 }
 
@@ -394,33 +401,30 @@ void DrawText(F2DDrawer *drawer, FFont* font, int normalcolor, double x, double 
 		return;
 
 	va_start(tags.list, tag_first);
-	bool res = ParseDrawTextureTags(drawer, nullptr, 0, 0, tag_first, tags, &parms, DrawTexture_Text);
+	bool res = ParseDrawTextureTags(drawer, nullptr, 0, 0, tag_first, tags, &parms, true);
 	va_end(tags.list);
 	if (!res)
 	{
 		return;
 	}
-	// [Gutawer] right now nothing needs the char32_t version to have localisation support, and i don't know how to do it
-	assert(parms.localize == false);
 	DrawTextCommon(drawer, font, normalcolor, x, y, string, parms);
 }
 
 
-void DrawText(F2DDrawer *drawer, FFont *font, int normalcolor, double x, double y, const FString& string, VMVa_List &args)
+void DrawText(F2DDrawer *drawer, FFont *font, int normalcolor, double x, double y, const char *string, VMVa_List &args)
 {
 	DrawParms parms;
 
-	if (font == NULL)
+	if (font == NULL || string == NULL)
 		return;
 
 	uint32_t tag = ListGetInt(args);
-	bool res = ParseDrawTextureTags(drawer, nullptr, 0, 0, tag, args, &parms, DrawTexture_Text, ~0u, 0.0, true);
+	bool res = ParseDrawTextureTags(drawer, nullptr, 0, 0, tag, args, &parms, true);
 	if (!res)
 	{
 		return;
 	}
-	const char *txt = (parms.localize && string[0] == '$') ? GStrings.GetString(&string[1]) : string.GetChars();
-	DrawTextCommon(drawer, font, normalcolor, x, y, (uint8_t*)txt, parms);
+	DrawTextCommon(drawer, font, normalcolor, x, y, (const uint8_t*)string, parms);
 }
 
 DEFINE_ACTION_FUNCTION(_Screen, DrawText)
@@ -436,24 +440,7 @@ DEFINE_ACTION_FUNCTION(_Screen, DrawText)
 
 	if (!twod->HasBegun2D()) ThrowAbortException(X_OTHER, "Attempt to draw to screen outside a draw function");
 	VMVa_List args = { param + 5, 0, numparam - 6, va_reginfo + 5 };
-	DrawText(twod, font, cr, x, y, chr, args);
-	return 0;
-}
-
-
-DEFINE_ACTION_FUNCTION(FCanvas, DrawText)
-{
-	PARAM_SELF_PROLOGUE(FCanvas);
-	PARAM_POINTER_NOT_NULL(font, FFont);
-	PARAM_INT(cr);
-	PARAM_FLOAT(x);
-	PARAM_FLOAT(y);
-	PARAM_STRING(chr);
-
-	PARAM_VA_POINTER(va_reginfo)	// Get the hidden type information array
-
-	VMVa_List args = { param + 6, 0, numparam - 7, va_reginfo + 6 };
-	DrawText(&self->Drawer, font, cr, x, y, chr, args);
-	self->Tex->NeedUpdate();
+	const char *txt = chr[0] == '$' ? GStrings(&chr[1]) : chr.GetChars();
+	DrawText(twod, font, cr, x, y, txt, args);
 	return 0;
 }

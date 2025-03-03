@@ -68,6 +68,7 @@ public:
 	bool isText = false;
 	bool InWad = false;
 	int lumpnum = -1;
+	int version = 0;
 
 	/*
 	void Seek(unsigned int lumpindex)
@@ -133,14 +134,14 @@ public:
 	void GetChecksum(uint8_t cksum[16]);
 
 	friend class MapLoader;
-	friend MapData *P_OpenMapData(const char * mapname, bool justcheck);
+	friend MapData* P_OpenMapData(const char* mapname, bool justcheck, int forceVersion);
 
 };
 
-MapData * P_OpenMapData(const char * mapname, bool justcheck);
-bool P_CheckMapData(const char * mapname);
+MapData * P_OpenMapData(const char * mapname, bool justcheck, int forceVersion = -1);
+bool P_CheckMapData(const char * mapname, int forceVersion = -1);
 
-void P_SetupLevel (FLevelLocals *Level, int position, bool newGame);
+void P_SetupLevel (FLevelLocals *Level, int position, bool newGame, int mapVersion = -1);
 void P_LoadLightmap(MapData *map);
 
 void P_FreeLevelData(bool fullgc = true);

@@ -456,19 +456,30 @@ TArray<uint8_t> FTexture::Get8BitPixels(bool alphatex)
 
 bool FTexture::TrimBorders(uint16_t* rect)
 {
-
 	auto texbuffer = CreateTexBuffer(0);
 	int w = texbuffer.mWidth;
 	int h = texbuffer.mHeight;
 	auto Buffer = texbuffer.mBuffer;
 
-	if (texbuffer.mBuffer == nullptr)
+	if (Buffer == nullptr)
 	{
 		return false;
 	}
 	if (w != Width || h != Height)
 	{
 		// external Hires replacements cannot be trimmed.
+		return false;
+	}
+
+	return TrimBorders(rect, Buffer, w, h);
+}
+
+
+// @Cockatrice - Designed to be used in a background loader thread when we already have the texture data loaded
+bool FTexture::TrimBorders(uint16_t* rect, uint8_t *Buffer, int w, int h) {
+
+	if (Buffer == nullptr)
+	{
 		return false;
 	}
 

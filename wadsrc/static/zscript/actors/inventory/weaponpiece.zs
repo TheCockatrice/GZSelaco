@@ -36,7 +36,7 @@
 class WeaponHolder : Inventory
 {
 	int PieceMask;
-	Class<Weapon> PieceWeapon;
+	Class<WeaponBase> PieceWeapon;
 	
 	Default
 	{
@@ -54,18 +54,11 @@ class WeaponPiece : Inventory
 	}
 	
 	int PieceValue;
-	Class<Weapon> WeaponClass;
-	Weapon FullWeapon;
+	Class<WeaponBase> WeaponClass;
+	WeaponBase FullWeapon;
 	
 	property number: PieceValue;
 	property weapon: WeaponClass;
-
-	// Account for weapon replacers, but make sure it's still a Weapon
-	clearscope class<Weapon> GetWeaponClass() const
-	{
-		class<Weapon> type = WeaponClass ? (class<Weapon>)(GetReplacement(WeaponClass)) : null;
-		return type ? type : WeaponClass;
-	}
 	
 	//==========================================================================
 	//
@@ -81,11 +74,7 @@ class WeaponPiece : Inventory
 			return false;
 		}
 
-		class<Weapon> type = GetWeaponClass();
-		if (!type)
-			return false;
-
-		let Defaults = GetDefaultByType(type);
+		let Defaults = GetDefaultByType(WeaponClass);
 
 		bool gaveSome = !!(toucher.GiveAmmo (Defaults.AmmoType1, Defaults.AmmoGive1) +
 						   toucher.GiveAmmo (Defaults.AmmoType2, Defaults.AmmoGive2));
@@ -105,15 +94,11 @@ class WeaponPiece : Inventory
 
 	override bool TryPickup (in out Actor toucher)
 	{
-		class<Weapon> type = GetWeaponClass();
-		if (!type)
-			return false;
-
 		Inventory item;
 		WeaponHolder hold = NULL;
 		bool shouldStay = ShouldStay ();
 		int gaveAmmo;
-		let Defaults = GetDefaultByType(type);
+		let Defaults = GetDefaultByType(WeaponClass);
 
 		FullWeapon = NULL;
 		for(item=toucher.Inv; item; item=item.Inv)
@@ -121,7 +106,6 @@ class WeaponPiece : Inventory
 			hold = WeaponHolder(item);
 			if (hold != null)
 			{
-				// Intentionally check against the unreplaced class
 				if (hold.PieceWeapon == WeaponClass) 
 				{
 					break;
@@ -169,9 +153,9 @@ class WeaponPiece : Inventory
 		// Check if  weapon assembled
 		if (hold.PieceMask == (1 << Defaults.health) - 1)
 		{
-			if (!toucher.FindInventory (type))
+			if (!toucher.FindInventory (WeaponClass))
 			{
-				FullWeapon= Weapon(Spawn(type));
+				FullWeapon= WeaponBase(Spawn(WeaponClass));
 				
 				// The weapon itself should not give more ammo to the player.
 				FullWeapon.AmmoGive1 = 0;

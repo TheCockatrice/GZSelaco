@@ -1,12 +1,16 @@
 class DynamicLight : Actor
 {
+	double user_flicker;			// @Cockatrice - For UDB
+
 	double SpotInnerAngle;
 	double SpotOuterAngle;
-	private int lighttype;
-	private int lightflags;
+	double Flicker;					// @Cockatrice - Used to override flicker settings on Spot lights, since it originally used the spawn angle.  -1 will use ANGLE
+	protected int lighttype;
+	protected int lightflags;
 
 	property SpotInnerAngle: SpotInnerAngle;
 	property SpotOuterAngle: SpotOuterAngle;
+	property Flicker: Flicker;
 	
 	flagdef subtractive: lightflags, 0;
 	flagdef additive: lightflags, 1;
@@ -56,9 +60,9 @@ class DynamicLight : Actor
 	};
 
 	native void SetOffset(Vector3 offset);
-	private native void AttachLight();
-	private native void ActivateLight();
-	private native void DeactivateLight();
+	protected native void AttachLight();
+	protected native void ActivateLight();
+	protected native void DeactivateLight();
 
 	Default
 	{
@@ -66,6 +70,7 @@ class DynamicLight : Actor
 		Radius 0.1;
 		FloatBobPhase 0;
 		RenderRadius -1;
+		DynamicLight.Flicker -1;
 		DynamicLight.SpotInnerAngle 10;
 		DynamicLight.SpotOuterAngle 25;
 		+NOBLOCKMAP
@@ -93,6 +98,8 @@ class DynamicLight : Actor
 
 	override void PostBeginPlay()
 	{
+		if(user_flicker > 0) Flicker = user_flicker;
+
 		Super.PostBeginPlay();
 		AttachLight();
 		
@@ -114,6 +121,21 @@ class DynamicLight : Actor
 		DeactivateLight();
 	}
 	
+	void SetLightParams(int newType, int newFlags = 0) {
+		lightType = newType;
+
+		if(newFlags != 0) {
+			lightflags = newFlags;
+		}
+	}
+
+	clearscope int getLightType() {
+		return lightType;
+	}
+
+	clearscope int getFlags() {
+		return lightflags;
+	}
 }
 
 

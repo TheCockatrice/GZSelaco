@@ -334,11 +334,18 @@ bool SightCheck::PTR_SightTraverse (intercept_t *in)
 				}
 				else
 				{
+					// @Cockatrice - I am not sure exactly how this was expected to work, my head math cannot understand this code
+					// However, it clearly does not function correctly, as two identical 3D floors side-by-side will often block LOS
+					// when they absoutely shouldn't. As such I am commenting out this code until I can figure out how to replicate what
+					// it was supposed to do, with the expectation that there may be some situations where 3D floors do not correctly
+					// block LOS when they should.
+
+
 					// the 3D-floor is inside the viewing cone but neither clips the top nor the bottom so by 
 					// itself it can't be view blocking.
 					// However, if there's a 3D-floor on the other side that obstructs the same vertical range
 					// the 2 together will block sight.
-					sector_t * sb = i == 2 ? li->frontsector : li->backsector;
+					/*sector_t* sb = i == 2 ? li->frontsector : li->backsector;
 
 					for (auto rover2 : sb->e->XFloor.ffloors)
 					{
@@ -355,7 +362,7 @@ bool SightCheck::PTR_SightTraverse (intercept_t *in)
 						{
 							return false;
 						}
-					}
+					}*/
 				}
 				// trace is leaving a sector with a 3d-floor
 				if (s == lastsector && frontflag == i - 1)

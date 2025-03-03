@@ -396,7 +396,7 @@ class AltHud ui
 	//
 	//---------------------------------------------------------------------------
 
-	void AddAmmoToList(readonly<Weapon> weapdef)
+	void AddAmmoToList(readonly<WeaponBase> weapdef)
 	{
 		for (int i = 0; i < 2; i++)
 		{
@@ -503,7 +503,7 @@ class AltHud ui
 			// Now check for the remaining weapons that are in the inventory but not in the weapon slots
 			for(inv = CPlayer.mo.Inv; inv; inv = inv.Inv)
 			{
-				let weap = Weapon(inv);
+				let weap = WeaponBase(inv);
 				if (weap)
 				{
 					AddAmmoToList(weap.default);
@@ -574,7 +574,7 @@ class AltHud ui
 	//
 	//---------------------------------------------------------------------------
 
-	virtual void DrawOneWeapon(PlayerInfo CPlayer, int x, in out int y, Weapon weapon)
+	virtual void DrawOneWeapon(PlayerInfo CPlayer, int x, in out int y, WeaponBase weapon)
 	{
 		double trans;
 
@@ -618,7 +618,7 @@ class AltHud ui
 		// First draw all weapons in the inventory that are not assigned to a weapon slot
 		for(inv = CPlayer.mo.Inv; inv; inv = inv.Inv)
 		{
-			let weap = Weapon(inv);
+			let weap = WeaponBase(inv);
 			if (weap && 
 				!CPlayer.weapons.LocateWeapon(weap.GetClass()))
 			{
@@ -632,7 +632,7 @@ class AltHud ui
 			let weap = CPlayer.weapons.GetWeapon(k, j);
 			if (weap) 
 			{
-				let weapitem = Weapon(CPlayer.mo.FindInventory(weap));
+				let weapitem = WeaponBase(CPlayer.mo.FindInventory(weap));
 				if (weapitem) 
 				{
 					DrawOneWeapon(CPlayer, x, y, weapitem);

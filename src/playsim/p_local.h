@@ -102,7 +102,9 @@ enum EPuffFlags
 	PF_TEMPORARY = 4,
 	PF_HITTHINGBLEED = 8,
 	PF_NORANDOMZ = 16,
-	PF_HITSKY = 32
+	PF_HITSKY = 32,
+	PF_SPLASHING = 64,
+	PF_HITTHRU = 128
 };
 
 AActor *P_SpawnPuff(AActor *source, PClassActor *pufftype, const DVector3 &pos, DAngle hitdir, DAngle particledir, int updown, int flags = 0, AActor *vict = NULL);
@@ -250,6 +252,7 @@ extern TArray<spechit_t> portalhit;
 
 
 int	P_TestMobjLocation (AActor *mobj);
+int P_FindOnMobjZNearest(AActor* actor, bool quick, AActor** pOnmobj);	// @Cockatrice - Find nearest thing below actor it can sit on 
 int	P_TestMobjZ (AActor *mobj, bool quick=true, AActor **pOnmobj = NULL);
 bool P_CheckPosition(AActor *thing, const DVector2 &pos, bool actorsonly = false);
 void P_DoMissileDamage(AActor* inflictor, AActor* target);
@@ -296,6 +299,7 @@ enum
 	FFCF_NOCEILING = 64,
 	FFCF_RESTRICTEDPORTAL = 128,	// current values in the iterator's return are through a restricted portal type (i.e. some features are blocked.)
 	FFCF_NODROPOFF = 256,			// Caller does not need a dropoff (saves some time when checking portals)
+	FFCF_ALLOWWATER = 512			// Allow 3D sectors that are swimmable and non-solid
 };
 void	P_FindFloorCeiling (AActor *actor, int flags=0);
 

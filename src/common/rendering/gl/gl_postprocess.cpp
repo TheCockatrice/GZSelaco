@@ -80,7 +80,7 @@ void FGLRenderer::AmbientOccludeScene(float m5)
 	hw_postprocess.ssao.Render(&renderstate, m5, sceneWidth, sceneHeight);
 }
 
-void FGLRenderer::BlurScene(float gameinfobluramount)
+void FGLRenderer::BlurScene(float gameinfobluramount, bool force)
 {
 	int sceneWidth = mBuffers->GetSceneWidth();
 	int sceneHeight = mBuffers->GetSceneHeight();
@@ -91,7 +91,7 @@ void FGLRenderer::BlurScene(float gameinfobluramount)
 	int eyeCount = vrmode->mEyeCount;
 	for (int i = 0; i < eyeCount; ++i)
 	{
-		hw_postprocess.bloom.RenderBlur(&renderstate, sceneWidth, sceneHeight, gameinfobluramount);
+		hw_postprocess.bloom.RenderBlur(&renderstate, sceneWidth, sceneHeight, gameinfobluramount, force);
 		if (eyeCount - i > 1) mBuffers->NextEye(eyeCount);
 	}
 }

@@ -468,6 +468,11 @@ void DPSprite::NewTick()
 				pspr->processPending = true;
 				pspr->ResetInterpolation();
 
+				// @Cockatrice - Add the current visible frame to the frame list, so the renderer can look backwards
+				// while waiting for frames to load in the background
+				FTextureID lump = sprites[pspr->GetSprite()].GetSpriteFrame(pspr->GetFrame(), 0, 0., nullptr);
+				if(lump.isValid() && lump.GetIndex() != 0 && (pspr->LastPatches.pos < 0 || lump.GetIndex() != pspr->LastPatches[0])) pspr->LastPatches.add(lump.GetIndex());
+
 				pspr = pspr->Next;
 			}
 		}
@@ -617,6 +622,33 @@ void P_BringUpWeapon (player_t *player)
 	{
 		VMValue param = player->mo;
 		VMCall(func, &param, 1, nullptr, 0);
+	}
+}
+
+CVAR(Bool, g_leveltilting, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
+
+void P_GetCameraOffsets(player_t *player, DVector3 &angleOffsets, DVector3 &posOffset, double ticFrac, bool worldTilt) {
+	angleOffsets = { 0,0,0 };
+	posOffset = { 0,0,0 };
+
+	if (player != NULL && player->mo != NULL) {
+		IFVIRTUALPTRNAME(player->mo, NAME_PlayerPawn, CameraOffsets)
+		{
+			VMValue param[] = { player->mo, ticFrac };
+			VMReturn ret[2];
+			ret[0].Location = &angleOffsets;
+			ret[1].Location = &posOffset;
+			ret[0].RegType = REGT_FLOAT | REGT_MULTIREG3;
+			ret[1].RegType = REGT_FLOAT | REGT_MULTIREG3;
+			VMCall(func, param, 2, ret, 2);
+		}
+
+		// Add level tilt to the offsets
+		if (worldTilt && g_leveltilting) {
+			auto wyaw = player->mo->Angles.Yaw + level.tiltAngle;
+			angleOffsets.Z += wyaw.Cos() * level.tilt;
+			angleOffsets.Y += -wyaw.Sin() * level.tilt;
+		}
 	}
 }
 

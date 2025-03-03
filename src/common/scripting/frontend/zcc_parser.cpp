@@ -181,6 +181,7 @@ static void InitTokenMap()
 	TOKENDEF (',',				ZCC_COMMA);
 	TOKENDEF (TK_Class,			ZCC_CLASS);
 	TOKENDEF (TK_Abstract,		ZCC_ABSTRACT);
+	TOKENDEF (TK_Unit,			ZCC_UNIT);
 	TOKENDEF (TK_Native,		ZCC_NATIVE);
 	TOKENDEF (TK_Action,		ZCC_ACTION);
 	TOKENDEF (TK_Replaces,		ZCC_REPLACES);

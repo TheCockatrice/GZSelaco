@@ -62,6 +62,8 @@ void I_ShutdownGraphics ()
 	SDL_QuitSubSystem (SDL_INIT_VIDEO);
 }
 
+void I_StartupJoysticks();
+
 void I_InitGraphics ()
 {
 #ifdef __APPLE__
@@ -82,4 +84,6 @@ void I_InitGraphics ()
 
 	if (Video == NULL)
 		I_FatalError ("Failed to initialize display");
+
+	I_StartupJoysticks();
 }

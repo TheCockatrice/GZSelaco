@@ -38,6 +38,7 @@ struct FCheckPosition
 	bool			portalstep;
 	bool			dropoffisportal;
 	int				portalgroup;
+	double			pushFactor;		// How much of the movement was consumed by a push
 
 	int				PushTime;
 
@@ -46,6 +47,7 @@ struct FCheckPosition
 		DoRipping = rip;
 		PushTime = 0;
 		FromPMove = false;
+		pushFactor = 0;
 	}
 };
 

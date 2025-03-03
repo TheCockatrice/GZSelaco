@@ -58,6 +58,8 @@ public:
 	FString GetConfigPath (bool tryProg);
 	void ReadNetVars ();
 
+	void FinishStartup();
+
 protected:
 	void WriteCommentHeader (FileWriter *file) const;
 	void CreateStandardAutoExec (const char *section, bool start);
@@ -67,7 +69,7 @@ private:
 	void SetStrifeDefaults ();
 	void ReadCVars (unsigned flags);
 
-	bool bModSetup;
+	bool bModSetup = false, bRequiresReset = false;
 
 	char section[64];
 	char *subsection;

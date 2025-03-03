@@ -31,6 +31,7 @@
 **
 */
 #include "events.h"
+#include "vm.h"
 #include "vmintern.h"
 #include "r_utility.h"
 #include "g_levellocals.h"
@@ -43,225 +44,6 @@
 #include "utf8.h"
 
 EventManager staticEventManager;
-
-static int ListGetInt(VMVa_List& tags)
-{
-	if (tags.curindex < tags.numargs)
-	{
-		if (tags.reginfo[tags.curindex] == REGT_FLOAT)
-			return static_cast<int>(tags.args[tags.curindex++].f);
-
-		if (tags.reginfo[tags.curindex] == REGT_INT)
-			return tags.args[tags.curindex++].i;
-
-		ThrowAbortException(X_OTHER, "Invalid parameter in network command function, int expected");
-	}
-
-	return TAG_DONE;
-}
-
-static double ListGetDouble(VMVa_List& tags)
-{
-	if (tags.curindex < tags.numargs)
-	{
-		if (tags.reginfo[tags.curindex] == REGT_FLOAT)
-			return tags.args[tags.curindex++].f;
-
-		if (tags.reginfo[tags.curindex] == REGT_INT)
-			return tags.args[tags.curindex++].i;
-
-		ThrowAbortException(X_OTHER, "Invalid parameter in network command function, float expected");
-	}
-
-	return TAG_DONE;
-}
-
-static const FString* ListGetString(VMVa_List& tags)
-{
-	if (tags.curindex < tags.numargs)
-	{
-		if (tags.reginfo[tags.curindex] == REGT_STRING)
-			return &tags.args[tags.curindex++].s();
-
-		ThrowAbortException(X_OTHER, "Invalid parameter in network command function, string expected");
-	}
-
-	return nullptr;
-}
-
-IMPLEMENT_CLASS(DNetworkBuffer, false, false);
-
-void DNetworkBuffer::AddInt8(int byte)
-{
-	++_size;
-	_buffer.Push({ NET_INT8, byte });
-}
-
-void DNetworkBuffer::AddInt16(int word)
-{
-	_size += 2u;
-	_buffer.Push({ NET_INT16, word });
-}
-
-void DNetworkBuffer::AddInt(int msg)
-{
-	_size += 4u;
-	_buffer.Push({ NET_INT, msg });
-}
-
-void DNetworkBuffer::AddFloat(double msg)
-{
-	_size += 4u;
-	_buffer.Push({ NET_FLOAT, msg });
-}
-
-void DNetworkBuffer::AddDouble(double msg)
-{
-	_size += 8u;
-	_buffer.Push({ NET_DOUBLE, msg });
-}
-
-void DNetworkBuffer::AddString(const FString& msg)
-{
-	_size += msg.Len() + 1u;
-	_buffer.Push({ NET_STRING, msg });
-}
-
-void DNetworkBuffer::OnDestroy()
-{
-	Super::OnDestroy();
-
-	_buffer.Reset();
-}
-
-void DNetworkBuffer::Serialize(FSerializer& arc)
-{
-	Super::Serialize(arc);
-
-	if (arc.isWriting())
-	{
-		if (!_buffer.Size())
-			return;
-
-		if (arc.BeginArray("types"))
-		{
-			for (const auto& value : _buffer)
-			{
-				int i = value.GetType();
-				arc(nullptr, i);
-			}
-
-			arc.EndArray();
-		}
-
-		if (arc.BeginArray("values"))
-		{
-			for (const auto& value : _buffer)
-			{
-				switch (value.GetType())
-				{
-					case NET_DOUBLE:
-					case NET_FLOAT:
-					{
-						double f = value.GetDouble();
-						arc(nullptr, f);
-						break;
-					}
-
-					case NET_STRING:
-					{
-						FString s = value.GetString();
-						arc(nullptr, s);
-						break;
-					}
-
-					default:
-					{
-						int i = value.GetInt();
-						arc(nullptr, i);
-						break;
-					}
-				}
-			}
-
-			arc.EndArray();
-		}
-	}
-	else
-	{
-		TArray<int> types = {};
-		arc("types", types);
-
-		if (!types.Size())
-			return;
-
-		if (arc.BeginArray("values"))
-		{
-			// Something got corrupted, don't repopulate the buffer.
-			if (arc.ArraySize() != types.Size())
-			{
-				arc.EndArray();
-				return;
-			}
-
-			for (int type : types)
-			{
-				switch (type)
-				{
-					case NET_INT8:
-					{
-						int i = 0;
-						arc(nullptr, i);
-						AddInt8(i);
-						break;
-					}
-
-					case NET_INT16:
-					{
-						int i = 0;
-						arc(nullptr, i);
-						AddInt16(i);
-						break;
-					}
-
-					case NET_INT:
-					{
-						int i = 0;
-						arc(nullptr, i);
-						AddInt(i);
-						break;
-					}
-
-					case NET_FLOAT:
-					{
-						double f = 0.0;
-						arc(nullptr, f);
-						AddFloat(f);
-						break;
-					}
-
-					case NET_DOUBLE:
-					{
-						double f = 0.0;
-						arc(nullptr, f);
-						AddDouble(f);
-						break;
-					}
-
-					case NET_STRING:
-					{
-						FString s = {};
-						arc(nullptr, s);
-						AddString(s);
-						break;
-					}
-				}
-			}
-
-			arc.EndArray();
-		}
-	}
-}
 
 void EventManager::CallOnRegister()
 {
@@ -383,157 +165,13 @@ bool EventManager::SendNetworkEvent(FString name, int arg1, int arg2, int arg3, 
 	if (gamestate != GS_LEVEL && gamestate != GS_TITLELEVEL)
 		return false;
 
-	Net_WriteInt8(DEM_NETEVENT);
-	Net_WriteString(name.GetChars());
-	Net_WriteInt8(3);
-	Net_WriteInt32(arg1);
-	Net_WriteInt32(arg2);
-	Net_WriteInt32(arg3);
-	Net_WriteInt8(manual);
-
-	return true;
-}
-
-bool EventManager::SendNetworkCommand(const FName& cmd, VMVa_List& args)
-{
-	if (gamestate != GS_LEVEL && gamestate != GS_TITLELEVEL)
-		return false;
-
-	// Calculate the size of the message so we know where it ends.
-	unsigned int bytes = 0u;
-	int tag = ListGetInt(args);
-	while (tag != TAG_DONE)
-	{
-		switch (tag)
-		{
-			case NET_INT8:
-				++bytes;
-				break;
-
-			case NET_INT16:
-				bytes += 2u;
-				break;
-
-			case NET_INT:
-			case NET_FLOAT:
-				bytes += 4u;
-				break;
-
-			case NET_DOUBLE:
-				bytes += 8u;
-				break;
-
-			case NET_STRING:
-			{
-				++bytes; // Strings will always consume at least one byte.
-				const FString* str = ListGetString(args);
-				if (str != nullptr)
-					bytes += str->Len();
-				break;
-			}
-		}
-
-		if (tag != NET_STRING)
-			++args.curindex;
-
-		tag = ListGetInt(args);
-	}
-
-	Net_WriteInt8(DEM_ZSC_CMD);
-	Net_WriteString(cmd.GetChars());
-	Net_WriteInt16(bytes);
-
-	constexpr char Default[] = "";
-
-	args.curindex = 0;
-	tag = ListGetInt(args);
-	while (tag != TAG_DONE)
-	{
-		switch (tag)
-		{
-			default:
-				++args.curindex;
-				break;
-
-			case NET_INT8:
-				Net_WriteInt8(ListGetInt(args));
-				break;
-
-			case NET_INT16:
-				Net_WriteInt16(ListGetInt(args));
-				break;
-
-			case NET_INT:
-				Net_WriteInt32(ListGetInt(args));
-				break;
-
-			case NET_FLOAT:
-				Net_WriteFloat(ListGetDouble(args));
-				break;
-
-			case NET_DOUBLE:
-				Net_WriteDouble(ListGetDouble(args));
-				break;
-
-			case NET_STRING:
-			{
-				const FString* str = ListGetString(args);
-				if (str != nullptr)
-					Net_WriteString(str->GetChars());
-				else
-					Net_WriteString(Default); // Still have to send something here to be read correctly.
-				break;
-			}
-		}
-
-		tag = ListGetInt(args);
-	}
-
-	return true;
-}
-
-bool EventManager::SendNetworkBuffer(const FName& cmd, const DNetworkBuffer* buffer)
-{
-	if (gamestate != GS_LEVEL && gamestate != GS_TITLELEVEL)
-		return false;
-
-	Net_WriteInt8(DEM_ZSC_CMD);
-	Net_WriteString(cmd.GetChars());
-	Net_WriteInt16(buffer != nullptr ? buffer->GetBytes() : 0);
-
-	if (buffer != nullptr)
-	{
-		for (unsigned int i = 0u; i < buffer->GetBufferSize(); ++i)
-		{
-			const auto& value = buffer->GetValue(i);
-			switch (value.GetType())
-			{
-				case NET_INT8:
-					Net_WriteInt8(value.GetInt());
-					break;
-
-				case NET_INT16:
-					Net_WriteInt16(value.GetInt());
-					break;
-
-				case NET_INT:
-					Net_WriteInt32(value.GetInt());
-					break;
-
-				case NET_FLOAT:
-					Net_WriteFloat(value.GetDouble());
-					break;
-
-				case NET_DOUBLE:
-					Net_WriteDouble(value.GetDouble());
-					break;
-
-				case NET_STRING:
-					Net_WriteString(value.GetString());
-					break;
-			}
-		}
-	}
+	Net_WriteByte(DEM_NETEVENT);
+	Net_WriteString(name);
+	Net_WriteByte(3);
+	Net_WriteLong(arg1);
+	Net_WriteLong(arg2);
+	Net_WriteLong(arg3);
+	Net_WriteByte(manual);
 
 	return true;
 }
@@ -642,14 +280,6 @@ void EventManager::Shutdown()
 		handler->name(); \
 }
 
-void EventManager::OnEngineInitialize()
-{
-	for (DStaticEventHandler* handler = FirstEventHandler; handler; handler = handler->next)
-	{
-		if (handler->IsStatic())
-			handler->OnEngineInitialize();
-	}
-}
 
 // note for the functions below.
 // *Unsafe is executed on EVERY map load/close, including savegame loading, etc.
@@ -670,6 +300,61 @@ void EventManager::WorldUnloaded(const FString& nextmap)
 	{
 		handler->WorldUnloaded(nextmap);
 	}
+}
+
+bool EventManager::IsSaveAllowed(bool quicksave) {
+	for (DStaticEventHandler* handler = FirstEventHandler; handler; handler = handler->next)
+		if (!handler->IsSaveAllowed(quicksave)) return false;
+	return true;
+}
+
+
+void EventManager::PreSave(int saveType) {
+	for (DStaticEventHandler* handler = FirstEventHandler; handler; handler = handler->next)
+		handler->PreSave(saveType);
+}
+
+void EventManager::PostSave(int saveType) {
+	for (DStaticEventHandler* handler = FirstEventHandler; handler; handler = handler->next)
+		handler->PostSave(saveType);
+}
+
+bool EventManager::HandleError(int errorType, FString errMsg) {
+	for (DStaticEventHandler* handler = FirstEventHandler; handler; handler = handler->next)
+		if (handler->IsStatic() && handler->HandleError(errorType, errMsg)) return true;
+
+	return false;
+}
+
+FString EventManager::GetSavegameComments()
+{
+	struct Comment {
+		FString txt;
+		int order;
+	};
+
+	FString comments = "";
+	TArray<Comment> allComments(20);
+
+	for (DStaticEventHandler* handler = FirstEventHandler; handler; handler = handler->next)
+	{
+		if (!handler->IsStatic()) continue;
+		int order;
+		FString res = handler->GetSavegameComment(order);
+		if (!res.IsEmpty()) {
+			int index = 0;
+			for (unsigned int x = 0; x < allComments.Size(); x++) { if (order > allComments[x].order) index++; }
+			allComments.Insert(index, { res, order });
+		}
+	}
+
+	if (allComments.Size()) {
+		for (unsigned int x = 0; x < allComments.Size(); x++) {
+			comments.AppendFormat("%s%s", comments.IsEmpty() ? "\n" : "", allComments[x].txt.GetChars());
+		}
+	}
+
+	return comments;
 }
 
 bool EventManager::ShouldCallStatic(bool forplay)
@@ -699,69 +384,6 @@ void EventManager::WorldThingDied(AActor* actor, AActor* inflictor)
 
 	for (DStaticEventHandler* handler = FirstEventHandler; handler; handler = handler->next)
 		handler->WorldThingDied(actor, inflictor);
-}
-
-bool EventManager::WorldHitscanPreFired(AActor* actor, DAngle angle, double distance, DAngle pitch, int damage, FName damageType, PClassActor *pufftype, int flags, double sz, double offsetforward, double offsetside)
-{
-	// don't call anything if actor was destroyed on PostBeginPlay/BeginPlay/whatever.
-	if (actor->ObjectFlags & OF_EuthanizeMe)
-		return false;
-
-	bool ret = false;
-	if (ShouldCallStatic(true)) ret = staticEventManager.WorldHitscanPreFired(actor, angle, distance, pitch, damage, damageType, pufftype, flags, sz, offsetforward, offsetside);
-
-	if (!ret)
-	{
-		for (DStaticEventHandler* handler = FirstEventHandler; handler && ret == false; handler = handler->next)
-			ret = handler->WorldHitscanPreFired(actor, angle, distance, pitch, damage, damageType, pufftype, flags, sz, offsetforward, offsetside);
-	}
-	
-	return ret;
-}
-
-bool EventManager::WorldRailgunPreFired(FName damageType, PClassActor* pufftype, FRailParams* param)
-{
-	auto actor = param->source;
-
-	// don't call anything if actor was destroyed on PostBeginPlay/BeginPlay/whatever.
-	if (actor->ObjectFlags & OF_EuthanizeMe)
-		return false;
-
-	bool ret = false;
-
-	if (ShouldCallStatic(true)) ret = staticEventManager.WorldRailgunPreFired(damageType, pufftype, param);
-
-	if (!ret)
-	{
-		for (DStaticEventHandler* handler = FirstEventHandler; handler && ret == false; handler = handler->next)
-			ret = handler->WorldRailgunPreFired(damageType, pufftype, param);
-	}
-
-	return ret;
-}
-
-void EventManager::WorldHitscanFired(AActor* actor, const DVector3& AttackPos, const DVector3& DamagePosition, AActor* Inflictor, int flags)
-{
-	// don't call anything if actor was destroyed on PostBeginPlay/BeginPlay/whatever.
-	if (actor->ObjectFlags & OF_EuthanizeMe)
-		return;
-
-	if (ShouldCallStatic(true)) staticEventManager.WorldHitscanFired(actor, AttackPos, DamagePosition, Inflictor, flags);
-
-	for (DStaticEventHandler* handler = FirstEventHandler; handler; handler = handler->next)
-		handler->WorldHitscanFired(actor, AttackPos, DamagePosition, Inflictor, flags);
-}
-
-void EventManager::WorldRailgunFired(AActor* actor, const DVector3& AttackPos, const DVector3& DamagePosition, AActor* Inflictor, int flags)
-{
-	// don't call anything if actor was destroyed on PostBeginPlay/BeginPlay/whatever.
-	if (actor->ObjectFlags & OF_EuthanizeMe)
-		return;
-
-	if (ShouldCallStatic(true)) staticEventManager.WorldRailgunFired(actor, AttackPos, DamagePosition, Inflictor, flags);
-
-	for (DStaticEventHandler* handler = FirstEventHandler; handler; handler = handler->next)
-		handler->WorldRailgunFired(actor, AttackPos, DamagePosition, Inflictor, flags);
 }
 
 void EventManager::WorldThingGround(AActor* actor, FState* st)
@@ -816,20 +438,20 @@ void EventManager::WorldThingDestroyed(AActor* actor)
 	if (ShouldCallStatic(true)) staticEventManager.WorldThingDestroyed(actor);
 }
 
-void EventManager::WorldLinePreActivated(line_t* line, AActor* actor, int activationType, bool* shouldactivate)
+void EventManager::WorldLinePreActivated(line_t* line, AActor* actor, int activationType, bool* shouldactivate, DVector3 *optpos)
 {
-	if (ShouldCallStatic(true)) staticEventManager.WorldLinePreActivated(line, actor, activationType, shouldactivate);
+	if (ShouldCallStatic(true)) staticEventManager.WorldLinePreActivated(line, actor, activationType, shouldactivate, optpos);
 
 	for (DStaticEventHandler* handler = FirstEventHandler; handler; handler = handler->next)
-		handler->WorldLinePreActivated(line, actor, activationType, shouldactivate);
+		handler->WorldLinePreActivated(line, actor, activationType, shouldactivate, optpos != nullptr ? *optpos  : DVector3(0,0,0));
 }
 
-void EventManager::WorldLineActivated(line_t* line, AActor* actor, int activationType)
+void EventManager::WorldLineActivated(line_t* line, AActor* actor, int activationType, DVector3 *optpos)
 {
-	if (ShouldCallStatic(true)) staticEventManager.WorldLineActivated(line, actor, activationType);
+	if (ShouldCallStatic(true)) staticEventManager.WorldLineActivated(line, actor, activationType, optpos);
 
 	for (DStaticEventHandler* handler = FirstEventHandler; handler; handler = handler->next)
-		handler->WorldLineActivated(line, actor, activationType);
+		handler->WorldLineActivated(line, actor, activationType, optpos != nullptr ? *optpos : DVector3(0, 0, 0));
 }
 
 int EventManager::WorldSectorDamaged(sector_t* sector, AActor* source, int damage, FName damagetype, int part, DVector3 position, bool isradius)
@@ -869,24 +491,6 @@ void EventManager::PlayerSpawned(int num)
 
 	for (DStaticEventHandler* handler = FirstEventHandler; handler; handler = handler->next)
 		handler->PlayerSpawned(num);
-}
-
-bool EventManager::PlayerRespawning(int num)
-{
-	if (ShouldCallStatic(true))
-	{
-		bool res = staticEventManager.PlayerRespawning(num);
-		if (!res)
-			return false;
-	}
-
-	for (DStaticEventHandler* handler = FirstEventHandler; handler; handler = handler->next)
-	{
-		if (!handler->PlayerRespawning(num))
-			return false;
-	}
-
-	return true;
 }
 
 void EventManager::PlayerRespawned(int num)
@@ -962,25 +566,48 @@ bool EventManager::Responder(const event_t* ev)
 				return true; // event was processed
 		}
 	}
-	if (ShouldCallStatic(false) && staticEventManager.Responder(ev)) return true;
+	if (ShouldCallStatic(false)) uiProcessorsFound = staticEventManager.Responder(ev);
 
 	return false;
 }
 
-void EventManager::NetCommand(FNetworkCommand& cmd)
+void EventManager::Console(int player, FString name, int arg1, int arg2, int arg3, bool manual)
 {
-	if (ShouldCallStatic(false)) staticEventManager.NetCommand(cmd);
+	if (ShouldCallStatic(false)) staticEventManager.Console(player, name, arg1, arg2, arg3, manual);
 
 	for (DStaticEventHandler* handler = FirstEventHandler; handler; handler = handler->next)
-		handler->NetCommandProcess(cmd);
+		handler->ConsoleProcess(player, name, arg1, arg2, arg3, manual);
 }
 
-void EventManager::Console(int player, FString name, int arg1, int arg2, int arg3, bool manual, bool ui)
-{
-	if (ShouldCallStatic(false)) staticEventManager.Console(player, name, arg1, arg2, arg3, manual, ui);
+void EventManager::Stat(FString name, FString text, bool isAchievement, double value) {
+	if (ShouldCallStatic(false)) staticEventManager.Stat(name, text, isAchievement, value);
 
 	for (DStaticEventHandler* handler = FirstEventHandler; handler; handler = handler->next)
-		handler->ConsoleProcess(player, name, arg1, arg2, arg3, manual, ui);
+		handler->StatsEvent(name, text, isAchievement, value);
+}
+
+bool EventManager::SkillShouldChange(int oldSkill, int newSkill) {
+	bool success = true;
+
+	if (ShouldCallStatic(false))
+		if (!staticEventManager.SkillShouldChange(oldSkill, newSkill))
+			success = false;
+
+	for (DStaticEventHandler* handler = FirstEventHandler; handler; handler = handler->next)
+		if (!handler->SkillShouldChange(oldSkill, newSkill))
+			success = false;
+
+	return success;
+}
+
+void EventManager::SkillChanged(int oldSkill, int newSkill) {
+	bool success = true;
+
+	if (ShouldCallStatic(false))
+		staticEventManager.SkillChanged(oldSkill, newSkill);
+
+	for (DStaticEventHandler* handler = FirstEventHandler; handler; handler = handler->next)
+		handler->SkillChanged(oldSkill, newSkill);
 }
 
 void EventManager::RenderOverlay(EHudState state)
@@ -1107,16 +734,6 @@ DEFINE_FIELD_X(WorldEvent, FWorldEvent, DamagePosition);
 DEFINE_FIELD_X(WorldEvent, FWorldEvent, DamageIsRadius);
 DEFINE_FIELD_X(WorldEvent, FWorldEvent, NewDamage);
 DEFINE_FIELD_X(WorldEvent, FWorldEvent, CrushedState);
-DEFINE_FIELD_X(WorldEvent, FWorldEvent, AttackPos);
-DEFINE_FIELD_X(WorldEvent, FWorldEvent, AttackAngle);
-DEFINE_FIELD_X(WorldEvent, FWorldEvent, AttackPitch);
-DEFINE_FIELD_X(WorldEvent, FWorldEvent, AttackDistance);
-DEFINE_FIELD_X(WorldEvent, FWorldEvent, AttackOffsetForward);
-DEFINE_FIELD_X(WorldEvent, FWorldEvent, AttackOffsetSide);
-DEFINE_FIELD_X(WorldEvent, FWorldEvent, AttackZ);
-DEFINE_FIELD_X(WorldEvent, FWorldEvent, AttackPuffType);
-DEFINE_FIELD_X(WorldEvent, FWorldEvent, RailParams);
-DEFINE_FIELD_X(WorldEvent, FWorldEvent, AttackLineFlags);
 
 DEFINE_FIELD_X(PlayerEvent, FPlayerEvent, PlayerNumber);
 DEFINE_FIELD_X(PlayerEvent, FPlayerEvent, IsReturn);
@@ -1134,500 +751,10 @@ DEFINE_FIELD_X(ReplacedEvent, FReplacedEvent, Replacee)
 DEFINE_FIELD_X(ReplacedEvent, FReplacedEvent, Replacement)
 DEFINE_FIELD_X(ReplacedEvent, FReplacedEvent, IsFinal)
 
-DEFINE_FIELD(FNetworkCommand, Player)
-DEFINE_FIELD(FNetworkCommand, Command)
-
-static int NativeReadInt8(FNetworkCommand* const self) { return self->ReadInt8(); }
-
-DEFINE_ACTION_FUNCTION_NATIVE(FNetworkCommand, ReadInt8, NativeReadInt8)
-{
-	PARAM_SELF_STRUCT_PROLOGUE(FNetworkCommand);
-
-	ACTION_RETURN_INT(self->ReadInt8());
-}
-
-static int NativeReadInt16(FNetworkCommand* const self) { return self->ReadInt16(); }
-
-DEFINE_ACTION_FUNCTION_NATIVE(FNetworkCommand, ReadInt16, NativeReadInt16)
-{
-	PARAM_SELF_STRUCT_PROLOGUE(FNetworkCommand);
-
-	ACTION_RETURN_INT(self->ReadInt16());
-}
-
-static int NativeReadInt(FNetworkCommand* const self) { return self->ReadInt(); }
-
-DEFINE_ACTION_FUNCTION_NATIVE(FNetworkCommand, ReadInt, NativeReadInt)
-{
-	PARAM_SELF_STRUCT_PROLOGUE(FNetworkCommand);
-
-	ACTION_RETURN_INT(self->ReadInt());
-}
-
-static double NativeReadFloat(FNetworkCommand* const self) { return self->ReadFloat(); }
-
-DEFINE_ACTION_FUNCTION_NATIVE(FNetworkCommand, ReadFloat, NativeReadFloat)
-{
-	PARAM_SELF_STRUCT_PROLOGUE(FNetworkCommand);
-
-	ACTION_RETURN_FLOAT(self->ReadFloat());
-}
-
-static double NativeReadDouble(FNetworkCommand* const self) { return self->ReadDouble(); }
-
-DEFINE_ACTION_FUNCTION_NATIVE(FNetworkCommand, ReadDouble, NativeReadDouble)
-{
-	PARAM_SELF_STRUCT_PROLOGUE(FNetworkCommand);
-
-	ACTION_RETURN_FLOAT(self->ReadDouble());
-}
-
-static void NativeReadString(FNetworkCommand* const self, FString* const result)
-{
-	const auto str = self->ReadString();
-	if (str != nullptr)
-		*result = str;
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(FNetworkCommand, ReadString, NativeReadString)
-{
-	PARAM_SELF_STRUCT_PROLOGUE(FNetworkCommand);
-
-	FString res = {};
-	NativeReadString(self, &res);
-	ACTION_RETURN_STRING(res);
-}
-
-static int NativeReadName(FNetworkCommand* const self)
-{
-	FName res = NAME_None;
-	const auto str = self->ReadString();
-	if (str != nullptr)
-		res = str;
-
-	return res.GetIndex();
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(FNetworkCommand, ReadName, NativeReadName)
-{
-	PARAM_SELF_STRUCT_PROLOGUE(FNetworkCommand);
-
-	ACTION_RETURN_INT(NativeReadName(self));
-}
-
-static double NativeReadMapUnit(FNetworkCommand* const self)
-{
-	constexpr double FixedToFloat = 1.0 / (1 << 16);
-	return self->ReadInt() * FixedToFloat;
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(FNetworkCommand, ReadMapUnit, NativeReadMapUnit)
-{
-	PARAM_SELF_STRUCT_PROLOGUE(FNetworkCommand);
-
-	ACTION_RETURN_FLOAT(NativeReadMapUnit(self));
-}
-
-static double NativeReadAngle(FNetworkCommand* const self) { return DAngle::fromBam(self->ReadInt()).Degrees(); }
-
-DEFINE_ACTION_FUNCTION_NATIVE(FNetworkCommand, ReadAngle, NativeReadAngle)
-{
-	PARAM_SELF_STRUCT_PROLOGUE(FNetworkCommand);
-
-	ACTION_RETURN_FLOAT(DAngle::fromBam(self->ReadInt()).Degrees());
-}
-
-static void NativeReadVector2(FNetworkCommand* const self, DVector2* const result)
-{
-	result->X = self->ReadDouble();
-	result->Y = self->ReadDouble();
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(FNetworkCommand, ReadVector2, NativeReadVector2)
-{
-	PARAM_SELF_STRUCT_PROLOGUE(FNetworkCommand);
-
-	ACTION_RETURN_VEC2(DVector2(self->ReadDouble(), self->ReadDouble()));
-}
-
-static void NativeReadVector3(FNetworkCommand* const self, DVector3* const result)
-{
-	result->X = self->ReadDouble();
-	result->Y = self->ReadDouble();
-	result->Z = self->ReadDouble();
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(FNetworkCommand, ReadVector3, NativeReadVector3)
-{
-	PARAM_SELF_STRUCT_PROLOGUE(FNetworkCommand);
-
-	ACTION_RETURN_VEC3(DVector3(self->ReadDouble(), self->ReadDouble(), self->ReadDouble()));
-}
-
-static void NativeReadVector4(FNetworkCommand* const self, DVector4* const result)
-{
-	result->X = self->ReadDouble();
-	result->Y = self->ReadDouble();
-	result->Z = self->ReadDouble();
-	result->W = self->ReadDouble();
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(FNetworkCommand, ReadVector4, NativeReadVector4)
-{
-	PARAM_SELF_STRUCT_PROLOGUE(FNetworkCommand);
-
-	ACTION_RETURN_VEC4(DVector4(self->ReadDouble(), self->ReadDouble(), self->ReadDouble(), self->ReadDouble()));
-}
-
-static void NativeReadQuat(FNetworkCommand* const self, DQuaternion* const result)
-{
-	result->X = self->ReadDouble();
-	result->Y = self->ReadDouble();
-	result->Z = self->ReadDouble();
-	result->W = self->ReadDouble();
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(FNetworkCommand, ReadQuat, NativeReadQuat)
-{
-	PARAM_SELF_STRUCT_PROLOGUE(FNetworkCommand);
-
-	ACTION_RETURN_QUAT(DQuaternion(self->ReadDouble(), self->ReadDouble(), self->ReadDouble(), self->ReadDouble()));
-}
-
-static void NativeReadIntArray(FNetworkCommand* const self, TArray<int>* const values, const int type)
-{
-	const unsigned int size = self->ReadInt();
-	for (unsigned int i = 0u; i < size; ++i)
-	{
-		switch (type)
-		{
-		case NET_INT8:
-			values->Push(self->ReadInt8());
-			break;
-
-		case NET_INT16:
-			values->Push(self->ReadInt16());
-			break;
-
-		default:
-			values->Push(self->ReadInt());
-			break;
-		}
-	}
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(FNetworkCommand, ReadIntArray, NativeReadIntArray)
-{
-	PARAM_SELF_STRUCT_PROLOGUE(FNetworkCommand);
-	PARAM_OUTPOINTER(values, TArray<int>);
-	PARAM_INT(type);
-
-	NativeReadIntArray(self, values, type);
-	return 0;
-}
-
-static void NativeReadDoubleArray(FNetworkCommand* const self, TArray<double>* const values, const bool doublePrecision)
-{
-	const unsigned int size = self->ReadInt();
-	for (unsigned int i = 0u; i < size; ++i)
-	{
-		if (doublePrecision)
-			values->Push(self->ReadDouble());
-		else
-			values->Push(self->ReadFloat());
-	}
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(FNetworkCommand, ReadDoubleArray, NativeReadDoubleArray)
-{
-	PARAM_SELF_STRUCT_PROLOGUE(FNetworkCommand);
-	PARAM_OUTPOINTER(values, TArray<double>);
-	PARAM_BOOL(doublePrecision);
-
-	NativeReadDoubleArray(self, values, doublePrecision);
-	return 0;
-}
-
-static void NativeReadStringArray(FNetworkCommand* const self, TArray<FString>* const values, const bool skipEmpty)
-{
-	const unsigned int size = self->ReadInt();
-	for (unsigned int i = 0u; i < size; ++i)
-	{
-		FString res = {};
-		const auto str = self->ReadString();
-		if (str != nullptr)
-			res = str;
-
-		if (!skipEmpty || !res.IsEmpty())
-			values->Push(res);
-	}
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(FNetworkCommand, ReadStringArray, NativeReadStringArray)
-{
-	PARAM_SELF_STRUCT_PROLOGUE(FNetworkCommand);
-	PARAM_OUTPOINTER(values, TArray<FString>);
-	PARAM_BOOL(skipEmpty);
-
-	NativeReadStringArray(self, values, skipEmpty);
-	return 0;
-}
-
-static int EndOfStream(FNetworkCommand* const self) { return self->EndOfStream(); }
-
-DEFINE_ACTION_FUNCTION_NATIVE(FNetworkCommand, EndOfStream, EndOfStream)
-{
-	PARAM_SELF_STRUCT_PROLOGUE(FNetworkCommand);
-
-	ACTION_RETURN_BOOL(self->EndOfStream());
-}
-
-static void AddInt8(DNetworkBuffer* const self, const int value) { self->AddInt8(value); }
-
-DEFINE_ACTION_FUNCTION_NATIVE(DNetworkBuffer, AddInt8, AddInt8)
-{
-	PARAM_SELF_PROLOGUE(DNetworkBuffer);
-	PARAM_INT(value);
-	self->AddInt8(value);
-	return 0;
-}
-
-static void AddInt16(DNetworkBuffer* const self, const int value) { self->AddInt16(value); }
-
-DEFINE_ACTION_FUNCTION_NATIVE(DNetworkBuffer, AddInt16, AddInt16)
-{
-	PARAM_SELF_PROLOGUE(DNetworkBuffer);
-	PARAM_INT(value);
-	self->AddInt16(value);
-	return 0;
-}
-
-static void AddInt(DNetworkBuffer* const self, const int value) { self->AddInt(value); }
-
-DEFINE_ACTION_FUNCTION_NATIVE(DNetworkBuffer, AddInt, AddInt)
-{
-	PARAM_SELF_PROLOGUE(DNetworkBuffer);
-	PARAM_INT(value);
-	self->AddInt(value);
-	return 0;
-}
-
-static void AddFloat(DNetworkBuffer* const self, const double value) { self->AddFloat(value); }
-
-DEFINE_ACTION_FUNCTION_NATIVE(DNetworkBuffer, AddFloat, AddFloat)
-{
-	PARAM_SELF_PROLOGUE(DNetworkBuffer);
-	PARAM_FLOAT(value);
-	self->AddFloat(value);
-	return 0;
-}
-
-static void AddDouble(DNetworkBuffer* const self, const double value) { self->AddDouble(value); }
-
-DEFINE_ACTION_FUNCTION_NATIVE(DNetworkBuffer, AddDouble, AddDouble)
-{
-	PARAM_SELF_PROLOGUE(DNetworkBuffer);
-	PARAM_FLOAT(value);
-	self->AddDouble(value);
-	return 0;
-}
-
-static void AddString(DNetworkBuffer* const self, const FString& value) { self->AddString(value); }
-
-DEFINE_ACTION_FUNCTION_NATIVE(DNetworkBuffer, AddString, AddString)
-{
-	PARAM_SELF_PROLOGUE(DNetworkBuffer);
-	PARAM_STRING(value);
-	self->AddString(value);
-	return 0;
-}
-
-static void AddName(DNetworkBuffer* const self, const int value) { FName x = ENamedName(value);  self->AddString(x.GetChars()); }
-
-DEFINE_ACTION_FUNCTION_NATIVE(DNetworkBuffer, AddName, AddName)
-{
-	PARAM_SELF_PROLOGUE(DNetworkBuffer);
-	PARAM_NAME(value);
-	self->AddString(value.GetChars());
-	return 0;
-}
-
-static void AddMapUnit(DNetworkBuffer* const self, const double value)
-{
-	constexpr int FloatToFixed = 1 << 16;
-	self->AddInt(static_cast<int>(value * FloatToFixed));
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(DNetworkBuffer, AddMapUnit, AddMapUnit)
-{
-	PARAM_SELF_PROLOGUE(DNetworkBuffer);
-	PARAM_FLOAT(value);
-
-	AddMapUnit(self, value);
-	return 0;
-}
-
-static void AddAngle(DNetworkBuffer* const self, const double value) { self->AddInt(DAngle::fromDeg(value).BAMs()); }
-
-DEFINE_ACTION_FUNCTION_NATIVE(DNetworkBuffer, AddAngle, AddAngle)
-{
-	PARAM_SELF_PROLOGUE(DNetworkBuffer);
-	PARAM_ANGLE(value);
-	self->AddInt(value.BAMs());
-	return 0;
-}
-
-static void AddVector2(DNetworkBuffer* const self, const double x, const double y)
-{
-	self->AddDouble(x);
-	self->AddDouble(y);
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(DNetworkBuffer, AddVector2, AddVector2)
-{
-	PARAM_SELF_PROLOGUE(DNetworkBuffer);
-	PARAM_FLOAT(x);
-	PARAM_FLOAT(y);
-	self->AddDouble(x);
-	self->AddDouble(y);
-	return 0;
-}
-
-static void AddVector3(DNetworkBuffer* const self, const double x, const double y, const double z)
-{
-	self->AddDouble(x);
-	self->AddDouble(y);
-	self->AddDouble(z);
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(DNetworkBuffer, AddVector3, AddVector3)
-{
-	PARAM_SELF_PROLOGUE(DNetworkBuffer);
-	PARAM_FLOAT(x);
-	PARAM_FLOAT(y);
-	PARAM_FLOAT(z);
-	self->AddDouble(x);
-	self->AddDouble(y);
-	self->AddDouble(z);
-	return 0;
-}
-
-static void AddVector4(DNetworkBuffer* const self, const double x, const double y, const double z, const double w)
-{
-	self->AddDouble(x);
-	self->AddDouble(y);
-	self->AddDouble(z);
-	self->AddDouble(w);
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(DNetworkBuffer, AddVector4, AddVector4)
-{
-	PARAM_SELF_PROLOGUE(DNetworkBuffer);
-	PARAM_FLOAT(x);
-	PARAM_FLOAT(y);
-	PARAM_FLOAT(z);
-	PARAM_FLOAT(w);
-	self->AddDouble(x);
-	self->AddDouble(y);
-	self->AddDouble(z);
-	self->AddDouble(w);
-	return 0;
-}
-
-static void AddQuat(DNetworkBuffer* const self, const double x, const double y, const double z, const double w)
-{
-	self->AddDouble(x);
-	self->AddDouble(y);
-	self->AddDouble(z);
-	self->AddDouble(w);
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(DNetworkBuffer, AddQuat, AddQuat)
-{
-	PARAM_SELF_PROLOGUE(DNetworkBuffer);
-	PARAM_FLOAT(x);
-	PARAM_FLOAT(y);
-	PARAM_FLOAT(z);
-	PARAM_FLOAT(w);
-	self->AddDouble(x);
-	self->AddDouble(y);
-	self->AddDouble(z);
-	self->AddDouble(w);
-	return 0;
-}
-
-static void AddIntArray(DNetworkBuffer* const self, TArray<int>* const values, const int type)
-{
-	const unsigned int size = values->Size();
-	self->AddInt(size);
-	for (unsigned int i = 0u; i < size; ++i)
-	{
-		switch (type)
-		{
-		case NET_INT8:
-			self->AddInt8((*values)[i]);
-			break;
-
-		case NET_INT16:
-			self->AddInt16((*values)[i]);
-			break;
-
-		default:
-			self->AddInt((*values)[i]);
-			break;
-		}
-	}
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(DNetworkBuffer, AddIntArray, AddIntArray)
-{
-	PARAM_SELF_PROLOGUE(DNetworkBuffer);
-	PARAM_POINTER(values, TArray<int>);
-	PARAM_INT(type);
-
-	AddIntArray(self, values, type);
-	return 0;
-}
-
-static void AddDoubleArray(DNetworkBuffer* const self, TArray<double>* const values, const bool doublePrecision)
-{
-	const unsigned int size = values->Size();
-	self->AddInt(size);
-	for (unsigned int i = 0u; i < size; ++i)
-	{
-		if (doublePrecision)
-			self->AddDouble((*values)[i]);
-		else
-			self->AddFloat((*values)[i]);
-	}
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(DNetworkBuffer, AddDoubleArray, AddDoubleArray)
-{
-	PARAM_SELF_PROLOGUE(DNetworkBuffer);
-	PARAM_POINTER(values, TArray<double>);
-	PARAM_BOOL(doublePrecision);
-
-	AddDoubleArray(self, values, doublePrecision);
-	return 0;
-}
-
-static void AddStringArray(DNetworkBuffer* const self, TArray<FString>* const values)
-{
-	const unsigned int size = values->Size();
-	self->AddInt(size);
-	for (unsigned int i = 0u; i < size; ++i)
-		self->AddString((*values)[i]);
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(DNetworkBuffer, AddStringArray, AddStringArray)
-{
-	PARAM_SELF_PROLOGUE(DNetworkBuffer);
-	PARAM_POINTER(values, TArray<FString>);
-
-	AddStringArray(self, values);
-	return 0;
-}
+DEFINE_FIELD_X(StatsEvent, FStatsEvent, Name)
+DEFINE_FIELD_X(StatsEvent, FStatsEvent, Text)
+DEFINE_FIELD_X(StatsEvent, FStatsEvent, IsAchievement)
+DEFINE_FIELD_X(StatsEvent, FStatsEvent, Value)
 
 DEFINE_ACTION_FUNCTION(DStaticEventHandler, SetOrder)
 {
@@ -1636,25 +763,6 @@ DEFINE_ACTION_FUNCTION(DStaticEventHandler, SetOrder)
 
 	self->Order = order;
 	return 0;
-}
-
-DEFINE_ACTION_FUNCTION(DEventHandler, SendNetworkCommand)
-{
-	PARAM_PROLOGUE;
-	PARAM_NAME(cmd);
-	PARAM_VA_POINTER(va_reginfo);
-
-	VMVa_List args = { param + 1, 0, numparam - 2, va_reginfo + 1 };
-	ACTION_RETURN_BOOL(currentVMLevel->localEventManager->SendNetworkCommand(cmd, args));
-}
-
-DEFINE_ACTION_FUNCTION(DEventHandler, SendNetworkBuffer)
-{
-	PARAM_PROLOGUE;
-	PARAM_NAME(cmd);
-	PARAM_OBJECT(buffer, DNetworkBuffer);
-
-	ACTION_RETURN_BOOL(currentVMLevel->localEventManager->SendNetworkBuffer(cmd, buffer));
 }
 
 DEFINE_ACTION_FUNCTION(DEventHandler, SendNetworkEvent)
@@ -1667,21 +775,6 @@ DEFINE_ACTION_FUNCTION(DEventHandler, SendNetworkEvent)
 	//
 
 	ACTION_RETURN_BOOL(currentVMLevel->localEventManager->SendNetworkEvent(name, arg1, arg2, arg3, false));
-}
-
-DEFINE_ACTION_FUNCTION(DEventHandler, SendInterfaceEvent)
-{
-	PARAM_PROLOGUE;
-	PARAM_INT(playerNum);
-	PARAM_STRING(name);
-	PARAM_INT(arg1);
-	PARAM_INT(arg2);
-	PARAM_INT(arg3);
-
-	if (playerNum == consoleplayer)
-		primaryLevel->localEventManager->Console(-1, name, arg1, arg2, arg3, false, true);
-
-	return 0;
 }
 
 DEFINE_ACTION_FUNCTION(DEventHandler, Find)
@@ -1752,21 +845,9 @@ FWorldEvent EventManager::SetupWorldEvent()
 	FWorldEvent e;
 	e.IsSaveGame = savegamerestore;
 	e.IsReopen = Level->FromSnapshot && !savegamerestore; // each one by itself isnt helpful, but with hub load we have savegamerestore==0 and level.FromSnapshot==1.
-	e.DamageAngle = nullAngle;
+	e.DamageAngle = 0.0;
 	return e;
 }
-
-void DStaticEventHandler::OnEngineInitialize()
-{
-	IFVIRTUAL(DStaticEventHandler, OnEngineInitialize)
-	{
-		// don't create excessive DObjects if not going to be processed anyway
-		if (isEmpty(func)) return;
-		VMValue params[1] = { (DStaticEventHandler*)this };
-		VMCall(func, params, 1, nullptr, 0);
-	}
-}
-
 
 void DStaticEventHandler::WorldLoaded()
 {
@@ -1820,98 +901,6 @@ void DStaticEventHandler::WorldThingDied(AActor* actor, AActor* inflictor)
 	}
 }
 
-bool DStaticEventHandler::WorldHitscanPreFired(AActor* actor, DAngle angle, double distance, DAngle pitch, int damage, FName damageType, PClassActor *pufftype, int flags, double sz, double offsetforward, double offsetside)
-{
-	IFVIRTUAL(DStaticEventHandler, WorldHitscanPreFired)
-	{
-		// don't create excessive DObjects if not going to be processed anyway
-		if (isEmpty(func)) return false;
-		FWorldEvent e = owner->SetupWorldEvent();
-		e.Thing = actor;
-		e.AttackAngle = angle;
-		e.AttackPitch = pitch;
-		e.AttackDistance = distance;
-		e.Damage = damage;
-		e.DamageType = damageType;
-		e.AttackPuffType = pufftype;
-		e.AttackOffsetForward = offsetforward;
-		e.AttackOffsetSide = offsetside;
-		e.AttackZ = sz;
-		e.AttackLineFlags = flags;
-		int processed;
-		VMReturn results[1] = { &processed };
-		VMValue params[2] = { (DStaticEventHandler*)this, &e };
-		VMCall(func, params, 2, results, 1);
-		return !!processed;
-	}
-
-	return false;
-}
-
-bool DStaticEventHandler::WorldRailgunPreFired(FName damageType, PClassActor* pufftype, FRailParams* param)
-{
-	IFVIRTUAL(DStaticEventHandler, WorldRailgunPreFired)
-	{
-		// don't create excessive DObjects if not going to be processed anyway
-		if (isEmpty(func)) return false;
-		FWorldEvent e = owner->SetupWorldEvent();
-		e.Thing = param->source;
-		e.AttackPuffType = pufftype;
-		e.DamageType = damageType;
-		e.Damage = param->damage;
-		e.AttackOffsetForward = 0;
-		e.AttackOffsetSide = param->offset_xy;
-		e.AttackDistance = param->distance;
-		e.AttackZ = param->offset_z;
-		e.AttackAngle = e.Thing->Angles.Yaw + param->angleoffset;
-		e.AttackPitch = e.Thing->Angles.Pitch + param->pitchoffset;
-		e.RailParams = *param;
-		e.RailParams.puff = pufftype;
-
-		int processed;
-		VMReturn results[1] = { &processed };
-		VMValue params[2] = { (DStaticEventHandler*)this, &e };
-		VMCall(func, params, 2, results, 1);
-		return !!processed;
-	}
-
-	return false;
-}
-
-void DStaticEventHandler::WorldHitscanFired(AActor* actor, const DVector3& AttackPos, const DVector3& DamagePosition, AActor* Inflictor, int flags)
-{
-	IFVIRTUAL(DStaticEventHandler, WorldHitscanFired)
-	{
-		// don't create excessive DObjects if not going to be processed anyway
-		if (isEmpty(func)) return;
-		FWorldEvent e = owner->SetupWorldEvent();
-		e.Thing = actor;
-		e.AttackPos = AttackPos;
-		e.DamagePosition = DamagePosition;
-		e.Inflictor = Inflictor;
-		e.AttackLineFlags = flags;
-		VMValue params[2] = { (DStaticEventHandler*)this, &e };
-		VMCall(func, params, 2, nullptr, 0);
-	}
-}
-
-void DStaticEventHandler::WorldRailgunFired(AActor* actor, const DVector3& AttackPos, const DVector3& DamagePosition, AActor* Inflictor, int flags)
-{
-	IFVIRTUAL(DStaticEventHandler, WorldRailgunFired)
-	{
-		// don't create excessive DObjects if not going to be processed anyway
-		if (isEmpty(func)) return;
-		FWorldEvent e = owner->SetupWorldEvent();
-		e.Thing = actor;
-		e.AttackPos = AttackPos;
-		e.DamagePosition = DamagePosition;
-		e.Inflictor = Inflictor;
-		e.AttackLineFlags = flags;
-		VMValue params[2] = { (DStaticEventHandler*)this, &e };
-		VMCall(func, params, 2, nullptr, 0);
-	}
-}
-
 void DStaticEventHandler::WorldThingGround(AActor* actor, FState* st)
 {
 	IFVIRTUAL(DStaticEventHandler, WorldThingGround)
@@ -1925,6 +914,7 @@ void DStaticEventHandler::WorldThingGround(AActor* actor, FState* st)
 		VMCall(func, params, 2, nullptr, 0);
 	}
 }
+
 
 void DStaticEventHandler::WorldThingRevived(AActor* actor)
 {
@@ -1971,7 +961,7 @@ void DStaticEventHandler::WorldThingDestroyed(AActor* actor)
 	}
 }
 
-void DStaticEventHandler::WorldLinePreActivated(line_t* line, AActor* actor, int activationType, bool* shouldactivate)
+void DStaticEventHandler::WorldLinePreActivated(line_t* line, AActor* actor, int activationType, bool* shouldactivate, DVector3 pos)
 {
 	IFVIRTUAL(DStaticEventHandler, WorldLinePreActivated)
 	{
@@ -1982,13 +972,14 @@ void DStaticEventHandler::WorldLinePreActivated(line_t* line, AActor* actor, int
 		e.ActivatedLine = line;
 		e.ActivationType = activationType;
 		e.ShouldActivate = *shouldactivate;
+		e.DamagePosition = pos;
 		VMValue params[2] = { (DStaticEventHandler*)this, &e };
 		VMCall(func, params, 2, nullptr, 0);
 		*shouldactivate = e.ShouldActivate;
 	}
 }
 
-void DStaticEventHandler::WorldLineActivated(line_t* line, AActor* actor, int activationType)
+void DStaticEventHandler::WorldLineActivated(line_t* line, AActor* actor, int activationType, DVector3 pos)
 {
 	IFVIRTUAL(DStaticEventHandler, WorldLineActivated)
 	{
@@ -1998,6 +989,7 @@ void DStaticEventHandler::WorldLineActivated(line_t* line, AActor* actor, int ac
 		e.Thing = actor;
 		e.ActivatedLine = line;
 		e.ActivationType = activationType;
+		e.DamagePosition = pos;
 		VMValue params[2] = { (DStaticEventHandler*)this, &e };
 		VMCall(func, params, 2, nullptr, 0);
 	}
@@ -2071,6 +1063,73 @@ void DStaticEventHandler::WorldTick()
 		VMCall(func, params, 1, nullptr, 0);
 	}
 }
+
+
+FString DStaticEventHandler::GetSavegameComment(int &order)
+{
+	IFVIRTUAL(DStaticEventHandler, GetSavegameComment)
+	{
+		FString retString;
+
+		// don't create excessive DObjects if not going to be processed anyway
+		if (isEmpty(func)) return "";
+		VMValue params[1] = { (DStaticEventHandler*)this };
+		VMReturn ret[2]; ret[0].StringAt(&retString); ret[1].IntAt(&order);
+		VMCall(func, params, 1, ret, 2);
+
+		return retString;
+	}
+
+	return "";
+}
+
+bool DStaticEventHandler::IsSaveAllowed(bool quicksave) {
+	IFVIRTUAL(DStaticEventHandler, IsSaveAllowed)
+	{
+		int valid = 1;
+		VMReturn results[1] = { &valid };
+		VMValue params[2] = { (DStaticEventHandler*)this, quicksave };
+		VMCall(func, params, 2, results, 1);
+		return !!valid;
+	}
+
+	return true;
+}
+
+
+void DStaticEventHandler::PreSave(int saveType) {
+	IFVIRTUAL(DStaticEventHandler, PreSave)
+	{
+		if (isEmpty(func)) return;
+		VMValue params[2] = { (DStaticEventHandler*)this, saveType };
+		VMCall(func, params, 2, nullptr, 0);
+	}
+}
+
+
+void DStaticEventHandler::PostSave(int saveType) {
+	IFVIRTUAL(DStaticEventHandler, PostSave)
+	{
+		if (isEmpty(func)) return;
+		VMValue params[2] = { (DStaticEventHandler*)this, saveType };
+		VMCall(func, params, 2, nullptr, 0);
+	}
+}
+
+
+bool DStaticEventHandler::HandleError(int errorType, FString engineErrMsg) {
+	IFVIRTUAL(DStaticEventHandler, HandleError)
+	{
+		int handled = 0;
+		VMReturn results[1] = { &handled };
+		VMValue params[3] = { (DStaticEventHandler*)this, errorType, (FString*)&engineErrMsg };
+		VMCall(func, params, 3, results, 1);
+		return !!handled;
+	}
+
+	return false;
+}
+
 
 FRenderEvent EventManager::SetupRenderEvent()
 {
@@ -2147,22 +1206,6 @@ void DStaticEventHandler::PlayerSpawned(int num)
 		VMValue params[2] = { (DStaticEventHandler*)this, &e };
 		VMCall(func, params, 2, nullptr, 0);
 	}
-}
-
-bool DStaticEventHandler::PlayerRespawning(int num)
-{
-	int res = true;
-	IFVIRTUAL(DStaticEventHandler, PlayerRespawning)
-	{
-		// don't create excessive DObjects if not going to be processed anyway
-		if (isEmpty(func)) return res;
-		FPlayerEvent e = { num, false };
-		VMValue params[] = { (DStaticEventHandler*)this, &e };
-		VMReturn returns[] = { &res };
-		VMCall(func, params, 2, returns, 1);
-	}
-
-	return res;
 }
 
 void DStaticEventHandler::PlayerRespawned(int num)
@@ -2260,63 +1303,74 @@ void DStaticEventHandler::PostUiTick()
 	}
 }
 
-void DStaticEventHandler::NetCommandProcess(FNetworkCommand& cmd)
-{
-	IFVIRTUAL(DStaticEventHandler, NetworkCommandProcess)
+void DStaticEventHandler::StatsEvent(FString name, FString text, bool isAchievement, double value) {
+	IFVIRTUAL(DStaticEventHandler, StatProcess)
 	{
-		if (isEmpty(func))
-			return;
+		// don't create excessive DObjects if not going to be processed anyway
+		if (isEmpty(func)) return;
+		FStatsEvent e;
 
-		VMValue params[] = { this, &cmd };
+		//
+		e.Name = name;
+		e.Text = text;
+		e.IsAchievement = isAchievement;
+		e.Value = value;
+
+		VMValue params[2] = { (DStaticEventHandler*)this, &e };
 		VMCall(func, params, 2, nullptr, 0);
-
-		cmd.Reset();
 	}
 }
 
-void DStaticEventHandler::ConsoleProcess(int player, FString name, int arg1, int arg2, int arg3, bool manual, bool ui)
+
+bool DStaticEventHandler::SkillShouldChange(int oldSkill, int newSkill) {
+	IFVIRTUAL(DStaticEventHandler, SkillShouldChange)
+	{
+		// don't create excessive DObjects if not going to be processed anyway
+		if (isEmpty(func)) return true;
+
+		int bbool = 1;
+		VMValue params[3] = { (DStaticEventHandler*)this, oldSkill, newSkill };
+		VMReturn ret(&bbool);
+		VMCall(func, params, countof(params), &ret, 1);
+		return bbool;
+	}
+
+	return true;
+}
+
+void DStaticEventHandler::SkillChanged(int oldSkill, int newSkill) {
+	IFVIRTUAL(DStaticEventHandler, SkillChanged)
+	{
+		// don't create excessive DObjects if not going to be processed anyway
+		if (isEmpty(func)) return;
+
+		int bbool = 1;
+		VMValue params[3] = { (DStaticEventHandler*)this, oldSkill, newSkill };
+		VMCall(func, params, countof(params), nullptr, 0);
+	}
+
+}
+
+void DStaticEventHandler::ConsoleProcess(int player, FString name, int arg1, int arg2, int arg3, bool manual)
 {
 	if (player < 0)
 	{
-		if (ui)
+		IFVIRTUAL(DStaticEventHandler, ConsoleProcess)
 		{
-			IFVIRTUAL(DStaticEventHandler, InterfaceProcess)
-			{
-				// don't create excessive DObjects if not going to be processed anyway
-				if (isEmpty(func)) return;
-				FConsoleEvent e;
+			// don't create excessive DObjects if not going to be processed anyway
+			if (isEmpty(func)) return;
+			FConsoleEvent e;
 
-				//
-				e.Player = player;
-				e.Name = name;
-				e.Args[0] = arg1;
-				e.Args[1] = arg2;
-				e.Args[2] = arg3;
-				e.IsManual = manual;
+			//
+			e.Player = player;
+			e.Name = name;
+			e.Args[0] = arg1;
+			e.Args[1] = arg2;
+			e.Args[2] = arg3;
+			e.IsManual = manual;
 
-				VMValue params[2] = { (DStaticEventHandler*)this, &e };
-				VMCall(func, params, 2, nullptr, 0);
-			}
-		}
-		else
-		{
-			IFVIRTUAL(DStaticEventHandler, ConsoleProcess)
-			{
-				// don't create excessive DObjects if not going to be processed anyway
-				if (isEmpty(func)) return;
-				FConsoleEvent e;
-
-				//
-				e.Player = player;
-				e.Name = name;
-				e.Args[0] = arg1;
-				e.Args[1] = arg2;
-				e.Args[2] = arg3;
-				e.IsManual = manual;
-
-				VMValue params[2] = { (DStaticEventHandler*)this, &e };
-				VMCall(func, params, 2, nullptr, 0);
-			}
+			VMValue params[2] = { (DStaticEventHandler*)this, &e };
+			VMCall(func, params, 2, nullptr, 0);
 		}
 	}
 	else
@@ -2392,25 +1446,6 @@ void DStaticEventHandler::OnDestroy()
 
 // console stuff
 // this is kinda like puke, except it distinguishes between local events and playsim events.
-CCMD(interfaceevent)
-{
-	int argc = argv.argc();
-
-	if (argc < 2 || argc > 5)
-	{
-		Printf("Usage: interfaceevent <name> [arg1] [arg2] [arg3]\n");
-	}
-	else
-	{
-		int arg[3] = { 0, 0, 0 };
-		int argn = min<int>(argc - 2, countof(arg));
-		for (int i = 0; i < argn; i++)
-			arg[i] = atoi(argv[2 + i]);
-		// call locally
-		primaryLevel->localEventManager->Console(-1, argv[1], arg[0], arg[1], arg[2], true, true);
-	}
-}
-
 CCMD(event)
 {
 	int argc = argv.argc();
@@ -2426,13 +1461,14 @@ CCMD(event)
 		for (int i = 0; i < argn; i++)
 			arg[i] = atoi(argv[2 + i]);
 		// call locally
-		primaryLevel->localEventManager->Console(-1, argv[1], arg[0], arg[1], arg[2], true, false);
+		primaryLevel->localEventManager->Console(-1, argv[1], arg[0], arg[1], arg[2], true);
 	}
 }
 
 CCMD(netevent)
 {
-	if (gamestate != GS_LEVEL/* && gamestate != GS_TITLELEVEL*/) // not sure if this should work in title level, but probably not, because this is for actual playing
+	// @cockatrice - Re-enabled GS_TITLELEVEL because netevent is the only way we can interact with some play scoped functionality while in titlemap
+	if (gamestate != GS_LEVEL && gamestate != GS_TITLELEVEL) // not sure if this should work in title level, but probably not, because this is for actual playing
 	{
 		DPrintf(DMSG_SPAMMY, "netevent cannot be used outside of a map.\n");
 		return;

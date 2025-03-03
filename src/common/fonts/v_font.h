@@ -37,7 +37,6 @@
 #include "vectors.h"
 #include "palentry.h"
 #include "name.h"
-#include "palettecontainer.h"
 
 class FGameTexture;
 struct FRemapTable;
@@ -99,13 +98,22 @@ public:
 		Custom
 	};
 
+	struct CharData
+	{
+		FGameTexture* OriginalPic = nullptr;
+		int XMove = INT_MIN;
+		int tCharX = -1, tCharY = -1, tCharW = -1, tCharH = -1;
+	};
+
 	FFont (const char *fontname, const char *nametemplate, const char *filetemplate, int first, int count, int base, int fdlump, int spacewidth=-1, bool notranslate = false, bool iwadonly = false, bool doomtemplate = false, GlyphSet *baseGlpyphs = nullptr);
 	FFont(int lump, FName nm = NAME_None);
 	virtual ~FFont ();
 
 	virtual FGameTexture *GetChar (int code, int translation, int *const width) const;
+	virtual CharData GetChar(int code, int translation) const;
+
 	virtual int GetCharWidth (int code) const;
-	FTranslationID GetColorTranslation (EColorRange range, PalEntry *color = nullptr) const;
+	int GetColorTranslation (EColorRange range, PalEntry *color = nullptr) const;
 	int GetLump() const { return Lump; }
 	int GetSpaceWidth () const { return SpaceWidth; }
 	int GetHeight () const { return FontHeight; }
@@ -168,7 +176,6 @@ public:
 		forceremap = other.forceremap;
 		Chars = other.Chars;
 		Translations = other.Translations;
-		lowercaselatinonly = other.lowercaselatinonly;
 		Lump = other.Lump;
 	}
 
@@ -176,13 +183,14 @@ protected:
 
 	void FixXMoves();
 
-	void ReadSheetFont(std::vector<FileSys::FolderEntry> &folderdata, int width, int height, const DVector2 &Scale);
+	void ReadSheetFont(TArray<FolderEntry> &folderdata, int width, int height, const DVector2 &Scale, TMap<int, int> &explicitWidths);
 
 	EFontType Type = EFontType::Unknown;
 	FName AltFontName = NAME_None;
 	int FirstChar, LastChar;
 	int SpaceWidth;
 	int FontHeight;
+	int No1252;			// @Cockatrice - Disable filtering of Win1252 characters
 	int GlobalKerning;
 	int TranslationType = 0;
 	int Displacement = 0;
@@ -191,14 +199,10 @@ protected:
 	bool noTranslate = false;
 	bool MixedCase = false;
 	bool forceremap = false;
-	bool lowercaselatinonly = false;
-	struct CharData
-	{
-		FGameTexture *OriginalPic = nullptr;
-		int XMove = INT_MIN;
-	};
+	bool supportsChardata = false;
+	
 	TArray<CharData> Chars;
-	TArray<FTranslationID> Translations;
+	TArray<int> Translations;
 
 	int Lump;
 	FName FontName = NAME_None;
@@ -211,6 +215,7 @@ protected:
 	friend void V_InitFonts();
 };
 
+
 extern FFont *SmallFont, *SmallFont2, *BigFont, *BigUpper, *ConFont, *IntermissionFont, *NewConsoleFont, *NewSmallFont, *CurrentConsoleFont, *OriginalSmallFont, *AlternativeSmallFont, *OriginalBigFont, *AlternativeBigFont;
 
 void V_InitFonts();
@@ -220,7 +225,7 @@ PalEntry V_LogColorFromColorRange (EColorRange range);
 EColorRange V_ParseFontColor (const uint8_t *&color_value, int normalcolor, int boldcolor);
 void V_InitFontColors();
 char* CleanseString(char* str);
-void V_ApplyLuminosityTranslation(const LuminosityTranslationDesc& lum, uint8_t* pixel, int size);
+void V_ApplyLuminosityTranslation(int translation, uint8_t* pixel, int size);
 void V_LoadTranslations();
 class FBitmap;
 

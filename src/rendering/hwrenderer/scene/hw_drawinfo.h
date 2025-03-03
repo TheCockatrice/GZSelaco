@@ -246,7 +246,7 @@ public:
 	void SetViewArea();
 	int SetFullbrightFlags(player_t *player);
 
-	void DrawScene(int drawmode);
+	void DrawScene(int drawmode, bool drawpsprites = false);
 	void CreateScene(bool drawpsprites);
 	void RenderScene(FRenderState &state);
 	void RenderTranslucent(FRenderState &state);
@@ -254,7 +254,7 @@ public:
 	void EndDrawScene(sector_t * viewsector, FRenderState &state);
 	void DrawEndScene2D(sector_t * viewsector, FRenderState &state);
 	void Set3DViewport(FRenderState &state);
-	void ProcessScene(bool toscreen);
+	void ProcessScene(bool toscreen, bool drawpsprites);
 
 	bool DoOneSectorUpper(subsector_t * subsec, float planez, area_t in_area);
 	bool DoOneSectorLower(subsector_t * subsec, float planez, area_t in_area);
@@ -326,7 +326,7 @@ public:
 };
 
 void CleanSWDrawer();
-sector_t* RenderViewpoint(FRenderViewpoint& mainvp, AActor* camera, IntRect* bounds, float fov, float ratio, float fovratio, bool mainview, bool toscreen);
+sector_t* RenderViewpoint(FRenderViewpoint& mainvp, AActor* camera, IntRect* bounds, float fov, float ratio, float fovratio, bool mainview, bool toscreen, bool isSavePic = false);
 void WriteSavePic(player_t* player, FileWriter* file, int width, int height);
 sector_t* RenderView(player_t* player);
 

@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "vectors.h"
+#include "tarray.h"
 #include "tflags.h"
 
 enum EChanFlag
@@ -31,11 +32,13 @@ enum EChanFlag
 	CHANF_LOCAL = 16384,	// only plays locally for the calling actor
 	CHANF_TRANSIENT = 32768,	// Do not record in savegames - used for sounds that get restarted outside the sound system (e.g. ambients in SW and Blood)
 	CHANF_FORCE = 65536,		// Start, even if sound is paused.
-	CHANF_SINGULAR = 0x20000,		// Only start if no sound of this name is already playing.
+	CHANF_RESERVED = 131072,	// @Cockatrice - internal: Channel is reserved for a queued sound and is not yet playing
 };
 
 typedef TFlags<EChanFlag> EChanFlags;
 DEFINE_TFLAGS_OPERATORS(EChanFlags)
+
+class FileReader;
 
 // For convenience, this structure matches FMOD_REVERB_PROPERTIES.
 // Since I can't very well #include system-specific stuff in the
@@ -75,17 +78,14 @@ struct REVERB_PROPERTIES
     unsigned int Flags;
 };
 
-enum EReverbFlags
-{
-	REVERB_FLAGS_DECAYTIMESCALE        = 0x00000001,
-	REVERB_FLAGS_REFLECTIONSSCALE      = 0x00000002,
-	REVERB_FLAGS_REFLECTIONSDELAYSCALE = 0x00000004,
-	REVERB_FLAGS_REVERBSCALE           = 0x00000008,
-	REVERB_FLAGS_REVERBDELAYSCALE      = 0x00000010,
-	REVERB_FLAGS_DECAYHFLIMIT          = 0x00000020,
-	REVERB_FLAGS_ECHOTIMESCALE         = 0x00000040,
-	REVERB_FLAGS_MODULATIONTIMESCALE   = 0x00000080,
-};
+#define REVERB_FLAGS_DECAYTIMESCALE        0x00000001
+#define REVERB_FLAGS_REFLECTIONSSCALE      0x00000002
+#define REVERB_FLAGS_REFLECTIONSDELAYSCALE 0x00000004
+#define REVERB_FLAGS_REVERBSCALE           0x00000008
+#define REVERB_FLAGS_REVERBDELAYSCALE      0x00000010
+#define REVERB_FLAGS_DECAYHFLIMIT          0x00000020
+#define REVERB_FLAGS_ECHOTIMESCALE         0x00000040
+#define REVERB_FLAGS_MODULATIONTIMESCALE   0x00000080
 
 struct ReverbContainer
 {
@@ -143,6 +143,8 @@ struct FISoundChannel
 	bool		ManualRolloff;
 	EChanFlags	ChanFlags;
 };
+
+class SoundStream;
 
 void S_SetSoundPaused(int state);
 

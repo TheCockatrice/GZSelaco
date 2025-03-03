@@ -111,7 +111,7 @@ static int GetMapIndex(const char *mapname, int lastindex, const char *lumpname,
 //
 //===========================================================================
 
-MapData *P_OpenMapData(const char * mapname, bool justcheck)
+MapData *P_OpenMapData(const char * mapname, bool justcheck, int forceVersion)
 {
 	MapData * map = new MapData;
 	FileReader * wadReader = nullptr;
@@ -125,24 +125,73 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck)
 			delete map;
 			return NULL;
 		}
-		map->resource = FResourceFile::OpenResourceFile(mapname);
-		wadReader = map->resource->GetContainerReader();
+		map->resource = FResourceFile::OpenResourceFile(mapname, true);
+		wadReader = map->resource->GetReader();
 	}
 	else
 	{
 		FString fmt;
-		int lump_wad;
-		int lump_map;
+		int lump_wad = -1;
+		int lump_map = -1;
 		int lump_name = -1;
-		
-		// Check for both *.wad and *.map in order to load Build maps
-		// as well. The higher one will take precedence.
-		// Names with more than 8 characters will only be checked as .wad and .map.
-		if (strlen(mapname) <= 8) lump_name = fileSystem.CheckNumForName(mapname);
-		fmt.Format("maps/%s.wad", mapname);
-		lump_wad = fileSystem.CheckNumForFullName(fmt.GetChars());
-		fmt.Format("maps/%s.map", mapname);
-		lump_map = fileSystem.CheckNumForFullName(fmt.GetChars());
+
+		FString fMapname(mapname);
+
+		// Version 0 will always refer to the base map with no version number
+		if (forceVersion > 0) {
+			// Force a specific version and error out if it doesn't exist
+			FString nMapName;
+			nMapName.Format("V%d%s", forceVersion, fMapname.GetChars());
+			if (nMapName.Len() <= 8) lump_name = fileSystem.CheckNumForName(nMapName);
+			fmt.Format("maps/%s.wad", nMapName.GetChars());
+			lump_wad = fileSystem.CheckNumForFullName(fmt);
+			fMapname = nMapName;
+			map->version = forceVersion;
+		}
+		else if (forceVersion < 0) {
+			if (strlen(mapname) <= 8) lump_name = fileSystem.CheckNumForName(mapname);
+			fmt.Format("maps/%s.wad", mapname);
+			lump_wad = fileSystem.CheckNumForFullName(fmt);
+			map->version = 0;
+
+			int lwad = -1, lname = -1;
+			FString lmapname = fMapname;
+
+			// Find any version number higher, stop searching if there is a gap
+			// Version numbers CANNOT BE SKIPPED YET
+			for (int x = 1; x < 50; x++) {
+				FString nMapName;
+				nMapName.Format("V%d%s", x, fMapname.GetChars());
+				if (nMapName.Len() <= 8) lname = fileSystem.CheckNumForName(nMapName);
+				fmt.Format("maps/%s.wad", nMapName.GetChars());
+				lwad = fileSystem.CheckNumForFullName(fmt);
+
+				if (lname >= 0 || lwad >= 0) {
+					lmapname = nMapName;
+					lump_wad = lwad;
+					lump_name = lname;
+					map->version = x;
+				}
+				else {
+					break;
+				}
+			}
+
+			fMapname = lmapname;
+		}
+		else {
+			// If version is zero, just get the base map name, skipping the version number
+
+			// Check for both *.wad and *.map in order to load Build maps
+			// as well. The higher one will take precedence.
+			// Names with more than 8 characters will only be checked as .wad and .map.
+			if (strlen(mapname) <= 8) lump_name = fileSystem.CheckNumForName(mapname);
+			fmt.Format("maps/%s.wad", mapname);
+			lump_wad = fileSystem.CheckNumForFullName(fmt);
+			/*fmt.Format("maps/%s.map", mapname);
+			lump_map = fileSystem.CheckNumForFullName(fmt);*/
+		}
+
 		
 		if (lump_name > lump_wad && lump_name > lump_map && lump_name != -1)
 		{
@@ -181,7 +230,7 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck)
 					const char * lumpname = fileSystem.GetFileFullName(lump_name + i);
 					try
 					{
-						index = GetMapIndex(mapname, index, lumpname, !justcheck);
+						index = GetMapIndex(fMapname.GetChars(), index, lumpname, !justcheck);
 					}
 					catch(...)
 					{
@@ -212,7 +261,7 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck)
 
 					if (lumpname == NULL)
 					{
-						I_Error("Invalid map definition for %s", mapname);
+						I_Error("Invalid map definition for %s", fMapname.GetChars());
 					}
 					else if (!stricmp(lumpname, "ZNODES"))
 					{
@@ -265,7 +314,7 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck)
 			map->lumpnum = lump_wad;
 			auto reader = fileSystem.ReopenFileReader(lump_wad);
 			map->resource = FResourceFile::OpenResourceFile(fileSystem.GetFileFullName(lump_wad), reader, true);
-			wadReader = map->resource->GetContainerReader();
+			wadReader = map->resource->GetReader();
 		}
 	}
 	uint32_t id;
@@ -280,21 +329,21 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck)
 		char maplabel[9]="";
 		int index=0;
 
-		map->MapLumps[0].Reader = map->resource->GetEntryReader(0, FileSys::READER_SHARED);
-		uppercopy(map->MapLumps[0].Name, map->resource->getName(0));
+		map->MapLumps[0].Reader = map->resource->GetLump(0)->NewReader();
+		uppercopy(map->MapLumps[0].Name, map->resource->GetLump(0)->getName());
 
-		for(uint32_t i = 1; i < map->resource->EntryCount(); i++)
+		for(uint32_t i = 1; i < map->resource->LumpCount(); i++)
 		{
-			const char* lumpname = map->resource->getName(i);
+			const char* lumpname = map->resource->GetLump(i)->getName();
 
 			if (i == 1 && !strnicmp(lumpname, "TEXTMAP", 8))
 			{
 				map->isText = true;
-				map->MapLumps[ML_TEXTMAP].Reader = map->resource->GetEntryReader(i, FileSys::READER_SHARED);
+				map->MapLumps[ML_TEXTMAP].Reader = map->resource->GetLump(i)->NewReader();
 				strncpy(map->MapLumps[ML_TEXTMAP].Name, lumpname, 8);
 				for(int i = 2;; i++)
 				{
-					lumpname = map->resource->getName(i);
+					lumpname = map->resource->GetLump(i)->getName();
 					if (!strnicmp(lumpname, "ZNODES",8))
 					{
 						index = ML_GLZNODES;
@@ -326,7 +375,7 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck)
 						return map;
 					}
 					else continue;
-					map->MapLumps[index].Reader = map->resource->GetEntryReader(i, FileSys::READER_SHARED);
+					map->MapLumps[index].Reader = map->resource->GetLump(i)->NewReader();
 					strncpy(map->MapLumps[index].Name, lumpname, 8);
 				}
 			}
@@ -358,7 +407,7 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck)
 				maplabel[8]=0;
 			}
 
-			map->MapLumps[index].Reader = map->resource->GetEntryReader(i, FileSys::READER_SHARED);
+			map->MapLumps[index].Reader = map->resource->GetLump(i)->NewReader();
 			strncpy(map->MapLumps[index].Name, lumpname, 8);
 		}
 	}
@@ -375,9 +424,9 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck)
 	return map;		
 }
 
-bool P_CheckMapData(const char *mapname)
+bool P_CheckMapData(const char *mapname, int forceVersion)
 {
-	MapData *mapd = P_OpenMapData(mapname, true);
+	MapData *mapd = P_OpenMapData(mapname, true, forceVersion);
 	if (mapd == NULL) return false;
 	delete mapd;
 	return true;

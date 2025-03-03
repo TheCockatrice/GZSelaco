@@ -43,11 +43,6 @@
 FSharedStringArena VMStringConstants;
 
 
-static bool ShouldWrapPointer(PType * type)
-{
-	return ((type->isStruct() && type != TypeVector2 && type != TypeVector3 && type != TypeVector4 && type != TypeQuaternion && type != TypeFVector2 && type != TypeFVector3 && type != TypeFVector4 && type != TypeFQuaternion) || type->isDynArray() || type->isMap() || type->isMapIterator());
-}
-
 int GetIntConst(FxExpression *ex, FCompileContext &ctx)
 {
 	ex = new FxIntCast(ex, false);
@@ -62,13 +57,6 @@ double GetFloatConst(FxExpression *ex, FCompileContext &ctx)
 	return ex ? static_cast<FxConstant*>(ex)->GetValue().GetFloat() : 0;
 }
 
-VMFunction* GetFuncConst(FxExpression* ex, FCompileContext& ctx)
-{
-	ex = new FxTypeCast(ex, TypeVMFunction, false);
-	ex = ex->Resolve(ctx);
-	return static_cast<VMFunction*>(ex ? static_cast<FxConstant*>(ex)->GetValue().GetPointer() : nullptr);
-}
-
 const char * ZCCCompiler::GetStringConst(FxExpression *ex, FCompileContext &ctx)
 {
 	ex = new FxStringCast(ex);
@@ -80,7 +68,7 @@ const char * ZCCCompiler::GetStringConst(FxExpression *ex, FCompileContext &ctx)
 
 int ZCCCompiler::IntConstFromNode(ZCC_TreeNode *node, PContainerType *cls)
 {
-	FCompileContext ctx(OutNamespace, cls, false, mVersion);
+	FCompileContext ctx(OutNamespace, cls, false);
 	FxExpression *ex = new FxIntCast(ConvertNode(node), false);
 	ex = ex->Resolve(ctx);
 	if (ex == nullptr) return 0;
@@ -94,7 +82,7 @@ int ZCCCompiler::IntConstFromNode(ZCC_TreeNode *node, PContainerType *cls)
 
 FString ZCCCompiler::StringConstFromNode(ZCC_TreeNode *node, PContainerType *cls)
 {
-	FCompileContext ctx(OutNamespace, cls, false, mVersion);
+	FCompileContext ctx(OutNamespace, cls, false);
 	FxExpression *ex = new FxStringCast(ConvertNode(node));
 	ex = ex->Resolve(ctx);
 	if (ex == nullptr) return "";
@@ -464,11 +452,6 @@ void ZCCCompiler::ProcessStruct(ZCC_Struct *cnode, PSymbolTreeNode *treenode, ZC
 			}
 			break;
 
-		case AST_FlagDef:
-			cls->FlagDefs.Push(static_cast<ZCC_FlagDef*>(node));
-			break;
-
-
 		default:
 			assert(0 && "Unhandled AST node type");
 			break;
@@ -679,7 +662,7 @@ void ZCCCompiler::MessageV(ZCC_TreeNode *node, const char *txtcolor, const char 
 	composed.Format("%s%s, line %d: ", txtcolor, node->SourceName->GetChars(), node->SourceLoc);
 	composed.VAppendFormat(msg, argptr);
 	composed += '\n';
-	PrintString(PRINT_HIGH, composed.GetChars());
+	PrintString(PRINT_HIGH, composed);
 }
 
 //==========================================================================
@@ -729,8 +712,6 @@ void ZCCCompiler::CreateStructTypes()
 			syms = &OutNamespace->Symbols;
 		}
 
-
-
 		if (s->NodeName() == NAME__ && fileSystem.GetFileContainer(Lump) == 0)
 		{
 			// This is just a container for syntactic purposes.
@@ -739,35 +720,15 @@ void ZCCCompiler::CreateStructTypes()
 		}
 		else if (s->strct->Flags & ZCC_Native)
 		{
-			s->strct->Type = NewStruct(s->NodeName(), outer, true, AST.FileNo);
+			s->strct->Type = NewStruct(s->NodeName(), outer, true);
 		}
 		else
 		{
-			s->strct->Type = NewStruct(s->NodeName(), outer, false, AST.FileNo);
+			s->strct->Type = NewStruct(s->NodeName(), outer);
 		}
-
 		if (s->strct->Flags & ZCC_Version)
 		{
 			s->strct->Type->mVersion = s->strct->Version;
-		}
-
-		if (s->strct->Flags & ZCC_Deprecated)
-		{
-			s->strct->Type->mVersion = s->strct->Version;
-			s->strct->Type->TypeDeprecated = true;
-			s->strct->Type->mDeprecationMessage = s->strct->DeprecationMessage ? *s->strct->DeprecationMessage : "";
-		}
-
-		if (s->strct->Flags & ZCC_Internal)
-		{
-			if(fileSystem.GetFileContainer(Lump) == 0)
-			{
-				s->strct->Type->TypeInternal = true;
-			}
-			else
-			{
-				Error(s->strct, "Internal structs are only allowed in the root pk3");
-			}
 		}
 
 		auto &sf = s->Type()->ScopeFlags;
@@ -800,6 +761,8 @@ void ZCCCompiler::CreateStructTypes()
 			auto etype = NewEnum(e->NodeName, s->Type());
 			s->Type()->Symbols.AddSymbol(Create<PSymbolType>(e->NodeName, etype));
 		}
+
+		(static_cast<PStruct*> (s->Type()))->sourceLump = s->strct->SourceLump;
 	}
 }
 
@@ -831,20 +794,8 @@ void ZCCCompiler::CreateClassTypes()
 			PClass *parent;
 			auto ParentName = c->cls->ParentName;
 
-			if (c->cls->Flags & ZCC_Internal)
-			{
-				Error(c->cls, "'Internal' not allowed for classes");
-			}
-
-			// The parent exists, we may create a type for this class
-			if (ParentName != nullptr && ParentName->SiblingNext == ParentName)
-			{
-				parent = PClass::FindClass(ParentName->Id);
-			}
-			else if (ParentName == nullptr)
-			{
-				parent = RUNTIME_CLASS(DObject);
-			}
+			if (ParentName != nullptr && ParentName->SiblingNext == ParentName) parent = PClass::FindClass(ParentName->Id);
+			else if (ParentName == nullptr) parent = RUNTIME_CLASS(DObject);
 			else
 			{
 				// The parent is a dotted name which the type system currently does not handle.
@@ -864,15 +815,7 @@ void ZCCCompiler::CreateClassTypes()
 
 			if (parent != nullptr && (parent->VMType != nullptr || c->NodeName() == NAME_Object))
 			{
-				if(parent->bFinal)
-				{
-					Error(c->cls, "Class '%s' cannot extend final class '%s'", FName(c->NodeName()).GetChars(), parent->TypeName.GetChars());
-				}
-				else if(parent->bSealed && !parent->SealedRestriction.Contains(c->NodeName()))
-				{
-					Error(c->cls, "Class '%s' cannot extend sealed class '%s'", FName(c->NodeName()).GetChars(), parent->TypeName.GetChars());
-				}
-
+				// The parent exists, we may create a type for this class
 				if (c->cls->Flags & ZCC_Native)
 				{
 					// If this is a native class, its own type must also already exist and not be a runtime class.
@@ -891,8 +834,9 @@ void ZCCCompiler::CreateClassTypes()
 					{
 						DPrintf(DMSG_SPAMMY, "Registered %s as native with parent %s\n", me->TypeName.GetChars(), parent->TypeName.GetChars());
 					}
-					c->cls->Type = NewClassType(me, AST.FileNo);
+					c->cls->Type = NewClassType(me);
 					me->SourceLumpName = *c->cls->SourceName;
+					me->SourceLump = c->cls->SourceLump;
 				}
 				else
 				{
@@ -903,14 +847,14 @@ void ZCCCompiler::CreateClassTypes()
 						{
 							Error(c->cls, "Parent class %s of %s not accessible to ZScript version %d.%d.%d", parent->TypeName.GetChars(), c->NodeName().GetChars(), mVersion.major, mVersion.minor, mVersion.revision);
 						}
-						auto newclass = parent->CreateDerivedClass(c->NodeName(), TentativeClass, nullptr, AST.FileNo);
+						auto newclass = parent->CreateDerivedClass(c->NodeName(), TentativeClass);
 						if (newclass == nullptr)
 						{
 							Error(c->cls, "Class name %s already exists", c->NodeName().GetChars());
 						}
 						else
 						{
-							c->cls->Type = NewClassType(newclass, AST.FileNo);
+							c->cls->Type = NewClassType(newclass);
 							DPrintf(DMSG_SPAMMY, "Created class %s with parent %s\n", c->Type()->TypeName.GetChars(), c->ClassType()->ParentClass->TypeName.GetChars());
 						}
 					}
@@ -923,41 +867,20 @@ void ZCCCompiler::CreateClassTypes()
 				if (c->Type() == nullptr)
 				{
 					// create a placeholder so that the compiler can continue looking for errors.
-					c->cls->Type = NewClassType(parent->FindClassTentative(c->NodeName()), AST.FileNo);
+					c->cls->Type = NewClassType(parent->FindClassTentative(c->NodeName()));
 				}
+
+				c->ClassType()->SourceLump = c->cls->SourceLump;
 
 				if (c->cls->Flags & ZCC_Abstract)
 					c->ClassType()->bAbstract = true;
 
+				if (c->cls->Flags & ZCC_Unit)
+					c->ClassType()->bUnitOnly = true;
+
 				if (c->cls->Flags & ZCC_Version)
 				{
 					c->Type()->mVersion = c->cls->Version;
-				}
-
-				if (c->cls->Flags & ZCC_Deprecated)
-				{
-					c->Type()->mVersion = c->cls->Version;
-					c->Type()->TypeDeprecated = true;
-					c->Type()->mDeprecationMessage = c->cls->DeprecationMessage ? *c->cls->DeprecationMessage : "";
-				}
-				
-
-				if (c->cls->Flags & ZCC_Final)
-				{
-					c->ClassType()->bFinal = true;
-				}
-
-				if (c->cls->Flags & ZCC_Sealed)
-				{
-					PClass * ccls = c->ClassType();
-					ccls->bSealed = true;
-					ZCC_Identifier * it = c->cls->Sealed;
-					if(it) do
-					{
-						ccls->SealedRestriction.Push(FName(it->Id));
-						it = (ZCC_Identifier*) it->SiblingNext;
-					}
-					while(it != c->cls->Sealed);
 				}
 				// 
 				if (mVersion >= MakeVersion(2, 4, 0))
@@ -1013,7 +936,7 @@ void ZCCCompiler::CreateClassTypes()
 				{
 					Error(c->cls, "Class %s has unknown base class %s", c->NodeName().GetChars(), FName(c->cls->ParentName->Id).GetChars());
 					// create a placeholder so that the compiler can continue looking for errors.
-					c->cls->Type = NewClassType(RUNTIME_CLASS(DObject)->FindClassTentative(c->NodeName()), AST.FileNo);
+					c->cls->Type = NewClassType(RUNTIME_CLASS(DObject)->FindClassTentative(c->NodeName()));
 					c->cls->Symbol = Create<PSymbolType>(c->NodeName(), c->Type());
 					OutNamespace->Symbols.AddSymbol(c->cls->Symbol);
 					Classes.Push(c);
@@ -1029,7 +952,7 @@ void ZCCCompiler::CreateClassTypes()
 	for (auto c : OrigClasses)
 	{
 		Error(c->cls, "Class %s has circular inheritance", FName(c->NodeName()).GetChars());
-		c->cls->Type = NewClassType(RUNTIME_CLASS(DObject)->FindClassTentative(c->NodeName()), AST.FileNo);
+		c->cls->Type = NewClassType(RUNTIME_CLASS(DObject)->FindClassTentative(c->NodeName()));
 		c->cls->Symbol = Create<PSymbolType>(c->NodeName(), c->Type());
 		OutNamespace->Symbols.AddSymbol(c->cls->Symbol);
 		Classes.Push(c);
@@ -1229,7 +1152,7 @@ void ZCCCompiler::AddConstant(ZCC_ConstantWork &constant)
 
 bool ZCCCompiler::CompileConstant(ZCC_ConstantWork *work)
 {
-	FCompileContext ctx(OutNamespace, work->cls, false, mVersion);
+	FCompileContext ctx(OutNamespace, work->cls, false);
 	FxExpression *exp = ConvertNode(work->node->Value);
 	try
 	{
@@ -1270,7 +1193,7 @@ void ZCCCompiler::CompileArrays(ZCC_StructWork *work)
 		ConvertNodeList(values, sas->Values);
 
 		bool fail = false;
-		FCompileContext ctx(OutNamespace, work->Type(), false, mVersion);
+		FCompileContext ctx(OutNamespace, work->Type(), false);
 
 		char *destmem = (char *)ClassDataAllocator.Alloc(values.Size() * ztype->Align);
 		memset(destmem, 0, values.Size() * ztype->Align);
@@ -1410,7 +1333,7 @@ void ZCCCompiler::CompileAllFields()
 {
 	// Create copies of the arrays which can be altered
 	auto Classes = this->Classes;
-	auto Structs = OrderStructs();
+	auto Structs = this->Structs;
 	TMap<FName, bool> HasNativeChildren;
 
 	// first step: Look for native classes with native children.
@@ -1509,8 +1432,8 @@ bool ZCCCompiler::CompileFields(PContainerType *type, TArray<ZCC_VarDeclarator *
 
 		// For structs only allow 'deprecated', for classes exclude function qualifiers.
 		int notallowed = forstruct? 
-			ZCC_Latent | ZCC_Final | ZCC_Action | ZCC_Static | ZCC_FuncConst | ZCC_FuncConstUnsafe | ZCC_Abstract | ZCC_Virtual | ZCC_Override | ZCC_Meta | ZCC_Extension | ZCC_VirtualScope | ZCC_ClearScope :
-			ZCC_Latent | ZCC_Final | ZCC_Action | ZCC_Static | ZCC_FuncConst | ZCC_FuncConstUnsafe | ZCC_Abstract | ZCC_Virtual | ZCC_Override | ZCC_Extension | ZCC_VirtualScope | ZCC_ClearScope;
+			ZCC_Latent | ZCC_Final | ZCC_Action | ZCC_Static | ZCC_FuncConst | ZCC_Abstract | ZCC_Virtual | ZCC_Override | ZCC_Meta | ZCC_Extension | ZCC_VirtualScope | ZCC_ClearScope :
+			ZCC_Latent | ZCC_Final | ZCC_Action | ZCC_Static | ZCC_FuncConst | ZCC_Abstract | ZCC_Virtual | ZCC_Override | ZCC_Extension | ZCC_VirtualScope | ZCC_ClearScope;
 
 		// Some internal fields need to be set to clearscope.
 		if (fileSystem.GetFileContainer(Lump) == 0) notallowed &= ~ZCC_ClearScope;
@@ -1542,7 +1465,7 @@ bool ZCCCompiler::CompileFields(PContainerType *type, TArray<ZCC_VarDeclarator *
 				varflags = FScopeBarrier::ChangeSideInFlags(varflags, FScopeBarrier::Side_UI);
 			if (field->Flags & ZCC_Play)
 				varflags = FScopeBarrier::ChangeSideInFlags(varflags, FScopeBarrier::Side_Play);
-			if (field->Flags & (ZCC_ClearScope | ZCC_UnsafeClearScope))
+			if (field->Flags & ZCC_ClearScope)
 				varflags = FScopeBarrier::ChangeSideInFlags(varflags, FScopeBarrier::Side_PlainData);
 		}
 		else
@@ -1699,83 +1622,6 @@ bool ZCCCompiler::CompileFields(PContainerType *type, TArray<ZCC_VarDeclarator *
 
 //==========================================================================
 //
-// ZCCCompiler :: OrderStructs
-//
-// Order the Structs array so that the least-dependant structs come first
-//
-//==========================================================================
-
-TArray<ZCC_StructWork *> ZCCCompiler::OrderStructs()
-{
-	TArray<ZCC_StructWork *> new_order;
-
-	for (auto struct_def : Structs)
-	{
-		if (std::find(new_order.begin(), new_order.end(), struct_def) != new_order.end())
-		{
-			continue;
-		}
-		AddStruct(new_order, struct_def);
-	}
-	return new_order;
-}
-
-//==========================================================================
-//
-// ZCCCompiler :: AddStruct
-//
-// Adds a struct to the Structs array, preceded by all its dependant structs
-//
-//==========================================================================
-
-void ZCCCompiler::AddStruct(TArray<ZCC_StructWork *> &new_order, ZCC_StructWork *my_def)
-{
-	PStruct *my_type = static_cast<PStruct *>(my_def->Type());
-	if (my_type)
-	{
-		if (my_type->isOrdered)
-		{
-			return;
-		}
-		my_type->isOrdered = true;
-	}
-
-	// Find all struct fields and add them before this one
-	for (const auto field : my_def->Fields)
-	{
-		PType *fieldtype = DetermineType(my_type, field, field->Names->Name, field->Type, true, true);
-		if (fieldtype->isStruct() && !static_cast<PStruct *>(fieldtype)->isOrdered)
-		{
-			AddStruct(new_order, StructTypeToWork(static_cast<PStruct *>(fieldtype)));
-		}
-	}
-	new_order.Push(my_def);
-}
-
-//==========================================================================
-//
-// ZCCCompiler :: StructTypeToWork
-//
-// Find the ZCC_StructWork that corresponds to a PStruct
-//
-//==========================================================================
-
-ZCC_StructWork *ZCCCompiler::StructTypeToWork(const PStruct *type) const
-{
-	assert(type->isStruct());
-	for (auto &def : Structs)
-	{
-		if (def->Type() == type)
-		{
-			return def;
-		}
-	}
-	assert(false && "Struct not found");
-	return nullptr;
-}
-
-//==========================================================================
-//
 // ZCCCompiler :: FieldFlagsToString
 //
 // creates a string for a field's flags
@@ -1875,10 +1721,6 @@ PType *ZCCCompiler::DetermineType(PType *outertype, ZCC_TreeNode *field, FName n
 			retval = TypeVector3;
 			break;
 
-		case ZCC_Vector4:
-			retval = TypeVector4;
-			break;
-
 		case ZCC_State:
 			retval = TypeState;
 			break;
@@ -1902,7 +1744,7 @@ PType *ZCCCompiler::DetermineType(PType *outertype, ZCC_TreeNode *field, FName n
 			{
 				Error(field, "%s: @ not allowed for user scripts", name.GetChars());
 			}
-			retval = ResolveUserType(outertype, btype, btype->UserType, outertype? &outertype->Symbols : nullptr, true);
+			retval = ResolveUserType(btype, outertype? &outertype->Symbols : nullptr, true);
 			break;
 
 		case ZCC_UserType:
@@ -1921,18 +1763,16 @@ PType *ZCCCompiler::DetermineType(PType *outertype, ZCC_TreeNode *field, FName n
 				retval = TypeSpriteID;
 				break;
 
+			case NAME_SoundHandle:
+				retval = TypeSoundHandle;
+				break;
+
 			case NAME_TextureID:
 				retval = TypeTextureID;
 				break;
 
-			case NAME_TranslationID:
-				retval = TypeTranslationID;
-				break;
-
-
-
 			default:
-				retval = ResolveUserType(outertype, btype, btype->UserType, outertype ? &outertype->Symbols : nullptr, false);
+				retval = ResolveUserType(btype, outertype ? &outertype->Symbols : nullptr, false);
 				break;
 			}
 			break;
@@ -1944,106 +1784,16 @@ PType *ZCCCompiler::DetermineType(PType *outertype, ZCC_TreeNode *field, FName n
 	}
 
 	case AST_MapType:
-	{
-		if(AST.ParseVersion < MakeVersion(4, 10, 0))
+		if (allowarraytypes)
 		{
-			Error(field, "Map not accessible to ZScript version %d.%d.%d", AST.ParseVersion.major, AST.ParseVersion.minor, AST.ParseVersion.revision);
-			break;
-		}
-
-		// Todo: Decide what we allow here and if it makes sense to allow more complex constructs.
-		auto mtype = static_cast<ZCC_MapType *>(ztype);
-
-		auto keytype = DetermineType(outertype, field, name, mtype->KeyType, false, false);
-		auto valuetype = DetermineType(outertype, field, name, mtype->ValueType, false, false);
-
-		if (keytype->GetRegType() != REGT_STRING && !(keytype->GetRegType() == REGT_INT && keytype->Size == 4))
-		{
-			if(name != NAME_None)
-			{
-				Error(field, "%s : Map<%s , ...> not implemented yet", name.GetChars(), keytype->DescriptiveName());
-			}
-			else
-			{
-				Error(field, "Map<%s , ...> not implemented yet", keytype->DescriptiveName());
-			}
-		}
-
-		switch(valuetype->GetRegType())
-		{
-		case REGT_FLOAT:
-		case REGT_INT:
-		case REGT_STRING:
-		case REGT_POINTER:
-			if (valuetype->GetRegCount() > 1)
-			{
-			default:
-				if(name != NAME_None)
-				{
-					Error(field, "%s : Base type for map value types must be integral, but got %s", name.GetChars(), valuetype->DescriptiveName());
-				}
-				else
-				{
-					Error(field, "Base type for map value types must be integral, but got %s", valuetype->DescriptiveName());
-				}
-				break;
-			}
-
-			retval = NewMap(keytype, valuetype);
-			break;
-		}
-
-		break;
-	}
-	case AST_MapIteratorType:
-	{
-		if(AST.ParseVersion < MakeVersion(4, 10, 0))
-		{
-			Error(field, "MapIterator not accessible to ZScript version %d.%d.%d", AST.ParseVersion.major, AST.ParseVersion.minor, AST.ParseVersion.revision);
-			break;
-		}
-		// Todo: Decide what we allow here and if it makes sense to allow more complex constructs.
-		auto mtype = static_cast<ZCC_MapIteratorType *>(ztype);
-
-		auto keytype = DetermineType(outertype, field, name, mtype->KeyType, false, false);
-		auto valuetype = DetermineType(outertype, field, name, mtype->ValueType, false, false);
-
-		if (keytype->GetRegType() != REGT_STRING && !(keytype->GetRegType() == REGT_INT && keytype->Size == 4))
-		{
-			if(name != NAME_None)
-			{
-				Error(field, "%s : MapIterator<%s , ...> not implemented yet", name.GetChars(), keytype->DescriptiveName());
-			}
-			else
-			{
-				Error(field, "MapIterator<%s , ...> not implemented yet", keytype->DescriptiveName());
-			}
-		}
-
-		switch(valuetype->GetRegType())
-		{
-		case REGT_FLOAT:
-		case REGT_INT:
-		case REGT_STRING:
-		case REGT_POINTER:
-			if (valuetype->GetRegCount() > 1)
-			{
-			default:
-				if(name != NAME_None)
-				{
-					Error(field, "%s : Base type for map value types must be integral, but got %s", name.GetChars(), valuetype->DescriptiveName());
-				}
-				else
-				{
-					Error(field, "Base type for map value types must be integral, but got %s", valuetype->DescriptiveName());
-				}
-				break;
-			}
-			retval = NewMapIterator(keytype, valuetype);
+			Error(field, "%s: Map types not implemented yet", name.GetChars());
+			// Todo: Decide what we allow here and if it makes sense to allow more complex constructs.
+			auto mtype = static_cast<ZCC_MapType *>(ztype);
+			retval = NewMap(DetermineType(outertype, field, name, mtype->KeyType, false, false), DetermineType(outertype, field, name, mtype->ValueType, false, false));
 			break;
 		}
 		break;
-	}
+
 	case AST_DynArrayType:
 	{
 		auto atype = static_cast<ZCC_DynArrayType *>(ztype);
@@ -2066,61 +1816,6 @@ PType *ZCCCompiler::DetermineType(PType *outertype, ZCC_TreeNode *field, FName n
 		else
 		{
 			retval = NewDynArray(ftype);
-		}
-		break;
-	}
-	case AST_FuncPtrType:
-	{
-		auto fn = static_cast<ZCC_FuncPtrType*>(ztype);
-
-		if(fn->Scope == -1)
-		{	// Function<void>
-			retval = NewFunctionPointer(nullptr, {}, -1);
-		}
-		else
-		{
-			TArray<PType*> returns;
-			TArray<PType*> args;
-			TArray<uint32_t> argflags;
-
-			if(auto *t = fn->RetType; t != nullptr) do {
-				returns.Push(DetermineType(outertype, field, name, t, false, false));
-			} while( (t = (ZCC_Type *)t->SiblingNext) != fn->RetType);
-			
-			if(auto *t = fn->Params; t != nullptr) do {
-				PType * tt = DetermineType(outertype, field, name, t->Type, false, false);
-				int flags = 0;
-
-				if (ShouldWrapPointer(tt))
-				{
-					tt = NewPointer(tt);
-					flags = VARF_Ref;
-				}
-
-				args.Push(tt);
-				argflags.Push(t->Flags == ZCC_Out ? VARF_Out|flags : flags);
-			} while( (t = (ZCC_FuncPtrParamDecl *) t->SiblingNext) != fn->Params);
-			
-			auto proto = NewPrototype(returns,args);
-			switch(fn->Scope)
-			{ // only play/ui/clearscope functions are allowed, no data or virtual scope functions
-			case ZCC_Play:
-				fn->Scope = FScopeBarrier::Side_Play;
-				break;
-			case ZCC_UIFlag:
-				fn->Scope = FScopeBarrier::Side_UI;
-				break;
-			case ZCC_ClearScope:
-				fn->Scope = FScopeBarrier::Side_PlainData;
-				break;
-			case 0:
-				fn->Scope = -1;
-				break;
-			default:
-				Error(field, "Invalid Scope for Function Pointer");
-				break;
-			}
-			retval = NewFunctionPointer(proto, std::move(argflags), fn->Scope);
 		}
 		break;
 	}
@@ -2176,64 +1871,25 @@ PType *ZCCCompiler::DetermineType(PType *outertype, ZCC_TreeNode *field, FName n
 //
 // ZCCCompiler :: ResolveUserType
 //
+// resolves a user type and returns a matching PType
+//
 //==========================================================================
 
-/**
-* Resolves a user type and returns a matching PType.
-*
-* @param type The tree node with the identifiers to look for.
-* @param type The current identifier being looked for. This must be in type's UserType list.
-* @param symt The symbol table to search in. If id is the first identifier and not found in symt, then OutNamespace will also be searched.
-* @param nativetype Distinguishes between searching for a native type or a user type.
-* @returns the PType found for this user type
-*/
-PType *ZCCCompiler::ResolveUserType(PType *outertype, ZCC_BasicType *type, ZCC_Identifier *id, PSymbolTable *symt, bool nativetype)
+PType *ZCCCompiler::ResolveUserType(ZCC_BasicType *type, PSymbolTable *symt, bool nativetype)
 {
 	// Check the symbol table for the identifier.
 	PSymbol *sym = nullptr;
 
 	// We first look in the current class and its parents, and then in the current namespace and its parents.
-	if (symt != nullptr) sym = symt->FindSymbol(id->Id, true);
-	if (sym == nullptr && type->UserType == id) sym = OutNamespace->Symbols.FindSymbol(id->Id, true);
+	if (symt != nullptr) sym = symt->FindSymbol(type->UserType->Id, true);
+	if (sym == nullptr) sym = OutNamespace->Symbols.FindSymbol(type->UserType->Id, true);
 	if (sym != nullptr && sym->IsKindOf(RUNTIME_CLASS(PSymbolType)))
 	{
 		auto ptype = static_cast<PSymbolType *>(sym)->Type;
-
-		if (ptype->TypeDeprecated)
-		{
-			if(ptype->mVersion <= mVersion && !outertype->TypeDeprecated && fileSystem.GetFileContainer(Lump) > 0)
-			{
-				Warn(type, "Type %s is deprecated since ZScript version %d.%d.%d%s%s",
-					FName(type->UserType->Id).GetChars(), mVersion.major, mVersion.minor, mVersion.revision, ptype->mDeprecationMessage.IsEmpty() ? "" : ": ", ptype->mDeprecationMessage.GetChars());
-			}
-		}
-		else if (ptype->mVersion > mVersion)
+		if (ptype->mVersion > mVersion)
 		{
 			Error(type, "Type %s not accessible to ZScript version %d.%d.%d", FName(type->UserType->Id).GetChars(), mVersion.major, mVersion.minor, mVersion.revision);
 			return TypeError;
-		}
-
-		//only allow references to internal types inside internal types
-		if (ptype->TypeInternal && !outertype->TypeInternal)
-		{
-			Error(type, "Type %s not accessible", FName(type->UserType->Id).GetChars());
-			return TypeError;
-		}
-
-		if (id->SiblingNext != type->UserType)
-		{
-			assert(id->SiblingNext->NodeType == AST_Identifier);
-			ptype = ResolveUserType(
-				outertype,
-				type,
-				static_cast<ZCC_Identifier *>(id->SiblingNext),
-				&ptype->Symbols,
-				nativetype
-			);
-			if (ptype == TypeError)
-			{
-				return ptype;
-			}
 		}
 
 		if (ptype->isEnum())
@@ -2251,35 +1907,10 @@ PType *ZCCCompiler::ResolveUserType(PType *outertype, ZCC_BasicType *type, ZCC_I
 		}
 		if (!nativetype) return ptype;
 	}
-	Error(type, "Unable to resolve %s%s as a type.", nativetype? "@" : "", UserTypeName(type).GetChars());
+	Error(type, "Unable to resolve %s%s as type.", nativetype? "@" : "", FName(type->UserType->Id).GetChars());
 	return TypeError;
 }
 
-
-//==========================================================================
-//
-// ZCCCompiler :: UserTypeName										STATIC
-//
-// Returns the full name for a UserType node.
-// 
-//==========================================================================
-
-FString ZCCCompiler::UserTypeName(ZCC_BasicType *type)
-{
-	FString out;
-	ZCC_Identifier *id = type->UserType;
-
-	do
-	{
-		assert(id->NodeType == AST_Identifier);
-		if (out.Len() > 0)
-		{
-			out += '.';
-		}
-		out += FName(id->Id).GetChars();
-	} while ((id = static_cast<ZCC_Identifier *>(id->SiblingNext)) != type->UserType);
-	return out;
-}
 
 //==========================================================================
 //
@@ -2318,7 +1949,7 @@ PType *ZCCCompiler::ResolveArraySize(PType *baseType, ZCC_Expression *arraysize,
 		indices = std::move(fixedIndices);
 	}
 
-	FCompileContext ctx(OutNamespace, cls, false, mVersion);
+	FCompileContext ctx(OutNamespace, cls, false);
 	for (auto index : indices)
 	{
 		// There is no float->int casting here.
@@ -2335,11 +1966,6 @@ PType *ZCCCompiler::ResolveArraySize(PType *baseType, ZCC_Expression *arraysize,
 		if (size < 1)
 		{
 			Error(arraysize, "Array size must be positive");
-			return TypeError;
-		}
-		if (uint64_t(size) * baseType->Size > 0x7fffffff)
-		{
-			Error(arraysize, "Array size overflow. Total size must be less than 2GB");
 			return TypeError;
 		}
 		baseType = NewArray(baseType, size);
@@ -2366,7 +1992,7 @@ void ZCCCompiler::SetImplicitArgs(TArray<PType*>* args, TArray<uint32_t>* argfla
 	if (funcflags & VARF_Method)
 	{
 		// implied self pointer
-		if (args != nullptr)		args->Push(NewPointer(cls, (funcflags & VARF_SafeConst)));
+		if (args != nullptr)		args->Push(NewPointer(cls, !!(funcflags & VARF_ReadOnly)));
 		if (argflags != nullptr)	argflags->Push(VARF_Implicit | VARF_ReadOnly);
 		if (argnames != nullptr)	argnames->Push(NAME_self);
 	}
@@ -2412,7 +2038,7 @@ void ZCCCompiler::CompileFunction(ZCC_StructWork *c, ZCC_FuncDeclarator *f, bool
 			do
 			{
 				auto type = DetermineType(c->Type(), f, f->Name, t, false, false);
-				if (type->isContainer() && type != TypeVector2 && type != TypeVector3 && type != TypeVector4 && type != TypeQuaternion && type != TypeFVector2 && type != TypeFVector3 && type != TypeFVector4 && type != TypeFQuaternion)
+				if (type->isContainer() && type != TypeVector2 && type != TypeVector3 && type != TypeFVector2 && type != TypeFVector3)
 				{
 					// structs and classes only get passed by pointer.
 					type = NewPointer(type);
@@ -2422,11 +2048,6 @@ void ZCCCompiler::CompileFunction(ZCC_StructWork *c, ZCC_FuncDeclarator *f, bool
 					Error(f, "The return type of a function cannot be a dynamic array");
 					break;
 				}
-				else if (type->isMap())
-				{
-					Error(f, "The return type of a function cannot be a map");
-					break;
-				}
 				else if (type == TypeFVector2)
 				{
 					type = TypeVector2;
@@ -2434,14 +2055,6 @@ void ZCCCompiler::CompileFunction(ZCC_StructWork *c, ZCC_FuncDeclarator *f, bool
 				else if (type == TypeFVector3)
 				{
 					type = TypeVector3;
-				}
-				else if (type == TypeFVector4)
-				{
-					type = TypeVector4;
-				}
-				else if (type == TypeFQuaternion)
-				{
-					type = TypeQuaternion;
 				}
 				// TBD: disallow certain types? For now, let everything pass that isn't an array.
 				rets.Push(type);
@@ -2496,9 +2109,20 @@ void ZCCCompiler::CompileFunction(ZCC_StructWork *c, ZCC_FuncDeclarator *f, bool
 		if (f->Flags & ZCC_Virtual) varflags |= VARF_Virtual;
 		if (f->Flags & ZCC_Override) varflags |= VARF_Override;
 		if (f->Flags & ZCC_Abstract) varflags |= VARF_Abstract;
+		if (f->Flags & ZCC_Unit) varflags |= VARF_Unit;
 		if (f->Flags & ZCC_VarArg) varflags |= VARF_VarArg;
-		if (f->Flags & ZCC_FuncConst) varflags |= (mVersion >= MakeVersion(4, 15, 1) ? VARF_ReadOnly | VARF_SafeConst : VARF_ReadOnly); // FuncConst method is internally marked as VARF_ReadOnly
-		if (f->Flags & ZCC_FuncConstUnsafe) varflags |= VARF_ReadOnly;
+		if (f->Flags & ZCC_FuncConst) varflags |= VARF_ReadOnly; // FuncConst method is internally marked as VARF_ReadOnly
+
+		// @Cockatrice: This is truly some bullshit and if you came looking for this and found it, feel free to hate me
+		if (c->NodeName() == NAME_StatDatabase &&
+			(f->Name == NAME_AddStat || f->Name == NAME_SetStat || f->Name == NAME_SetAchievement)) {
+			varflags |= VARF_Unit;
+
+			auto container = fileSystem.GetFileContainer(f->SourceLump);
+			if (container > 2) { // TODO: 1
+				Error(f, "Redefinition of %s not allowed", FName(f->Name).GetChars());
+			}
+		}
 
 		if (mVersion >= MakeVersion(2, 4, 0))
 		{
@@ -2617,12 +2241,12 @@ void ZCCCompiler::CompileFunction(ZCC_StructWork *c, ZCC_FuncDeclarator *f, bool
 			do
 			{
 				int elementcount = 1;
-				TypedVMValue vmval[4];	// default is REGT_NIL which means 'no default value' here.
+				TypedVMValue vmval[3];	// default is REGT_NIL which means 'no default value' here.
 				if (p->Type != nullptr)
 				{
 					auto type = DetermineType(c->Type(), p, f->Name, p->Type, false, false);
 					int flags = 0;
-					if (ShouldWrapPointer(type))
+					if ((type->isStruct() && type != TypeVector2 && type != TypeVector3) || type->isDynArray())
 					{
 						// Structs are being passed by pointer, but unless marked 'out' that pointer must be readonly.
 						type = NewPointer(type /*, !(p->Flags & ZCC_Out)*/);
@@ -2639,18 +2263,10 @@ void ZCCCompiler::CompileFunction(ZCC_StructWork *c, ZCC_FuncDeclarator *f, bool
 						{
 							elementcount = 3;
 						}
-						else if (type == TypeVector4 || type == TypeFVector4 || type == TypeQuaternion || type == TypeFQuaternion)
-						{
-							elementcount = 4;
-						}
 					}
-					if (type->GetRegType() == REGT_NIL && type != TypeVector2 && type != TypeVector3 && type != TypeVector4 && type != TypeQuaternion && type != TypeFVector2 && type != TypeFVector3 && type != TypeFVector4 && type != TypeFQuaternion)
+					if (type->GetRegType() == REGT_NIL && type != TypeVector2 && type != TypeVector3 && type != TypeFVector2 && type != TypeFVector3)
 					{
-						// If it's TypeError, then an error was already given
-						if (type != TypeError)
-						{
-							Error(p, "Invalid type %s for function parameter", type->DescriptiveName());
-						}
+						Error(p, "Invalid type %s for function parameter", type->DescriptiveName());
 					}
 					else if (p->Default != nullptr)
 					{
@@ -2679,7 +2295,7 @@ void ZCCCompiler::CompileFunction(ZCC_StructWork *c, ZCC_FuncDeclarator *f, bool
 
 
 						FxExpression *x = new FxTypeCast(ConvertNode(p->Default), type, false);
-						FCompileContext ctx(OutNamespace, c->Type(), false, mVersion);
+						FCompileContext ctx(OutNamespace, c->Type(), false);
 						x = x->Resolve(ctx);
 
 						if (x != nullptr)
@@ -2688,31 +2304,15 @@ void ZCCCompiler::CompileFunction(ZCC_StructWork *c, ZCC_FuncDeclarator *f, bool
 							if ((type == TypeVector2 || type == TypeFVector2) && x->ExprType == EFX_VectorValue && static_cast<FxVectorValue *>(x)->isConstVector(2))
 							{
 								auto vx = static_cast<FxVectorValue *>(x);
-								vmval[0] = static_cast<FxConstant *>(vx->xyzw[0])->GetValue().GetFloat();
-								vmval[1] = static_cast<FxConstant *>(vx->xyzw[1])->GetValue().GetFloat();
+								vmval[0] = static_cast<FxConstant *>(vx->xyz[0])->GetValue().GetFloat();
+								vmval[1] = static_cast<FxConstant *>(vx->xyz[1])->GetValue().GetFloat();
 							}
 							else if ((type == TypeVector3 || type == TypeFVector3) && x->ExprType == EFX_VectorValue && static_cast<FxVectorValue *>(x)->isConstVector(3))
 							{
 								auto vx = static_cast<FxVectorValue *>(x);
-								vmval[0] = static_cast<FxConstant *>(vx->xyzw[0])->GetValue().GetFloat();
-								vmval[1] = static_cast<FxConstant *>(vx->xyzw[1])->GetValue().GetFloat();
-								vmval[2] = static_cast<FxConstant *>(vx->xyzw[2])->GetValue().GetFloat();
-							}
-							else if ((type == TypeVector4 || type == TypeFVector4) && x->ExprType == EFX_VectorValue && static_cast<FxVectorValue*>(x)->isConstVector(4))
-							{
-								auto vx = static_cast<FxVectorValue*>(x);
-								vmval[0] = static_cast<FxConstant*>(vx->xyzw[0])->GetValue().GetFloat();
-								vmval[1] = static_cast<FxConstant*>(vx->xyzw[1])->GetValue().GetFloat();
-								vmval[2] = static_cast<FxConstant*>(vx->xyzw[2])->GetValue().GetFloat();
-								vmval[3] = static_cast<FxConstant*>(vx->xyzw[3])->GetValue().GetFloat();
-							}
-							else if ((type == TypeQuaternion || type == TypeFQuaternion) && x->ExprType == EFX_VectorValue && static_cast<FxVectorValue*>(x)->isConstVector(4))
-							{
-								auto vx = static_cast<FxVectorValue*>(x);
-								vmval[0] = static_cast<FxConstant*>(vx->xyzw[0])->GetValue().GetFloat();
-								vmval[1] = static_cast<FxConstant*>(vx->xyzw[1])->GetValue().GetFloat();
-								vmval[2] = static_cast<FxConstant*>(vx->xyzw[2])->GetValue().GetFloat();
-								vmval[3] = static_cast<FxConstant*>(vx->xyzw[3])->GetValue().GetFloat();
+								vmval[0] = static_cast<FxConstant *>(vx->xyz[0])->GetValue().GetFloat();
+								vmval[1] = static_cast<FxConstant *>(vx->xyz[1])->GetValue().GetFloat();
+								vmval[2] = static_cast<FxConstant *>(vx->xyz[2])->GetValue().GetFloat();
 							}
 							else if (!x->isConstant())
 							{
@@ -2836,7 +2436,7 @@ void ZCCCompiler::CompileFunction(ZCC_StructWork *c, ZCC_FuncDeclarator *f, bool
 			// [ZZ] unspecified virtual function inherits old scope. virtual function scope can't be changed.
 			sym->Variants[0].Implementation->VarFlags = sym->Variants[0].Flags;
 		}
-		
+
 		bool exactReturnType = mVersion < MakeVersion(4, 4);
 		PClass *clstype = forclass? static_cast<PClassType *>(c->Type())->Descriptor : nullptr;
 		if (varflags & VARF_Virtual)
@@ -2857,7 +2457,7 @@ void ZCCCompiler::CompileFunction(ZCC_StructWork *c, ZCC_FuncDeclarator *f, bool
 
 				auto parentfunc = clstype->ParentClass? dyn_cast<PFunction>(clstype->ParentClass->VMType->Symbols.FindSymbol(sym->SymbolName, true)) : nullptr;
 
-				int virtindex = clstype->FindVirtualIndex(sym->SymbolName, &sym->Variants[0], parentfunc, exactReturnType, sym->SymbolName == FName("SpecialBounceHit") && mVersion < MakeVersion(4, 12));
+				int virtindex = clstype->FindVirtualIndex(sym->SymbolName, &sym->Variants[0], parentfunc, exactReturnType);
 				// specifying 'override' is necessary to prevent one of the biggest problem spots with virtual inheritance: Mismatching argument types.
 				if (varflags & VARF_Override)
 				{
@@ -2939,7 +2539,7 @@ void ZCCCompiler::CompileFunction(ZCC_StructWork *c, ZCC_FuncDeclarator *f, bool
 		}
 		else if (forclass)
 		{
-			int virtindex = clstype->FindVirtualIndex(sym->SymbolName, &sym->Variants[0], nullptr, exactReturnType, sym->SymbolName == FName("SpecialBounceHit") && mVersion < MakeVersion(4, 12));
+			int virtindex = clstype->FindVirtualIndex(sym->SymbolName, &sym->Variants[0], nullptr, exactReturnType);
 			if (virtindex != -1)
 			{
 				Error(f, "Function %s attempts to override parent function without 'override' qualifier", FName(f->Name).GetChars());
@@ -2983,7 +2583,7 @@ void ZCCCompiler::InitFunctions()
 			{
 				if (v->VarFlags & VARF_Abstract)
 				{
-					Error(c->cls, "Non-abstract class %s must override abstract function %s", c->Type()->TypeName.GetChars(), v->PrintableName);
+					Error(c->cls, "Non-abstract class %s must override abstract function %s", c->Type()->TypeName.GetChars(), v->PrintableName.GetChars());
 				}
 			}
 		}
@@ -3071,12 +2671,12 @@ FxExpression *ZCCCompiler::ConvertNode(ZCC_TreeNode *ast, bool substitute)
 		{
 		case AST_ExprID:
 			// The function name is a simple identifier.
-			return new FxFunctionCall(static_cast<ZCC_ExprID *>(fcall->Function)->Identifier, NAME_None, std::move(ConvertNodeList(args, fcall->Parameters)), *ast);
+			return new FxFunctionCall(static_cast<ZCC_ExprID *>(fcall->Function)->Identifier, NAME_None, ConvertNodeList(args, fcall->Parameters), *ast);
 
 		case AST_ExprMemberAccess:
 		{
 			auto ema = static_cast<ZCC_ExprMemberAccess *>(fcall->Function);
-			return new FxMemberFunctionCall(ConvertNode(ema->Left, true), ema->Right, std::move(ConvertNodeList(args, fcall->Parameters)), *ast);
+			return new FxMemberFunctionCall(ConvertNode(ema->Left, true), ema->Right, ConvertNodeList(args, fcall->Parameters), *ast);
 		}
 
 		case AST_ExprBinary:
@@ -3086,7 +2686,7 @@ FxExpression *ZCCCompiler::ConvertNode(ZCC_TreeNode *ast, bool substitute)
 				auto binary = static_cast<ZCC_ExprBinary *>(fcall->Function);
 				if (binary->Left->NodeType == AST_ExprID && binary->Right->NodeType == AST_ExprID)
 				{
-					return new FxFunctionCall(static_cast<ZCC_ExprID *>(binary->Left)->Identifier, static_cast<ZCC_ExprID *>(binary->Right)->Identifier, std::move(ConvertNodeList(args, fcall->Parameters)), *ast);
+					return new FxFunctionCall(static_cast<ZCC_ExprID *>(binary->Left)->Identifier, static_cast<ZCC_ExprID *>(binary->Right)->Identifier, ConvertNodeList(args, fcall->Parameters), *ast);
 				}
 			}
 			// fall through if this isn't an array access node.
@@ -3114,17 +2714,6 @@ FxExpression *ZCCCompiler::ConvertNode(ZCC_TreeNode *ast, bool substitute)
 			return new FxNop(*ast);	// return something so that the compiler can continue.
 		}
 		return new FxClassPtrCast(cls, ConvertNode(cc->Parameters));
-	}
-
-	case AST_FunctionPtrCast:
-	{
-		auto cast = static_cast<ZCC_FunctionPtrCast *>(ast);
-
-		auto type = DetermineType(ConvertClass, cast, NAME_None, cast->PtrType, false, false);
-		assert(type->isFunctionPointer());
-		auto ptrType = static_cast<PFunctionPointer*>(type);
-
-		return new FxFunctionPtrCast(ptrType, ConvertNode(cast->Expr));
 	}
 
 	case AST_StaticArrayStatement:
@@ -3167,14 +2756,7 @@ FxExpression *ZCCCompiler::ConvertNode(ZCC_TreeNode *ast, bool substitute)
 		}
 		else if (cnst->Type->isInt())
 		{
-			if (cnst->Type == TypeUInt32)
-			{
-				return new FxConstant((unsigned)cnst->IntVal, *ast);
-			}
-			else
-			{
-				return new FxConstant(cnst->IntVal, *ast);
-			}
+			return new FxConstant(cnst->IntVal, *ast);
 		}
 		else if (cnst->Type == TypeBool)
 		{
@@ -3346,8 +2928,7 @@ FxExpression *ZCCCompiler::ConvertNode(ZCC_TreeNode *ast, bool substitute)
 		auto xx = ConvertNode(vecini->X);
 		auto yy = ConvertNode(vecini->Y);
 		auto zz = ConvertNode(vecini->Z);
-		auto ww = ConvertNode(vecini->W);
-		return new FxVectorValue(xx, yy, zz, ww, *ast);
+		return new FxVectorValue(xx, yy, zz, *ast);
 	}
 
 	case AST_LocalVarStmt:
@@ -3455,52 +3036,6 @@ FxExpression *ZCCCompiler::ConvertNode(ZCC_TreeNode *ast, bool substitute)
 		return new FxIfStatement(ConvertNode(iff->Condition), truePath, falsePath, *ast);
 	}
 
-	case AST_ArrayIterationStmt:
-	{
-		auto iter = static_cast<ZCC_ArrayIterationStmt*>(ast);
-		auto var = iter->ItName->Name;
-		FxExpression* const itArray = ConvertNode(iter->ItArray);
-		FxExpression* const itArray2 = ConvertNode(iter->ItArray);
-		FxExpression* const itArray3 = ConvertNode(iter->ItArray);
-		FxExpression* const itArray4 = ConvertNode(iter->ItArray);	// the handler needs copies of this - here's the easiest place to create them.
-		FxExpression* const body = ConvertImplicitScopeNode(ast, iter->LoopStatement);
-		return new FxForEachLoop(iter->ItName->Name, itArray, itArray2, itArray3, itArray4, body, *ast);
-	}
-
-	case AST_TwoArgIterationStmt:
-	{
-		auto iter = static_cast<ZCC_TwoArgIterationStmt*>(ast);
-		auto key = iter->ItKey->Name;
-		auto var = iter->ItValue->Name;
-		FxExpression* const itMap = ConvertNode(iter->ItMap);
-		FxExpression* const itMap2 = ConvertNode(iter->ItMap);
-		FxExpression* const itMap3 = ConvertNode(iter->ItMap);
-		FxExpression* const itMap4 = ConvertNode(iter->ItMap);
-		FxExpression* const body = ConvertImplicitScopeNode(ast, iter->LoopStatement);
-		return new FxTwoArgForEachLoop(key, var, itMap, itMap2, itMap3, itMap4, body, *ast);
-	}
-
-	case AST_ThreeArgIterationStmt:
-	{
-		auto iter = static_cast<ZCC_ThreeArgIterationStmt*>(ast);
-		auto var = iter->ItVar->Name;
-		auto pos = iter->ItPos->Name;
-		auto flags = iter->ItFlags->Name;
-		FxExpression* const itBlock = ConvertNode(iter->ItBlock);
-		FxExpression* const body = ConvertImplicitScopeNode(ast, iter->LoopStatement);
-		return new FxThreeArgForEachLoop(var, pos, flags, itBlock, body, *ast);
-	}
-
-	case AST_TypedIterationStmt:
-	{
-		auto iter = static_cast<ZCC_TypedIterationStmt*>(ast);
-		auto cls = iter->ItType->Name;
-		auto var = iter->ItVar->Name;
-		FxExpression* const itExpr = ConvertNode(iter->ItExpr);
-		FxExpression* const body = ConvertImplicitScopeNode(ast, iter->LoopStatement);
-		return new FxTypedForEachLoop(cls, var, itExpr, body, *ast);
-	}
-
 	case AST_IterationStmt:
 	{
 		auto iter = static_cast<ZCC_IterationStmt *>(ast);
@@ -3579,28 +3114,6 @@ FxExpression *ZCCCompiler::ConvertNode(ZCC_TreeNode *ast, bool substitute)
 			return new FxNop(*ast);	// allow compiler to continue looking for errors.
 		}
 		return new FxMultiAssign(args, ConvertNode(ass->Sources), *ast);
-	}
-
-	case AST_AssignDeclStmt:
-	{
-		auto ass = static_cast<ZCC_AssignDeclStmt *>(ast);
-		FArgumentList args;
-		{
-			ZCC_TreeNode *n = ass->Dests;
-			if(n) do
-			{
-				args.Push(new FxIdentifier(static_cast<ZCC_Identifier*>(n)->Id,*n));
-				n = n->SiblingNext;
-			} while(n != ass->Dests);
-		}
-		assert(ass->Sources->SiblingNext == ass->Sources);	// right side should be a single function call - nothing else
-		if (ass->Sources->NodeType != AST_ExprFuncCall)
-		{
-			// don't let this through to the code generator. This node is only used to assign multiple returns of a function to more than one variable.
-			Error(ass, "Right side of multi-assignment must be a function call");
-			return new FxNop(*ast);	// allow compiler to continue looking for errors.
-		}
-		return new FxMultiAssignDecl(args, ConvertNode(ass->Sources), *ast);
 	}
 
 	default:

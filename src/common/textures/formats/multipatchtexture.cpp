@@ -331,6 +331,71 @@ int FMultiPatchTexture::CopyPixels(FBitmap *bmp, int conversion, int frame)
 	return retv;
 }
 
+
+int FMultiPatchTexture::ReadPixels(FImageLoadParams *params, FBitmap *bmp)
+{
+	int retv = -1;
+	int conversion = params->conversion;
+
+	if (conversion == noremap0)
+	{
+		if (bTextual || !UseGamePalette()) conversion = normal;
+	}
+
+	FMultiPatchParams *parms = dynamic_cast<FMultiPatchParams *>(params);
+	if (!parms || parms->numPatches != NumParts) return -1;
+
+	for (int i = 0; i < NumParts; i++)
+	{
+		int ret = -1;
+		FCopyInfo info;
+
+		memset(&info, 0, sizeof(info));
+		info.alpha = Parts[i].Alpha;
+		info.invalpha = BLENDUNIT - info.alpha;
+		info.op = ECopyOp(Parts[i].op);
+		PalEntry b = Parts[i].Blend;
+		if (b.a == 0 && b != BLEND_NONE)
+		{
+			info.blend = EBlend(b.d);
+		}
+		else if (b.a != 0)
+		{
+			if (b.a == 255)
+			{
+				info.blendcolor[0] = b.r * BLENDUNIT / 255;
+				info.blendcolor[1] = b.g * BLENDUNIT / 255;
+				info.blendcolor[2] = b.b * BLENDUNIT / 255;
+				info.blend = BLEND_MODULATE;
+			}
+			else
+			{
+				blend_t blendalpha = b.a * BLENDUNIT / 255;
+				info.blendcolor[0] = b.r * blendalpha;
+				info.blendcolor[1] = b.g * blendalpha;
+				info.blendcolor[2] = b.b * blendalpha;
+				info.blendcolor[3] = FRACUNIT - blendalpha;
+				info.blend = BLEND_OVERLAY;
+			}
+		}
+
+		auto trans = Parts[i].Translation ? Parts[i].Translation->Palette : nullptr;
+		FBitmap Pixels;
+		Pixels.Create(Parts[i].Image->GetWidth(), Parts[i].Image->GetHeight());
+
+		assert(parms->params[i] != nullptr);
+		ret = Parts[i].Image->ReadPixels(parms->params[i], &Pixels);
+		
+		//Parts[i].Image->GetCachedBitmap(trans, conversion, &ret);
+		bmp->Blit(Parts[i].OriginX, Parts[i].OriginY, Pixels, Pixels.GetWidth(), Pixels.GetHeight(), Parts[i].Rotate, &info);
+		// treat -1 (i.e. unknown) as absolute. We have no idea if this may have overwritten previous info so a real check needs to be done.
+		if (ret == -1) retv = ret;
+		else if (retv != -1 && ret > retv) retv = ret;
+	}
+	return retv;
+}
+
+
 //==========================================================================
 //
 //
@@ -355,5 +420,25 @@ void FMultiPatchTexture::CollectForPrecache(PrecacheInfo &info, bool requiretrue
 		Parts[i].Image->CollectForPrecache(info, requiretruecolor);
 	}
 }
+
+
+// Special version of this must provide a reader for every patch in the texture
+FImageLoadParams *FMultiPatchTexture::NewLoaderParams(int conversion, int translation, FRemapTable *remap) {
+	FMultiPatchParams *il = new FMultiPatchParams();
+	il->reader = nullptr;
+	il->conversion = conversion;
+	il->translation = translation;
+	il->remap = remap;
+
+	il->numPatches = NumParts;
+	il->params = new FImageLoadParams*[NumParts]();
+
+	for (int i = 0; i < NumParts; i++) {
+		il->params[i] = Parts[i].Image->NewLoaderParams(conversion, translation, remap);
+	}
+
+	return il;
+}
+
 
 

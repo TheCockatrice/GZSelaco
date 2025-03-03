@@ -267,7 +267,7 @@ public:
 	const char *GetSecretExitMap();
 	void ExitLevel(int position, bool keepFacing);
 	void SecretExitLevel(int position);
-	void DoLoadLevel(const FString &nextmapname, int position, bool autosave, bool newGame);
+	void DoLoadLevel(const FString &nextmapname, int position, bool autosave, bool newGame, int mapVersion = -1);
 
 	void DeleteAllAttachedLights();
 	void RecreateAllAttachedLights();
@@ -527,7 +527,7 @@ public:
 
 	uint8_t		md5[16];			// for savegame validation. If the MD5 does not match the savegame won't be loaded.
 	int			time;			// time in the hub
-	int			maptime;			// time in the map
+	int			maptime;		// time in the map
 	int			totaltime;		// time in the game
 	int			starttime;
 	int			partime;
@@ -535,10 +535,13 @@ public:
 	uint32_t	spawnindex;
 
 	level_info_t *info;
+	int			invasiontier;
+	double		tilt, tiltAngle;
 	int			cluster;
 	int			clusterflags;
-	int			levelnum;
+	int			levelnum, levelgroup, areaNum;
 	int			lumpnum;
+	int			mapVersion;			// @Cockatrice - Track which version was loaded so reloading the map works correctly in hubs (Do not expose this to script)
 	FString		LevelName;
 	FString		MapName;			// the lump name (E1M1, MAP01, etc)
 	FString		NextMap;			// go here when using the regular exit

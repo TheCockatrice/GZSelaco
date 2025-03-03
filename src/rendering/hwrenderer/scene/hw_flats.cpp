@@ -178,7 +178,8 @@ void HWFlat::SetupLights(HWDrawInfo *di, FLightNode * node, FDynLightData &light
 		}
 
 		p.Set(plane.plane.Normal(), plane.plane.fD());
-		draw_dlightf += GetLight(lightdata, portalgroup, p, light, false);
+		
+		draw_dlightf += GetLight(lightdata, portalgroup, p, light, false, di->Viewpoint.TicFrac);
 		node = node->nextLight;
 	}
 

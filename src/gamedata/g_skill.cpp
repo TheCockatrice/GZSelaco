@@ -42,9 +42,38 @@
 #include "gstrings.h"
 #include "g_levellocals.h"
 #include "vm.h"
+#include "events.h"
 
 TArray<FSkillInfo> AllSkills;
 int DefaultSkill = -1;
+
+// @Cockatrice - Allow ZScript skill hacking
+
+DEFINE_ACTION_FUNCTION(FLevelLocals, SetNewSkill)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(FLevelLocals);
+	PARAM_INT(skill);
+
+	if (gamestate != GS_LEVEL) {
+		Printf(TEXTCOLOR_RED "(%d) Cannot change skill when not in a game!\n", skill);
+	}
+
+	int oldSkill = gameskill;
+
+	// Send an event to the event handlers
+	if (primaryLevel->localEventManager->SkillShouldChange(oldSkill, skill)) {
+		UCVarValue cv;
+		cv.Int = skill;
+		gameskill.ForceSet(cv, CVAR_Int);
+		primaryLevel->localEventManager->SkillChanged(oldSkill, skill);
+	}
+	else if (developer > 0) {
+		Printf(TEXTCOLOR_YELLOW "Event manager cancelled skill change...\n");
+	}
+
+
+	return 0;
+}
 
 //==========================================================================
 //

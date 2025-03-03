@@ -38,9 +38,8 @@
 #include "doomtype.h"
 #include "vectors.h"
 #include "sc_man.h"
+#include "file_zip.h"
 #include "screenjob.h"
-#include "hwrenderer/postprocessing/hw_postprocess.h"
-#include "hw_viewpointuniforms.h"
 
 struct level_info_t;
 struct cluster_info_t;
@@ -79,10 +78,6 @@ struct CutsceneDef;
 
 struct FMapInfoParser
 {
-	FMapInfoParser(FScanner* parent)
-		: sc(parent ? &parent->GetSymbols() : nullptr)
-	{
-	}
 	enum EFormatType
 	{
 		FMT_Unknown,
@@ -102,7 +97,7 @@ struct FMapInfoParser
 
 	bool ParseLookupName(FString &dest);
 	void ParseMusic(FString &name, int &order);
-	void ParseCutscene(CutsceneDef& cdef, bool allow_function = true);
+	void ParseCutscene(CutsceneDef& cdef);
 
 	//void ParseLumpOrTextureName(char *name);
 	void ParseLumpOrTextureName(FString &name);
@@ -270,8 +265,8 @@ enum ELevelFlags : unsigned int
 	LEVEL3_AVOIDMELEE			= 0x00020000,	// global flag needed for proper MBF support.
 	LEVEL3_NOJUMPDOWN			= 0x00040000,	// only for MBF21. Inverse of MBF's dog_jumping flag.
 	LEVEL3_LIGHTCREATED			= 0x00080000,	// a light had been created in the last frame
-	LEVEL3_NOFOGOFWAR			= 0x00100000,	// disables effect of r_radarclipper CVAR on this map
-	LEVEL3_SECRET				= 0x00200000,   // level is a secret level
+	LEVEL3_RAINYMAP				= 0x00100000,	// @Cockatrice - Indicates map should draw rain effects under F_SKY
+	LEVEL3_SAFEROOM				= 0x00200000	// @Cockatrice - Indicates a saferoom is in this map, available for fast travel
 };
 
 
@@ -329,10 +324,10 @@ struct level_info_t
 	FString		NextMap;
 	FString		NextSecretMap;
 	FString		PName;
+	FString		Description;
 	FString		SkyPic1;
 	FString		SkyPic2;
 	FString		FadeTable;
-	FString		CustomColorMap;
 	FString		F1Pic;
 	FString		BorderTexture;
 	FString		MapBackground;
@@ -340,20 +335,21 @@ struct level_info_t
 	TMap<FName, FExitText> ExitMapTexts;
 
 	int			cluster;
+	int			levelgroup, areaNum;
 	int			partime;
 	int			sucktime;
+	int			invasiontier;
+	double		tilt, tiltAngle;
 	int32_t		flags;
 	uint32_t	flags2;
 	uint32_t	flags3;
 
-	FString		LightningSound = "world/thunder";
 	FString		Music;
 	FString		LevelName;
-	FString		MapLabel;
 	FString		AuthorName;
 	int8_t		WallVertLight, WallHorizLight;
 	int			musicorder;
-	FileSys::FCompressedBuffer	Snapshot;
+	FCompressedBuffer	Snapshot;
 	TArray<acsdefered_t> deferred;
 	float		skyspeed1;
 	float		skyspeed2;
@@ -384,15 +380,8 @@ struct level_info_t
 	FName		RedirectType;
 	FString		RedirectMapName;
 
-	// CVAR Redirection: If the CVAR Bool returns true, then
-	// you go to the RedirectMap instead of this one.
-	FName		RedirectCVAR;
-	FString		RedirectCVARMapName;
-
 	FString		EnterPic;
 	FString		ExitPic;
-	FString		EnterAnim;
-	FString		ExitAnim;
 	FString 	InterMusic;
 	int			intermusicorder;
 	TMap <FName, std::pair<FString, int> > MapInterMusic;
@@ -406,7 +395,7 @@ struct level_info_t
 
 	TArray<FSpecialAction> specialactions;
 
-	TArray<FSoundID> PrecacheSounds;
+	TArray<int> PrecacheSounds;
 	TArray<FString> PrecacheTextures;
 	TArray<FName> PrecacheClasses;
 	
@@ -422,8 +411,6 @@ struct level_info_t
 	FString		EDName;
 	FString		acsName;
 	bool		fs_nocheckposition;
-	ELightBlendMode lightblendmode;
-	ETonemapMode tonemap;
 	
 	CutsceneDef intro, outro;
 
@@ -492,8 +479,6 @@ level_info_t *FindLevelInfo (const char *mapname, bool allowdefault=true);
 level_info_t *FindLevelByNum (int num);
 level_info_t *CheckLevelRedirect (level_info_t *info);
 
-bool SecretLevelVisited();
-
 FString CalcMapName (int episode, int level);
 
 void G_ClearMapinfo();
@@ -516,7 +501,6 @@ enum ESkillProperty
 	SKILLP_PlayerRespawn,
 	SKILLP_SpawnMulti,
 	SKILLP_InstantReaction,
-	SKILLP_SpawnMultiCoopOnly,
 };
 enum EFSkillProperty	// floating point properties
 {
@@ -562,7 +546,6 @@ struct FSkillInfo
 	int SpawnFilter;
 	bool SpawnMulti;
 	bool InstantReaction;
-	bool SpawnMultiCoopOnly;
 	int ACSReturn;
 	FString MenuName;
 	FString PicName;

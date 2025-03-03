@@ -11,6 +11,7 @@ FString M_GetAutoexecPath();
 FString M_GetConfigPath(bool for_reading);
 FString M_GetScreenshotsPath();
 FString M_GetSavegamesPath();
+int		M_GetSavegamesPaths(TArray<FString>& outputAr);		// @Cockatrice - Get all possible savegame paths
 FString M_GetDocumentsPath();
 FString M_GetDemoPath();
 

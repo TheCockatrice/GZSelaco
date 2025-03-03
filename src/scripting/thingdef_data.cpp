@@ -57,7 +57,6 @@
 #include "a_dynlight.h"
 #include "types.h"
 #include "dictionary.h"
-#include "events.h"
 
 static TArray<FPropertyInfo*> properties;
 static TArray<AFuncDesc> AFTable;
@@ -75,8 +74,8 @@ extern float			BackbuttonAlpha;
 #define DEFINE_FLAG(prefix, name, type, variable) { (unsigned int)prefix##_##name, #name, (int)(size_t)&((type*)1)->variable - 1, sizeof(((type *)0)->variable), VARF_Native }
 #define DEFINE_PROTECTED_FLAG(prefix, name, type, variable) { (unsigned int)prefix##_##name, #name, (int)(size_t)&((type*)1)->variable - 1, sizeof(((type *)0)->variable), VARF_Native|VARF_ReadOnly|VARF_InternalAccess }
 #define DEFINE_FLAG2(symbol, name, type, variable) { (unsigned int)symbol, #name, (int)(size_t)&((type*)1)->variable - 1, sizeof(((type *)0)->variable), VARF_Native }
-#define DEFINE_FLAG2_DEPRECATED(symbol, name, type, variable, version) { (unsigned int)symbol, #name, (int)(size_t)&((type*)1)->variable - 1, sizeof(((type *)0)->variable), VARF_Native|VARF_Deprecated }
-#define DEFINE_DEPRECATED_FLAG(name, version) { DEPF_##name, #name, -1, 0, VARF_Deprecated, version }
+#define DEFINE_FLAG2_DEPRECATED(symbol, name, type, variable) { (unsigned int)symbol, #name, (int)(size_t)&((type*)1)->variable - 1, sizeof(((type *)0)->variable), VARF_Native|VARF_Deprecated }
+#define DEFINE_DEPRECATED_FLAG(name) { DEPF_##name, #name, -1, 0, true }
 #define DEFINE_DUMMY_FLAG(name, deprec) { DEPF_UNUSED, #name, -1, 0, deprec? VARF_Deprecated:0 }
 
 // internal flags. These do not get exposed to actor definitions but scripts need to be able to access them as variables.
@@ -210,6 +209,8 @@ static FFlagDef ActorFlagDefs[]=
 	DEFINE_FLAG(MF4, ACTLIKEBRIDGE, AActor, flags4),
 	DEFINE_FLAG(MF4, STRIFEDAMAGE, AActor, flags4),
 	DEFINE_FLAG(MF4, CANUSEWALLS, AActor, flags4),
+	DEFINE_FLAG(MF4, MISSILEMORE, AActor, flags4),
+	DEFINE_FLAG(MF4, MISSILEEVENMORE, AActor, flags4),
 	DEFINE_FLAG(MF4, FORCERADIUSDMG, AActor, flags4),
 	DEFINE_FLAG(MF4, DONTFALL, AActor, flags4),
 	DEFINE_FLAG(MF4, SEESDAGGERS, AActor, flags4),
@@ -325,8 +326,9 @@ static FFlagDef ActorFlagDefs[]=
 	DEFINE_FLAG(MF8, RETARGETAFTERSLAM, AActor, flags8),
 	DEFINE_FLAG(MF8, STOPRAILS, AActor, flags8),
 	DEFINE_FLAG(MF8, FALLDAMAGE, AActor, flags8),
-	DEFINE_FLAG(MF8, MINVISIBLE, AActor, flags8),
-	DEFINE_FLAG(MF8, MVISBLOCKED, AActor, flags8),
+	DEFINE_FLAG(MF8, ABSDAMAGE, AActor, flags8),
+	DEFINE_FLAG(MF8, HITSCANTHRU, AActor, flags8),
+	DEFINE_FLAG(MF8, BLOCKLOF, AActor, flags8),
 	DEFINE_FLAG(MF8, ABSVIEWANGLES, AActor, flags8),
 	DEFINE_FLAG(MF8, ALLOWTHRUBITS, AActor, flags8),
 	DEFINE_FLAG(MF8, FULLVOLSEE, AActor, flags8),
@@ -344,17 +346,7 @@ static FFlagDef ActorFlagDefs[]=
 	DEFINE_FLAG(MF8, CROSSLINECHECK, AActor, flags8),
 	DEFINE_FLAG(MF8, MASTERNOSEE, AActor, flags8),
 	DEFINE_FLAG(MF8, ADDLIGHTLEVEL, AActor, flags8),
-	DEFINE_FLAG(MF8, ONLYSLAMSOLID, AActor, flags8),
-
-	DEFINE_FLAG(MF9, SHADOWAIM, AActor, flags9),
-	DEFINE_FLAG(MF9, DOSHADOWBLOCK, AActor, flags9),
-	DEFINE_FLAG(MF9, SHADOWBLOCK, AActor, flags9),
-	DEFINE_FLAG(MF9, SHADOWAIMVERT, AActor, flags9),
-	DEFINE_FLAG(MF9, DECOUPLEDANIMATIONS, AActor, flags9),
-	DEFINE_FLAG(MF9, NOSECTORDAMAGE, AActor, flags9),
-	DEFINE_PROTECTED_FLAG(MF9, ISPUFF, AActor, flags9), //[AA] was spawned by SpawnPuff
-	DEFINE_FLAG(MF9, FORCESECTORDAMAGE, AActor, flags9),
-	DEFINE_FLAG(MF9, NOAUTOOFFSKULLFLY, AActor, flags9),
+	DEFINE_FLAG(MF8, PRECACHEALWAYS, AActor, flags8),
 
 	// Effect flags
 	DEFINE_FLAG(FX, VISIBILITYPULSE, AActor, effects),
@@ -364,7 +356,8 @@ static FFlagDef ActorFlagDefs[]=
 	DEFINE_FLAG(RF, FORCEYBILLBOARD, AActor, renderflags),
 	DEFINE_FLAG(RF, FORCEXYBILLBOARD, AActor, renderflags),
 	DEFINE_FLAG(RF, ROLLSPRITE, AActor, renderflags), // [marrub] roll the sprite billboard
-	DEFINE_FLAG(RF, FLATSPRITE, AActor, renderflags), // [fgsfds] Flat sprites
+			// [fgsfds] Flat sprites
+	DEFINE_FLAG(RF, FLATSPRITE, AActor, renderflags),
 	DEFINE_FLAG(RF, WALLSPRITE, AActor, renderflags),
 	DEFINE_FLAG(RF, DONTFLIP, AActor, renderflags),
 	DEFINE_FLAG(RF, ROLLCENTER, AActor, renderflags),
@@ -381,14 +374,6 @@ static FFlagDef ActorFlagDefs[]=
 	DEFINE_FLAG(RF, NOSPRITESHADOW, AActor, renderflags),
 	DEFINE_FLAG(RF2, INVISIBLEINMIRRORS, AActor, renderflags2),
 	DEFINE_FLAG(RF2, ONLYVISIBLEINMIRRORS, AActor, renderflags2),
-	DEFINE_FLAG(RF2, BILLBOARDFACECAMERA, AActor, renderflags2),
-	DEFINE_FLAG(RF2, BILLBOARDNOFACECAMERA, AActor, renderflags2),
-	DEFINE_FLAG(RF2, FLIPSPRITEOFFSETX, AActor, renderflags2),
-	DEFINE_FLAG(RF2, FLIPSPRITEOFFSETY, AActor, renderflags2),
-	DEFINE_FLAG(RF2, CAMFOLLOWSPLAYER, AActor, renderflags2),
-	DEFINE_FLAG(RF2, ISOMETRICSPRITES, AActor, renderflags2),
-	DEFINE_FLAG(RF2, SQUAREPIXELS, AActor, renderflags2),
-	DEFINE_FLAG(RF2, STRETCHPIXELS, AActor, renderflags2),
 
 	// Bounce flags
 	DEFINE_FLAG2(BOUNCE_Walls, BOUNCEONWALLS, AActor, BounceFlags),
@@ -408,15 +393,6 @@ static FFlagDef ActorFlagDefs[]=
 	DEFINE_FLAG2(BOUNCE_NotOnShootables, DONTBOUNCEONSHOOTABLES, AActor, BounceFlags),
 	DEFINE_FLAG2(BOUNCE_BounceOnUnrips, BOUNCEONUNRIPPABLES, AActor, BounceFlags),
 	DEFINE_FLAG2(BOUNCE_NotOnSky, DONTBOUNCEONSKY, AActor, BounceFlags),
-	DEFINE_FLAG2(BOUNCE_KeepAngle, KEEPBOUNCEANGLE, AActor, BounceFlags),
-	DEFINE_FLAG2(BOUNCE_ModifyPitch, BOUNCEMODIFIESPITCH, AActor, BounceFlags),
-	
-	DEFINE_FLAG2(OF_Transient, NOSAVEGAME, AActor, ObjectFlags),
-
-	// Deprecated flags which need a ZScript workaround.
-	DEFINE_DEPRECATED_FLAG(MISSILEMORE, MakeVersion(4, 13, 0)),
-	DEFINE_DEPRECATED_FLAG(MISSILEEVENMORE, MakeVersion(4, 13, 0)),
-
 };
 
 // These won't be accessible through bitfield variables
@@ -424,25 +400,24 @@ static FFlagDef MoreFlagDefs[] =
 {
 
 	// Deprecated flags. Handling must be performed in HandleDeprecatedFlags
-	// Note: Although deprecated since DECORATE times, they were never actually flagged as deprecated before 4.13.0 and no message was output...
-	DEFINE_DEPRECATED_FLAG(FIREDAMAGE, MakeVersion(4, 13, 0)),
-	DEFINE_DEPRECATED_FLAG(ICEDAMAGE, MakeVersion(4, 13, 0)),
-	DEFINE_DEPRECATED_FLAG(LOWGRAVITY, MakeVersion(4, 13, 0)),
-	DEFINE_DEPRECATED_FLAG(SHORTMISSILERANGE, MakeVersion(4, 13, 0)),
-	DEFINE_DEPRECATED_FLAG(LONGMELEERANGE, MakeVersion(4, 13, 0)),
-	DEFINE_DEPRECATED_FLAG(QUARTERGRAVITY, MakeVersion(4, 13, 0)),
-	DEFINE_DEPRECATED_FLAG(FIRERESIST, MakeVersion(4, 13, 0)),
-	DEFINE_DEPRECATED_FLAG(HERETICBOUNCE, MakeVersion(4, 13, 0)),
-	DEFINE_DEPRECATED_FLAG(HEXENBOUNCE, MakeVersion(4, 13, 0)),
-	DEFINE_DEPRECATED_FLAG(DOOMBOUNCE, MakeVersion(4, 13, 0)),
-	DEFINE_DEPRECATED_FLAG(HIGHERMPROB, MakeVersion(4, 13, 0)),
+	DEFINE_DEPRECATED_FLAG(FIREDAMAGE),
+	DEFINE_DEPRECATED_FLAG(ICEDAMAGE),
+	DEFINE_DEPRECATED_FLAG(LOWGRAVITY),
+	DEFINE_DEPRECATED_FLAG(SHORTMISSILERANGE),
+	DEFINE_DEPRECATED_FLAG(LONGMELEERANGE),
+	DEFINE_DEPRECATED_FLAG(QUARTERGRAVITY),
+	DEFINE_DEPRECATED_FLAG(FIRERESIST),
+	DEFINE_DEPRECATED_FLAG(HERETICBOUNCE),
+	DEFINE_DEPRECATED_FLAG(HEXENBOUNCE),
+	DEFINE_DEPRECATED_FLAG(DOOMBOUNCE),
+	DEFINE_DEPRECATED_FLAG(HIGHERMPROB),
 
 	// Deprecated flags with no more existing functionality.
 	DEFINE_DUMMY_FLAG(FASTER, true),				// obsolete, replaced by 'Fast' state flag
 	DEFINE_DUMMY_FLAG(FASTMELEE, true),			// obsolete, replaced by 'Fast' state flag
 
 	// Deprecated name as an alias
-	DEFINE_FLAG2_DEPRECATED(MF4_DONTHARMCLASS, DONTHURTSPECIES, AActor, flags4, 0),
+	DEFINE_FLAG2_DEPRECATED(MF4_DONTHARMCLASS, DONTHURTSPECIES, AActor, flags4),
 
 	// Various Skulltag flags that are quite irrelevant to ZDoom
 	// [BC] New DECORATE flag defines here.
@@ -665,15 +640,6 @@ static int propcmp(const void * a, const void * b)
 //==========================================================================
 void InitImports();
 
-struct UserInfoCVarNamePlayer
-{
-	FBaseCVar** addr;
-	FString name;
-	int pnum;
-};
-
-TArray<UserInfoCVarNamePlayer> LoadGameUserInfoCVars;
-
 void InitThingdef()
 {
 	// Some native types need size and serialization information added before the scripts get compiled.
@@ -745,10 +711,6 @@ void InitThingdef()
 	sectorportalstruct->Size = sizeof(FSectorPortal);
 	sectorportalstruct->Align = alignof(FSectorPortal);
 
-	auto lineportalstruct = NewStruct("LinePortal", nullptr, true);
-	lineportalstruct->Size = sizeof(FLinePortal);
-	lineportalstruct->Align = alignof(FLinePortal);
-
 	auto playerclassstruct = NewStruct("PlayerClass", nullptr, true);
 	playerclassstruct->Size = sizeof(FPlayerClass);
 	playerclassstruct->Align = alignof(FPlayerClass);
@@ -760,10 +722,6 @@ void InitThingdef()
 	auto teamstruct = NewStruct("Team", nullptr, true);
 	teamstruct->Size = sizeof(FTeam);
 	teamstruct->Align = alignof(FTeam);
-
-	auto terraindefstruct = NewStruct("TerrainDef", nullptr, true);
-	terraindefstruct->Size = sizeof(FTerrainDef);
-	terraindefstruct->Align = alignof(FTerrainDef);
 
 	PStruct *pstruct = NewStruct("PlayerInfo", nullptr, true);
 	pstruct->Size = sizeof(player_t);
@@ -824,90 +782,9 @@ void InitThingdef()
 	frp->Size = sizeof(FRailParams);
 	frp->Align = alignof(FRailParams);
 
-	auto netcmdstruct = NewStruct("NetworkCommand", nullptr, true);
-	netcmdstruct->Size = sizeof(FNetworkCommand);
-	netcmdstruct->Align = alignof(FNetworkCommand);
-
 	auto fltd = NewStruct("FLineTraceData", nullptr);
 	fltd->Size = sizeof(FLineTraceData);
 	fltd->Align = alignof(FLineTraceData);
-
-	auto fspp = NewStruct("FSpawnParticleParams", nullptr);
-	fspp->Size = sizeof(FSpawnParticleParams);
-	fspp->Align = alignof(FSpawnParticleParams);
-
-	auto cvst = NewStruct("CVar", nullptr, true);
-	NewPointer(cvst, false)->InstallHandlers(
-		[](FSerializer &arc, const char *key, const void *addr)
-		{
-			const FBaseCVar * self = *(const FBaseCVar**)addr;
-			
-			if(self)
-			{
-				arc.BeginObject(key);
-
-
-				if(self->pnum != -1)
-				{
-					int32_t pnum = self->pnum;
-					FName name = self->userinfoName;
-					arc("name", name);
-					arc("player", pnum);
-				}
-				else
-				{
-					FString name = self->GetName();
-					arc("name", name);
-				}
-
-				arc.EndObject();
-			}
-		},
-		[](FSerializer &arc, const char *key, void *addr)
-		{
-			FBaseCVar ** self = (FBaseCVar**)addr;
-
-			FString name;
-			arc.BeginObject(key);
-
-			arc("name", name);
-
-			FBaseCVar * backing = FindCVar(name.GetChars(), nullptr);
-			if(!backing)
-			{
-				I_Error("Attempt to load pointer to inexisted CVar '%s'", name.GetChars());
-			}
-			else if((backing->GetFlags()  & (CVAR_USERINFO|CVAR_IGNORE)) == CVAR_USERINFO)
-			{
-				if(int pnum; arc.ReadOptionalInt("player", pnum))
-				{
-					*self = nullptr;
-					LoadGameUserInfoCVars.Push({self, name, pnum}); // this needs to be done later, since userinfo isn't loaded yet
-					arc.EndObject();
-					return true;
-				}
-			}
-			
-			*self = backing;
-
-			arc.EndObject();
-
-			return true;
-		}
-	);
-}
-
-void SetupLoadingCVars()
-{
-	LoadGameUserInfoCVars.Clear();
-}
-
-void FinishLoadingCVars()
-{
-	for(UserInfoCVarNamePlayer &cvar : LoadGameUserInfoCVars)
-	{
-		(*cvar.addr) = GetCVar(cvar.pnum, cvar.name.GetChars());
-	}
 }
 
 void SynthesizeFlagFields()
@@ -924,18 +801,6 @@ void SynthesizeFlagFields()
 				{
 					cls->VMType->AddNativeField(FStringf("b%s", fl.Defs[i].name), (fl.Defs[i].fieldsize == 4 ? TypeSInt32 : TypeSInt16), fl.Defs[i].structoffset, fl.Defs[i].varflags, fl.Defs[i].flagbit);
 				}
-				else if (fl.Defs[i].flagbit == DEPF_MISSILEMORE || fl.Defs[i].flagbit == DEPF_MISSILEEVENMORE) // these need script side emulation because they have been around for many years.
-				{
-					auto field = cls->VMType->AddNativeField(FStringf("b%s", fl.Defs[i].name), TypeSInt32, 0, VARF_Native);
-					if (field)
-					{
-						// these are deprecated so flag accordingly with a proper message.
-						field->DeprecationMessage = "Use missilechancemult property instead";
-						field->mVersion = MakeVersion(4, 13, 0);
-						field->Flags |= VARF_Deprecated;
-						field->BitValue = fl.Defs[i].flagbit + 64;
-					}
-				}
 			}
 		}
 	}
@@ -944,7 +809,7 @@ void SynthesizeFlagFields()
 DEFINE_ACTION_FUNCTION(DObject, BAM)
 {
 	PARAM_PROLOGUE;
-	PARAM_ANGLE(ang);
-	ACTION_RETURN_INT(ang.BAMs());
+	PARAM_FLOAT(ang);
+	ACTION_RETURN_INT(DAngle(ang).BAMs());
 }
 

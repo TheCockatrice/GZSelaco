@@ -17,7 +17,6 @@ DoomEdNums
     11 = "$DeathmatchStart"
     14 = TeleportDest
    118 = ZBridge
-   888 = MBFHelperDog
   1400 = "$SSeqOverride", 0
   1401 = "$SSeqOverride", 1
   1402 = "$SSeqOverride", 2
@@ -54,7 +53,6 @@ DoomEdNums
   9031 = PurpleParticleFountain
   9032 = BlackParticleFountain
   9033 = WhiteParticleFountain
-  9037 = BetaSkull
   9038 = ColorSetter
   9039 = FadeSetter
   9040 = MapMarker

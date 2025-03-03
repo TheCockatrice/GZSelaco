@@ -194,6 +194,37 @@ IHardwareTexture* FMaterial::GetLayer(int i, int translation, MaterialLayerInfo*
 	return nullptr;
 }
 
+
+//===========================================================================
+//
+// @Cockatrice - Check if all layers have been successfully hardware cached
+// We don't create the hwtex here because if it hasn't already been created, it's not loaded
+//
+//===========================================================================
+
+
+bool FMaterial::IsHardwareCached(int translation) {
+	if (mScaleFlags & CTF_Indexed) translation = -1;
+
+	MaterialLayerInfo *hwt = &mTextureLayers[0];
+	IHardwareTexture *ihwt = nullptr;
+
+	if (hwt->layerTexture) {
+		ihwt = hwt->layerTexture->SystemTextures.GetHardwareTexture(translation, hwt->scaleFlags);
+		if(!ihwt || !ihwt->IsValid(0)) return false;
+	}
+
+	for (unsigned int i = 1; i < mTextureLayers.Size(); i++) {
+		hwt = &mTextureLayers[i];
+		if (hwt->layerTexture) {
+			ihwt = hwt->layerTexture->SystemTextures.GetHardwareTexture(0, hwt->scaleFlags);
+			if (!ihwt || !ihwt->IsValid(i)) return false;
+		}
+	}
+
+	return true;
+}
+
 //==========================================================================
 //
 // Gets a texture from the texture manager and checks its validity for

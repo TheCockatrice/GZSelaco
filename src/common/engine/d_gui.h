@@ -83,14 +83,14 @@ enum ESpecialGUIKeys
 	GK_END		= 4,
 	GK_LEFT		= 5,
 	GK_RIGHT	= 6,
-	GK_ALERT	= 7,		// ASCII bell
+	GK_CTRL		= 7,		// Replaces GK_ALERT (ASCII bell)
 	GK_BACKSPACE= 8,		// ASCII
 	GK_TAB		= 9,		// ASCII
 	GK_LINEFEED	= 10,		// ASCII
 	GK_DOWN		= 10,
 	GK_VTAB		= 11,		// ASCII
 	GK_UP		= 11,
-	GK_FORMFEED	= 12,		// ASCII
+	GK_MENU		= 12,		// Replaces GK_FORMFEED ASCII
 	GK_RETURN	= 13,		// ASCII
 	GK_F1		= 14,
 	GK_F2		= 15,
@@ -106,8 +106,8 @@ enum ESpecialGUIKeys
 	GK_F12		= 25,
 	GK_DEL		= 26,
 	GK_ESCAPE	= 27,		// ASCII
-	GK_FREE1	= 28,
-	GK_FREE2	= 29,
+	GK_CAPSLOCK	= 28,
+	GK_SHIFT	= 29,
 	GK_BACK		= 30,		// browser back key
 	GK_CESCAPE	= 31		// color escape
 };

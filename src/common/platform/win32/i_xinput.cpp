@@ -46,6 +46,9 @@
 #include "cmdlib.h"
 #include "keydef.h"
 
+#include "i_time.h"
+#include "TSQueue.h"
+
 // MACROS ------------------------------------------------------------------
 
 // This macro is defined by newer versions of xinput.h. In case we are
@@ -65,14 +68,43 @@
 #endif
 #endif
 
-extern bool AppActive;
+#define XINPUT_DLL_A1 "xinput1_4.dll"
+#define XINPUT_DLL_W1 L"xinput1_4.dll"
+
+#ifdef UNICODE
+#define XINPUT_DLL1 XINPUT_DLL_W1
+#else
+#define XINPUT_DLL1 XINPUT_DLL_A1
+#endif 
+
+
+EXTERN_CVAR(Bool, joy_feedback)
+EXTERN_CVAR(Float, joy_feedback_scale)
+
+CUSTOM_CVAR(Int, joy_xinput_queuesize, 5, CVAR_ARCHIVE | CVAR_GLOBALCONFIG) {
+	if (self > 10) self = 10;
+	if (self < 1) self = 1;
+}
+
+CUSTOM_CVAR(Int, joy_xinput_squaremove, 1, CVAR_ARCHIVE | CVAR_GLOBALCONFIG) {
+	if (self > 2) self = 2;
+	if (self < 0) self = 0;
+}
+
+CUSTOM_CVAR(Int, joy_xinput_squarelook, 1, CVAR_ARCHIVE | CVAR_GLOBALCONFIG) {
+	if (self > 2) self = 2;
+	if (self < 0) self = 0;
+}
 
 // TYPES -------------------------------------------------------------------
 
 typedef DWORD (WINAPI *XInputGetStateType)(DWORD index, XINPUT_STATE *state);
 typedef DWORD (WINAPI *XInputSetStateType)(DWORD index, XINPUT_STATE *state);
+typedef DWORD (WINAPI *XInputSetVibeType)(DWORD index, XINPUT_VIBRATION *vibe);
 typedef DWORD (WINAPI *XInputGetCapabilitiesType)(DWORD index, DWORD flags, XINPUT_CAPABILITIES *caps);
 typedef void  (WINAPI *XInputEnableType)(BOOL enable);
+
+
 
 class FXInputController : public IJoystickConfig
 {
@@ -94,40 +126,45 @@ public:
 	EJoyAxis GetAxisMap(int axis);
 	const char *GetAxisName(int axis);
 	float GetAxisScale(int axis);
+	float GetAxisAcceleration(int axis) override;
+	float GetAxis(int axis) override;
+	float GetRawAxis(int axis) override;
 
 	void SetAxisDeadZone(int axis, float deadzone);
 	void SetAxisMap(int axis, EJoyAxis gameaxis);
 	void SetAxisScale(int axis, float scale);
+	void SetAxisAcceleration(int axis, float accel) override;
 
 	bool IsSensitivityDefault();
 	bool IsAxisDeadZoneDefault(int axis);
 	bool IsAxisMapDefault(int axis);
 	bool IsAxisScaleDefault(int axis);
-
-	bool GetEnabled();
-	void SetEnabled(bool enabled);
-
-	bool AllowsEnabledInBackground() { return true; }
-	bool GetEnabledInBackground() { return EnabledInBackground; }
-	void SetEnabledInBackground(bool enabled) { EnabledInBackground = enabled; }
+	bool IsAxisAccelerationDefault(int axis) override;
 
 	void SetDefaultConfig();
 	FString GetIdentifier();
+
+	//bool SetVibration(float l, float r) override;
+	//bool AddVibration(float l, float r) override;
 
 protected:
 	struct AxisInfo
 	{
 		float Value;
+		float RawValue;
 		float DeadZone;
 		float Multiplier;
+		float Acceleration;
 		EJoyAxis GameAxis;
 		uint8_t ButtonValue;
+		RingBuffer<float, 10> Inputs;
 	};
 	struct DefaultAxisConfig
 	{
 		float DeadZone;
 		EJoyAxis GameAxis;
 		float Multiplier;
+		float Acceleration;
 	};
 	enum
 	{
@@ -140,6 +177,8 @@ protected:
 		NUM_AXES
 	};
 
+	bool InternalSetVibration(float l, float r) override;
+
 	int Index;
 	float Multiplier;
 	AxisInfo Axes[NUM_AXES];
@@ -147,14 +186,13 @@ protected:
 	DWORD LastPacketNumber;
 	int LastButtons;
 	bool Connected;
-	bool Enabled;
-	bool EnabledInBackground;
 
 	void Attached();
 	void Detached();
 
 	static void ProcessThumbstick(int value1, AxisInfo *axis1, int value2, AxisInfo *axis2, int base);
 	static void ProcessTrigger(int value, AxisInfo *axis, int base);
+	static void ProcessAcceleration(AxisInfo *axis, float val);
 };
 
 class FXInputManager : public FJoystickCollection
@@ -198,6 +236,7 @@ static XInputGetStateType			InputGetState;
 static XInputSetStateType			InputSetState;
 static XInputGetCapabilitiesType	InputGetCapabilities;
 static XInputEnableType				InputEnable;
+static XInputSetVibeType			InputSetVibe;
 
 static const char *AxisNames[] =
 {
@@ -211,13 +250,13 @@ static const char *AxisNames[] =
 
 FXInputController::DefaultAxisConfig FXInputController::DefaultAxes[NUM_AXES] =
 {
-	// Dead zone, game axis, multiplier
-	{ XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE / 32768.f, JOYAXIS_Side, 1 },		// ThumbLX
-	{ XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE / 32768.f, JOYAXIS_Forward, 1 },	// ThumbLY
-	{ XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE / 32768.f, JOYAXIS_Yaw, 1 },		// ThumbRX
-	{ XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE / 32768.f, JOYAXIS_Pitch, 0.75 },	// ThumbRY
-	{ XINPUT_GAMEPAD_TRIGGER_THRESHOLD / 256.f, JOYAXIS_None, 0 },			// LeftTrigger
-	{ XINPUT_GAMEPAD_TRIGGER_THRESHOLD / 256.f, JOYAXIS_None, 0 }			// RightTrigger
+	// Dead zone, game axis, multiplier, acceleration
+	{ XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE / 32768.f,		JOYAXIS_Side,		1,		0.25f },	// ThumbLX
+	{ XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE / 32768.f,		JOYAXIS_Forward,	1,		0.25f },	// ThumbLY
+	{ XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE / 32768.f,	JOYAXIS_Yaw,		1,		0.5f },		// ThumbRX
+	{ XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE / 32768.f,	JOYAXIS_Pitch,		0.4f,	0.5f },		// ThumbRY
+	{ XINPUT_GAMEPAD_TRIGGER_THRESHOLD / 256.f,			JOYAXIS_None,		0,		0 },		// LeftTrigger
+	{ XINPUT_GAMEPAD_TRIGGER_THRESHOLD / 256.f,			JOYAXIS_None,		0,		0 }			// RightTrigger
 };
 
 // CODE --------------------------------------------------------------------
@@ -232,7 +271,6 @@ FXInputController::FXInputController(int index)
 {
 	Index = index;
 	Connected = false;
-	Enabled = true;
 	M_LoadJoystickConfig(this);
 }
 
@@ -281,16 +319,11 @@ void FXInputController::ProcessInput()
 	{
 		Attached();
 	}
-	if (state.dwPacketNumber == LastPacketNumber || !Enabled)
-	{ // Nothing has changed since last time.
-		return;
-	}
 
-	// There is a hole in the wButtons bitmask where two buttons could fit.
-	// As per the XInput documentation, "bits that are set but not defined ... are reserved,
-	// and their state is undefined," so we clear them to make sure they're not set.
-	// Our keymapping uses these two slots for the triggers as buttons.
-	state.Gamepad.wButtons &= 0xF3FF;
+	UpdateFeedback();
+
+	// We run these every frame now, even if they have not changed
+	// This is necessary to run joytick acceleration properly
 
 	// Convert axes to floating point and cancel out deadzones.
 	// XInput's Y axes are reversed compared to DirectInput.
@@ -301,12 +334,131 @@ void FXInputController::ProcessInput()
 	ProcessTrigger(state.Gamepad.bLeftTrigger, &Axes[AXIS_LeftTrigger], KEY_PAD_LTRIGGER);
 	ProcessTrigger(state.Gamepad.bRightTrigger, &Axes[AXIS_RightTrigger], KEY_PAD_RTRIGGER);
 
+
+	// Find the two axes for directional movement
+	if (joy_xinput_squaremove > 0) {
+		AxisInfo *moveSide = NULL, *moveForward = NULL;
+		int axisSide = -1, axisForward = -1;
+		for (int x = 0; x < NUM_AXES; x++) {
+			if (Axes[x].GameAxis == JOYAXIS_Forward) {
+				moveForward = &Axes[x];
+				axisForward = x;
+			}
+			else if (Axes[x].GameAxis == JOYAXIS_Side) {
+				moveSide = &Axes[x];
+				axisSide = x;
+			}
+		}
+
+		// Make sure they are on the same physical stick, or let it be forced with joy_xinput_squaremove
+		if (moveSide && moveForward && (
+			joy_xinput_squaremove > 1 || 
+			((axisSide == AXIS_ThumbLX || axisSide == AXIS_ThumbLY) && (axisForward == AXIS_ThumbLX || axisForward == AXIS_ThumbLY)) ||
+			((axisSide == AXIS_ThumbRX || axisSide == AXIS_ThumbRY) && (axisForward == AXIS_ThumbRX || axisForward == AXIS_ThumbRY))
+			)) {
+
+			// We share a physical stick, so let's un-circularize the inputs
+			float x = moveSide->Value * 1.15f;	// Add a slightly arbitrary bonus value to make up for many sticks that don't fully commit a proper circle
+			float y = moveForward->Value * 1.15f;
+			float r = sqrt(x*x + y*y);
+			float maxMove = max(abs(x), abs(y));
+			if (maxMove > 0) {
+				moveForward->Value = clamp(y * (r / maxMove), -1.0f, 1.0f);
+				moveSide->Value = clamp(x * (r / maxMove), -1.0f, 1.0f);
+			}
+		}
+	}
+
+	// Find the two axis for looking
+	if (joy_xinput_squarelook > 0) {
+		AxisInfo *lookYaw = NULL, *lookPitch = NULL;
+		int axisPitch = -1, axisYaw = -1;
+		for (int x = 0; x < NUM_AXES; x++) {
+			if (Axes[x].GameAxis == JOYAXIS_Yaw) {
+				lookYaw = &Axes[x];
+				axisYaw = x;
+			}
+			else if (Axes[x].GameAxis == JOYAXIS_Pitch) {
+				lookPitch = &Axes[x];
+				axisPitch = x;
+			}
+		}
+
+		// Make sure they are on the same physical stick, or let it be forced with joy_xinput_squarelook
+		if (lookPitch && lookYaw && (
+			joy_xinput_squarelook > 1 ||
+			((axisPitch == AXIS_ThumbLX || axisPitch == AXIS_ThumbLY) && (axisYaw == AXIS_ThumbLX || axisYaw == AXIS_ThumbLY)) ||
+			((axisPitch == AXIS_ThumbRX || axisPitch == AXIS_ThumbRY) && (axisYaw == AXIS_ThumbRX || axisYaw == AXIS_ThumbRY))
+			)) {
+
+			// We share a physical stick, so let's un-circularize the inputs
+			float x = lookYaw->Value * 1.15f;	// Add a slightly arbitrary bonus value to make up for many sticks that don't fully commit a proper circle
+			float y = lookPitch->Value * 1.15f;
+			float r = sqrt(x*x + y * y);
+			float maxMove = max(abs(x), abs(y));
+			if (maxMove > 0) {
+				lookPitch->Value = clamp(y * (r / maxMove), -1.0f, 1.0f);
+				lookYaw->Value = clamp(x * (r / maxMove), -1.0f, 1.0f);
+			}
+		}
+	}
+	
+
+	if (state.dwPacketNumber == LastPacketNumber)
+	{ // Nothing has changed since last time.
+		return;
+	}
+
+	// There is a hole in the wButtons bitmask where two buttons could fit.
+	// As per the XInput documentation, "bits that are set but not defined ... are reserved,
+	// and their state is undefined," so we clear them to make sure they're not set.
+	// Our keymapping uses these two slots for the triggers as buttons.
+	state.Gamepad.wButtons &= 0xF3FF;
+
 	// Generate events for buttons that have changed.
 	Joy_GenerateButtonEvents(LastButtons, state.Gamepad.wButtons, 16, KEY_PAD_DPAD_UP);
 
 	LastPacketNumber = state.dwPacketNumber;
 	LastButtons = state.Gamepad.wButtons;
 }
+
+
+//==========================================================================
+//
+// FXInputController :: InternalSetVibration
+//
+// Set left and right vibration. Converts floating point to internal values
+// These settings may end up being zeroed out after a period of inactivty
+// as we don't want the motors to run forever. This decay is handled in 
+// the generic interface
+// 
+//==========================================================================
+
+bool FXInputController::InternalSetVibration(float l, float r) {
+	if (!joy_feedback) {
+		if (lFeed != 0.0f || rFeed != 0.0f) {
+			rFeed = rFeed = 0.0f;
+
+			XINPUT_VIBRATION vibration;
+			ZeroMemory(&vibration, sizeof(XINPUT_VIBRATION));
+			vibration.wLeftMotorSpeed = (WORD)0;
+			vibration.wRightMotorSpeed = (WORD)0;
+			InputSetVibe(Index, &vibration);
+		}
+		return false;
+	}
+
+	lFeed = clamp(l, 0.0f, 1.0f);
+	rFeed = clamp(r, 0.0f, 1.0f);
+
+	XINPUT_VIBRATION vibration;
+	ZeroMemory(&vibration, sizeof(XINPUT_VIBRATION));
+	vibration.wLeftMotorSpeed = (WORD)round(clamp(lFeed * joy_feedback_scale, 0.0f, 1.0f) * 65535.0);
+	vibration.wRightMotorSpeed = (WORD)round(clamp(rFeed * joy_feedback_scale, 0.0f, 1.0f) * 65535.0);
+
+	return InputSetVibe(Index, &vibration) == ERROR_SUCCESS;
+}
+
 
 //==========================================================================
 //
@@ -317,6 +469,17 @@ void FXInputController::ProcessInput()
 //
 //==========================================================================
 
+void FXInputController::ProcessAcceleration(AxisInfo *axis, float val) {
+	// Curve value - Circular
+	//float cv = (1 - sqrt(1.0f - pow(abs(val), 2.0f))) * (val > 0 ? 1.0f : -1.0f);
+
+	// Curve value, Quint
+	float cv = (val * val * val * val * val);
+
+	// Return a lerp of the actual value and the curve value
+	axis->Value = clamp(cv + ((1.0f - axis->Acceleration) * (val - cv)), -1.0f, 1.0f);
+}
+
 void FXInputController::ProcessThumbstick(int value1, AxisInfo *axis1,
 	int value2, AxisInfo *axis2, int base)
 {
@@ -325,13 +488,18 @@ void FXInputController::ProcessThumbstick(int value1, AxisInfo *axis1,
 
 	axisval1 = (value1 - SHRT_MIN) * 2.0 / 65536 - 1.0;
 	axisval2 = (value2 - SHRT_MIN) * 2.0 / 65536 - 1.0;
+
+	axis1->RawValue = (float)axisval1;
+	axis2->RawValue = (float)axisval2;
+
 	axisval1 = Joy_RemoveDeadZone(axisval1, axis1->DeadZone, NULL);
 	axisval2 = Joy_RemoveDeadZone(axisval2, axis2->DeadZone, NULL);
-	axis1->Value = float(axisval1);
-	axis2->Value = float(axisval2);
+
+	ProcessAcceleration(axis1, (float)axisval1);
+	ProcessAcceleration(axis2, (float)axisval2);
 
 	// We store all four buttons in the first axis and ignore the second.
-	buttonstate = Joy_XYAxesToButtons(axisval1, axisval2);
+	buttonstate = Joy_XYAxesToButtons(axis1->Value, axis2->Value);
 	Joy_GenerateButtonEvents(axis1->ButtonValue, buttonstate, 4, base);
 	axis1->ButtonValue = buttonstate;
 }
@@ -348,12 +516,18 @@ void FXInputController::ProcessThumbstick(int value1, AxisInfo *axis1,
 void FXInputController::ProcessTrigger(int value, AxisInfo *axis, int base)
 {
 	uint8_t buttonstate;
-	double axisval;
+	float axisval = value / 256.0f;
+	
+	axis->RawValue = axisval;
 
-	axisval = Joy_RemoveDeadZone(value / 256.0, axis->DeadZone, &buttonstate);
+	// Seems silly to bother with axis scaling here, but I'm going to @Cockatrice
+	axisval = (float)Joy_RemoveDeadZone((double)axisval, axis->DeadZone, &buttonstate);
+	ProcessAcceleration(axis, axisval);
+	
+
 	Joy_GenerateButtonEvents(axis->ButtonValue, buttonstate, 1, base);
 	axis->ButtonValue = buttonstate;
-	axis->Value = float(axisval);
+	//axis->Value = float(axisval);
 }
 
 //==========================================================================
@@ -374,8 +548,13 @@ void FXInputController::Attached()
 	for (i = 0; i < NUM_AXES; ++i)
 	{
 		Axes[i].Value = 0;
+		Axes[i].RawValue = 0;
 		Axes[i].ButtonValue = 0;
+		Axes[i].Inputs.pos = -1;
 	}
+	
+	lFeed = rFeed = 0;
+	feedLastUpdate = I_msTimeF();
 	UpdateJoystickMenu(this);
 }
 
@@ -419,7 +598,13 @@ void FXInputController::AddAxes(float axes[NUM_JOYAXIS])
 	// Add to game axes.
 	for (int i = 0; i < NUM_AXES; ++i)
 	{
-		axes[Axes[i].GameAxis] -= float(Axes[i].Value * Multiplier * Axes[i].Multiplier);
+		// Do not scale the movement axes by the global multiplier
+		if (Axes[i].GameAxis == JOYAXIS_Forward || Axes[i].GameAxis == JOYAXIS_Side) {
+			axes[Axes[i].GameAxis] -= float(Axes[i].Value * Axes[i].Multiplier);
+		}
+		else {
+			axes[Axes[i].GameAxis] -= float(Axes[i].Value * Multiplier * Axes[i].Multiplier);
+		}
 	}
 }
 
@@ -437,6 +622,8 @@ void FXInputController::SetDefaultConfig()
 		Axes[i].DeadZone = DefaultAxes[i].DeadZone;
 		Axes[i].GameAxis = DefaultAxes[i].GameAxis;
 		Axes[i].Multiplier = DefaultAxes[i].Multiplier;
+		Axes[i].Acceleration = DefaultAxes[i].Acceleration;
+		Axes[i].Inputs.pos = -1;
 	}
 }
 
@@ -460,7 +647,7 @@ FString FXInputController::GetIdentifier()
 FString FXInputController::GetName()
 {
 	FString res;
-	res.Format("XInput Controller #%d", Index + 1);
+	res.Format("Controller #%d (XInput)", Index + 1);
 	return res;
 }
 
@@ -570,6 +757,39 @@ float FXInputController::GetAxisScale(int axis)
 
 //==========================================================================
 //
+// FXInputController :: GetAxisAccleration
+//
+//==========================================================================
+
+float FXInputController::GetAxisAcceleration(int axis)
+{
+	if (unsigned(axis) < NUM_AXES)
+	{
+		return Axes[axis].Acceleration;
+	}
+	return 0;
+}
+
+
+float FXInputController::GetAxis(int axis) {
+	if (unsigned(axis) < NUM_AXES)
+	{
+		return Axes[axis].Value;
+	}
+	return 0;
+}
+
+
+float FXInputController::GetRawAxis(int axis) {
+	if (unsigned(axis) < NUM_AXES)
+	{
+		return Axes[axis].RawValue;
+	}
+	return 0;
+}
+
+//==========================================================================
+//
 // FXInputController :: SetAxisDeadZone
 //
 //==========================================================================
@@ -610,6 +830,20 @@ void FXInputController::SetAxisScale(int axis, float scale)
 	}
 }
 
+//==========================================================================
+//
+// FXInputController :: SetAxisAcceleration
+//
+//==========================================================================
+
+void FXInputController::SetAxisAcceleration(int axis, float acceleration)
+{
+	if (unsigned(axis) < NUM_AXES)
+	{
+		Axes[axis].Acceleration = acceleration;
+	}
+}
+
 //===========================================================================
 //
 // FXInputController :: IsAxisDeadZoneDefault
@@ -642,24 +876,17 @@ bool FXInputController::IsAxisScaleDefault(int axis)
 
 //===========================================================================
 //
-// FXInputController :: GetEnabled
+// FXInputController :: IsAxisScaleDefault
 //
 //===========================================================================
 
-bool FXInputController::GetEnabled()
+bool FXInputController::IsAxisAccelerationDefault(int axis)
 {
-	return Enabled;
-}
-
-//===========================================================================
-//
-// FXInputController :: SetEnabled
-//
-//===========================================================================
-
-void FXInputController::SetEnabled(bool enabled)
-{
-	Enabled = enabled;
+	if (unsigned(axis) < NUM_AXES)
+	{
+		return Axes[axis].Acceleration == DefaultAxes[axis].Acceleration;
+	}
+	return true;
 }
 
 //===========================================================================
@@ -685,13 +912,21 @@ bool FXInputController::IsAxisMapDefault(int axis)
 
 FXInputManager::FXInputManager()
 {
-	XInputDLL = LoadLibrary(XINPUT_DLL);
+	// Try UAP first, should have better support
+	//XInputDLL = LoadLibrary(XINPUT_DLL1);
+
+	//if (XInputDLL == NULL) {
+	//	Printf("Switching to xinput9_1_0.dll...\n");
+		XInputDLL = LoadLibrary(XINPUT_DLL);
+	//}
+
 	if (XInputDLL != NULL)
 	{
 		InputGetState = (XInputGetStateType)GetProcAddress(XInputDLL, "XInputGetState");
 		InputSetState = (XInputSetStateType)GetProcAddress(XInputDLL, "XInputSetState");
 		InputGetCapabilities = (XInputGetCapabilitiesType)GetProcAddress(XInputDLL, "XInputGetCapabilities");
 		InputEnable = (XInputEnableType)GetProcAddress(XInputDLL, "XInputEnable");
+		InputSetVibe = (XInputSetVibeType)GetProcAddress(XInputDLL, "XInputSetState");
 		// Treat XInputEnable() function as optional
 		// It is not available in xinput9_1_0.dll which is XINPUT_DLL in modern SDKs
 		// See https://msdn.microsoft.com/en-us/library/windows/desktop/hh405051(v=vs.85).aspx
@@ -699,6 +934,7 @@ FXInputManager::FXInputManager()
 		{
 			FreeLibrary(XInputDLL);
 			XInputDLL = NULL;
+			Printf("XInput Library failed to initialize");
 		}
 	}
 	for (int i = 0; i < XUSER_MAX_COUNT; ++i)
@@ -751,10 +987,7 @@ void FXInputManager::ProcessInput()
 {
 	for (int i = 0; i < XUSER_MAX_COUNT; ++i)
 	{
-		if(AppActive || Devices[i]->GetEnabledInBackground())
-		{
-			Devices[i]->ProcessInput();
-		}
+		Devices[i]->ProcessInput();
 	}
 }
 
@@ -857,6 +1090,13 @@ void I_StartupXInput()
 			if (joys->GetDevice())
 			{
 				JoyDevices[INPUT_XInput] = joys;
+				
+				// See if there is at least one joystick connected
+				TArray<IJoystickConfig*> joycon;
+				joys->GetDevices(joycon);
+				if (joycon.Size() > 0) {
+					UpdateJoystickMenu(joycon[0]);
+				}
 			}
 			else
 			{

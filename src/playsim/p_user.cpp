@@ -285,6 +285,7 @@ void player_t::CopyFrom(player_t &p, bool copyPSP)
 	cls = p.cls;
 	DesiredFOV = p.DesiredFOV;
 	FOV = p.FOV;
+	deltaFOV = p.FOV;
 	viewz = p.viewz;
 	viewheight = p.viewheight;
 	deltaviewheight = p.deltaviewheight;
@@ -1052,7 +1053,7 @@ void P_CheckPlayerSprite(AActor *actor, int &spritenum, DVector2 &scale)
 		}
 		else if (player->playerstate != PST_DEAD && player->crouchfactor < 0.75)
 		{
-			scale.Y *= 0.5;
+			//scale.Y *= 0.5;
 		}
 	}
 }
@@ -1716,6 +1717,7 @@ void player_t::Serialize(FSerializer &arc)
 
 	arc("desiredfov", DesiredFOV)
 		("fov", FOV)
+		("deltaFOV", deltaFOV)
 		("viewz", viewz)
 		("viewheight", viewheight)
 		("deltaviewheight", deltaviewheight)
@@ -1825,6 +1827,7 @@ DEFINE_FIELD_X(PlayerInfo, player_t, original_oldbuttons)
 DEFINE_FIELD_X(PlayerInfo, player_t, cls)
 DEFINE_FIELD_X(PlayerInfo, player_t, DesiredFOV)
 DEFINE_FIELD_X(PlayerInfo, player_t, FOV)
+DEFINE_FIELD_X(PlayerInfo, player_t, deltaFOV)
 DEFINE_FIELD_X(PlayerInfo, player_t, viewz)
 DEFINE_FIELD_X(PlayerInfo, player_t, viewheight)
 DEFINE_FIELD_X(PlayerInfo, player_t, deltaviewheight)

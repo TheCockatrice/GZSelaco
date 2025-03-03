@@ -85,6 +85,8 @@ extern AActor *SpawnMapThing (int index, FMapThing *mthing, int position);
 
 extern unsigned int R_OldBlend;
 
+CVAR(Bool, debug_precache_actor, 0, 0);
+
 
 //===========================================================================
 //
@@ -102,11 +104,11 @@ static void AddToList(uint8_t *hitlist, FTextureID texid, int bitmask)
 
 	const auto addAnimations = [hitlist, bitmask](const FTextureID texid)
 	{
-		for (auto& anim : TexAnim.GetAnimations())
+		for (auto anim : TexAnim.GetAnimations())
 		{
-			if (texid == anim.BasePic || (!anim.bDiscrete && anim.BasePic < texid && texid < anim.BasePic + anim.NumFrames))
+			if (texid == anim->BasePic || (!anim->bDiscrete && anim->BasePic < texid && texid < anim->BasePic + anim->NumFrames))
 			{
-				for (int i = anim.BasePic.GetIndex(); i < anim.BasePic.GetIndex() + anim.NumFrames; i++)
+				for (int i = anim->BasePic.GetIndex(); i < anim->BasePic.GetIndex() + anim->NumFrames; i++)
 				{
 					hitlist[i] |= (uint8_t)bitmask;
 				}
@@ -150,6 +152,8 @@ static void AddToList(uint8_t *hitlist, FTextureID texid, int bitmask)
 	}
 }
 
+EXTERN_CVAR(Bool, gl_precache_actors)
+
 static void PrecacheLevel(FLevelLocals *Level)
 {
 	if (demoplayback)
@@ -159,6 +163,7 @@ static void PrecacheLevel(FLevelLocals *Level)
 	TMap<PClassActor *, bool> actorhitlist;
 	int cnt = TexMan.NumTextures();
 	TArray<uint8_t> hitlist(cnt, true);
+	bool precacheActors = gamestate != GS_TITLELEVEL;
 
 	memset(hitlist.Data(), 0, cnt);
 
@@ -170,26 +175,44 @@ static void PrecacheLevel(FLevelLocals *Level)
 		actorhitlist[actor->GetClass()] = true;
 	}
 
-	for (auto n : gameinfo.PrecachedClasses)
-	{
-		PClassActor *cls = PClass::FindActor(n);
-		if (cls != nullptr) actorhitlist[cls] = true;
-	}
-	for (unsigned i = 0; i < Level->info->PrecacheClasses.Size(); i++)
-	{
-		// Level->info can only store names, no class pointers.
-		PClassActor *cls = PClass::FindActor(Level->info->PrecacheClasses[i]);
-		if (cls != nullptr) actorhitlist[cls] = true;
+	if (precacheActors) {
+		if (gl_precache_actors) {
+			for (auto n : gameinfo.PrecachedClasses)
+			{
+				PClassActor *cls = PClass::FindActor(n);
+				if (cls != nullptr) actorhitlist[cls] = true;
+			}
+
+			for (unsigned i = 0; i < Level->info->PrecacheClasses.Size(); i++)
+			{
+				// Level->info can only store names, no class pointers.
+				PClassActor *cls = PClass::FindActor(Level->info->PrecacheClasses[i]);
+				if (cls != nullptr) actorhitlist[cls] = true;
+			}
+		}
+
+		// @Cockatrice - Also check the actor classes themselves to see if they are marked for precache
+		for (auto pc : PClassActor::AllActorClasses) {
+			auto act = GetDefaultByType(pc);
+			if (act != NULL && act->flags8 && (act->flags8 & MF8_PRECACHEALWAYS))
+			{
+				actorhitlist[static_cast<PClassActor*>(pc)] = true;
+				//Printf(TEXTCOLOR_YELLOW"Adding actor: %s to precache list from CACHEALWAYS\n", act->GetCharacterName());
+			}
+		}
+
+		// Debug: Precache ALL ACTORS
+		if (debug_precache_actor) {
+			for (auto pc : PClassActor::AllActorClasses) {
+				actorhitlist[pc] = true;
+			}
+		}
 	}
 
 	for (i = Level->sectors.Size() - 1; i >= 0; i--)
 	{
 		AddToList(hitlist.Data(), Level->sectors[i].GetTexture(sector_t::floor), FTextureManager::HIT_Flat);
 		AddToList(hitlist.Data(), Level->sectors[i].GetTexture(sector_t::ceiling), FTextureManager::HIT_Flat);
-		AddToList(hitlist.Data(), Level->sectors[i].planes[0].skytexture[0], FTextureManager::HIT_Wall);
-		AddToList(hitlist.Data(), Level->sectors[i].planes[0].skytexture[1], FTextureManager::HIT_Wall);
-		AddToList(hitlist.Data(), Level->sectors[i].planes[1].skytexture[0], FTextureManager::HIT_Wall);
-		AddToList(hitlist.Data(), Level->sectors[i].planes[1].skytexture[1], FTextureManager::HIT_Wall);
 	}
 
 	for (i = Level->sides.Size() - 1; i >= 0; i--)
@@ -217,12 +240,12 @@ static void PrecacheLevel(FLevelLocals *Level)
 
 	for (auto n : gameinfo.PrecachedTextures)
 	{
-		FTextureID tex = TexMan.CheckForTexture(n.GetChars(), ETextureType::Wall, checkForTextureFlags);
+		FTextureID tex = TexMan.CheckForTexture(n, ETextureType::Wall, checkForTextureFlags);
 		if (tex.Exists()) AddToList(hitlist.Data(), tex, FTextureManager::HIT_Wall);
 	}
 	for (unsigned i = 0; i < Level->info->PrecacheTextures.Size(); i++)
 	{
-		FTextureID tex = TexMan.CheckForTexture(Level->info->PrecacheTextures[i].GetChars(), ETextureType::Wall, checkForTextureFlags);
+		FTextureID tex = TexMan.CheckForTexture(Level->info->PrecacheTextures[i], ETextureType::Wall, checkForTextureFlags);
 		if (tex.Exists()) AddToList(hitlist.Data(), tex, FTextureManager::HIT_Wall);
 	}
 
@@ -249,11 +272,11 @@ void FLevelLocals::ClearPortals()
 	PortalBlockmap.Clear();
 
 	// The first entry must always be the default skybox. This is what every sector gets by default.
-	sectorPortals[0].Clear();
+	memset(&sectorPortals[0], 0, sizeof(sectorPortals[0]));
 	sectorPortals[0].mType = PORTS_SKYVIEWPOINT;
 	sectorPortals[0].mFlags = PORTSF_SKYFLATONLY;
 	// The second entry will be the default sky. This is for forcing a regular sky through the skybox picker
-	sectorPortals[1].Clear();
+	memset(&sectorPortals[1], 0, sizeof(sectorPortals[0]));
 	sectorPortals[1].mType = PORTS_SKYVIEWPOINT;
 	sectorPortals[1].mFlags = PORTSF_SKYFLATONLY;
 
@@ -283,19 +306,19 @@ void FLevelLocals::ClearPortals()
 //
 //==========================================================================
 
-void FLevelLocals::ClearLevelData(bool fullgc)
+void FLevelLocals::ClearLevelData()
 {
 	{
 		auto it = GetThinkerIterator<AActor>(NAME_None, STAT_TRAVELLING);
 		for (AActor *actor = it.Next(); actor != nullptr; actor = it.Next())
 		{
-			actor->BlockingLine = actor->MovementBlockingLine = nullptr;
+			actor->BlockingLine = nullptr;
 			actor->BlockingFloor = actor->BlockingCeiling = actor->Blocking3DFloor = nullptr;
 		}
 	}
 	
 	interpolator.ClearInterpolations();	// [RH] Nothing to interpolate on a fresh level.
-	Thinkers.DestroyAllThinkers(fullgc);
+	Thinkers.DestroyAllThinkers();
 	ClearAllSubsectorLinks(); // can't be done as part of the polyobj deletion process.
 
 	total_monsters = total_items = total_secrets =
@@ -376,11 +399,7 @@ void FLevelLocals::ClearLevelData(bool fullgc)
 	Behaviors.UnloadModules();
 	localEventManager->Shutdown();
 	if (aabbTree) delete aabbTree;
-	if (levelMesh) delete levelMesh;
 	aabbTree = nullptr;
-	levelMesh = nullptr;
-	VisualThinkerHead = nullptr;
-	ActorBehaviors.Clear();
 	if (screen)
 		screen->SetAABBTree(nullptr);
 }
@@ -391,13 +410,13 @@ void FLevelLocals::ClearLevelData(bool fullgc)
 //
 //==========================================================================
 
-void P_FreeLevelData (bool fullgc)
+void P_FreeLevelData ()
 {
 	R_FreePastViewers();
 
 	for (auto Level : AllLevels())
 	{
-		Level->ClearLevelData(fullgc);
+		Level->ClearLevelData();
 	}
 	// primaryLevel->FreeSecondaryLevels();
 }
@@ -410,7 +429,7 @@ void P_FreeLevelData (bool fullgc)
 //
 //===========================================================================
 
-void P_SetupLevel(FLevelLocals *Level, int position, bool newGame)
+void P_SetupLevel(FLevelLocals *Level, int position, bool newGame, int mapVersion)
 {
 	int i;
 
@@ -457,7 +476,7 @@ void P_SetupLevel(FLevelLocals *Level, int position, bool newGame)
 	// Free all level data from the previous map
 	P_FreeLevelData();
 
-	MapData *map = P_OpenMapData(Level->MapName.GetChars(), true);
+	MapData *map = P_OpenMapData(Level->MapName, true, mapVersion);
 	if (map == nullptr)
 	{
 		I_Error("Unable to open map '%s'\n", Level->MapName.GetChars());
@@ -471,6 +490,7 @@ void P_SetupLevel(FLevelLocals *Level, int position, bool newGame)
 	map->GetChecksum(Level->md5);
 	// find map num
 	Level->lumpnum = map->lumpnum;
+	Level->mapVersion = map->version;
 
 	if (newGame)
 	{
@@ -502,18 +522,6 @@ void P_SetupLevel(FLevelLocals *Level, int position, bool newGame)
 			{
 				Level->Players[i]->mo = nullptr;
 				FPlayerStart *mthing = Level->PickPlayerStart(i);
-				Level->SpawnPlayer(mthing, i, (Level->flags2 & LEVEL2_PRERAISEWEAPON) ? SPF_WEAPONFULLYUP : 0);
-			}
-		}
-	}
-	else if (newGame)
-	{
-		for (i = 0; i < MAXPLAYERS; ++i)
-		{
-			// Didn't have a player spawn available so spawn it now.
-			if (Level->PlayerInGame(i) && Level->Players[i]->playerstate == PST_ENTER && Level->Players[i]->mo == nullptr)
-			{
-				FPlayerStart* mthing = Level->PickPlayerStart(i);
 				Level->SpawnPlayer(mthing, i, (Level->flags2 & LEVEL2_PRERAISEWEAPON) ? SPF_WEAPONFULLYUP : 0);
 			}
 		}
@@ -566,6 +574,11 @@ void P_SetupLevel(FLevelLocals *Level, int position, bool newGame)
 
 	// [RH] Remove all particles
 	P_ClearParticles(Level);
+
+	// @Cockatrice - Flush any background texture loads
+	if (screen->SupportsBackgroundCache()) {
+		screen->FlushBackground();
+	}
 
 	// preload graphics and sounds
 	if (precache)

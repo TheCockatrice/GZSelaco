@@ -196,6 +196,7 @@ void HWWall::DrawDecalsForMirror(HWDrawInfo *di, FRenderState &state, TArray<HWD
 //
 //
 //==========================================================================
+EXTERN_CVAR(Bool, gl_texture_thread);
 
 void HWWall::ProcessDecal(HWDrawInfo *di, DBaseDecal *decal, const FVector3 &normal)
 {
@@ -219,6 +220,42 @@ void HWWall::ProcessDecal(HWDrawInfo *di, DBaseDecal *decal, const FVector3 &nor
 	
 	auto texture = TexMan.GetGameTexture(decalTile);
 	if (texture == NULL) return;
+
+	// @Cockatrice - If this texture is not loaded, and we are able to BG load it, try to render this sprites last frame instead
+	// Also load the texture
+	FTextureID lastPatch = decal->LastPatch;
+	if (gametic - primaryLevel->starttime > 2 &&	// On the first tic or so, do not use the background loader to avoid pop-in
+		decalTile != lastPatch &&						// only if this is a new frame
+		gl_texture_thread &&
+		screen->SupportsBackgroundCache()) {
+
+		int scaleflags = 0;
+		if (shouldUpscale(texture, UF_Sprite)) scaleflags |= CTF_Upscale;
+
+		FMaterial * gltex = FMaterial::ValidateTexture(texture, scaleflags, false);
+		if (!gltex || !gltex->IsHardwareCached(decal->Translation)) {
+			if (gltex) {
+				screen->BackgroundCacheMaterial(gltex, decal->Translation, true);  // TODO: Prevent calling this every time the sprite wants to render, it's incredibly wasteful
+			}
+			else {
+				screen->BackgroundCacheTextureMaterial(texture, decal->Translation, scaleflags, true);
+			}
+
+			// Last ditch, grab the last rendered patch from this sprite
+			if (lastPatch.isValid()) {
+				decalTile = lastPatch;
+				texture = TexMan.GetGameTexture(decalTile, false);
+				if (texture == NULL || !texture->isValid()) return;
+			}
+			else {
+				return;
+			}
+		}
+
+		// If the bg cache func fails, we can't bg load the patch so just move on to the normal render path and load in the main thread
+	}
+
+	decal->LastPatch = decalTile;
 
 	
 	// the sectors are only used for their texture origin coordinates

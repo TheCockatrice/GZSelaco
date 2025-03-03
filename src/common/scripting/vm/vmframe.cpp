@@ -54,15 +54,9 @@ CUSTOM_CVAR(Bool, vm_jit, true, CVAR_NOINITCALL)
 	Printf("You must restart " GAMENAME " for this change to take effect.\n");
 	Printf("This cvar is currently not saved. You must specify it on the command line.");
 }
-CUSTOM_CVAR(Bool, vm_jit_aot, true, CVAR_NOINITCALL)
-{
-	Printf("You must restart " GAMENAME " for this change to take effect.\n");
-	Printf("This cvar is currently not saved. You must specify it on the command line.");
-}
 #else
 CVAR(Bool, vm_jit, false, CVAR_NOINITCALL|CVAR_NOSET)
-CVAR(Bool, vm_jit_aot, false, CVAR_NOINITCALL|CVAR_NOSET)
-FString JitCaptureStackTrace(int framesToSkip, bool includeNativeFrames, int maxFrames) { return FString(); }
+FString JitCaptureStackTrace(int framesToSkip, bool includeNativeFrames) { return FString(); }
 void JitRelease() {}
 #endif
 
@@ -86,7 +80,7 @@ void VMFunction::CreateRegUse()
 	if (!Proto)
 	{
 		//if (RegTypes) return;
-		//Printf(TEXTCOLOR_ORANGE "Function without prototype needs register info manually set: %s\n", PrintableName);
+		//Printf(TEXTCOLOR_ORANGE "Function without prototype needs register info manually set: %s\n", PrintableName.GetChars());
 		return;
 	}
 	assert(Proto->isPrototype());
@@ -279,34 +273,13 @@ static bool CanJit(VMScriptFunction *func)
 	// Asmjit has a 256 register limit. Stay safely away from it as the jit compiler uses a few for temporaries as well.
 	// Any function exceeding the limit will use the VM - a fair punishment to someone for writing a function so bloated ;)
 
-	if(func->blockJit) return false;
-
 	int maxregs = 200;
 	if (func->NumRegA + func->NumRegD + func->NumRegF + func->NumRegS < maxregs)
 		return true;
 
-	Printf(TEXTCOLOR_ORANGE "%s is using too many registers (%d of max %d)! Function will not use native code.\n", func->PrintableName, func->NumRegA + func->NumRegD + func->NumRegF + func->NumRegS, maxregs);
+	Printf(TEXTCOLOR_ORANGE "%s is using too many registers (%d of max %d)! Function will not use native code.\n", func->PrintableName.GetChars(), func->NumRegA + func->NumRegD + func->NumRegF + func->NumRegS, maxregs);
 
 	return false;
-}
-
-void VMScriptFunction::JitCompile()
-{
-	if(!(VarFlags & VARF_Abstract))
-	{
-	#ifdef HAVE_VM_JIT
-		if (vm_jit && CanJit(this))
-		{
-			ScriptCall = ::JitCompile(this);
-			if (!ScriptCall)
-				ScriptCall = VMExec;
-		}
-		else
-	#endif // HAVE_VM_JIT
-		{
-			ScriptCall = VMExec;
-		}
-	}
 }
 
 int VMScriptFunction::FirstScriptCall(VMFunction *func, VMValue *params, int numparams, VMReturn *ret, int numret)
@@ -316,10 +289,20 @@ int VMScriptFunction::FirstScriptCall(VMFunction *func, VMValue *params, int num
 	// rather than let GZDoom crash.
 	if (func->VarFlags & VARF_Abstract)
 	{
-		ThrowAbortException(X_OTHER, "attempt to call abstract function %s.", func->PrintableName);
+		ThrowAbortException(X_OTHER, "attempt to call abstract function %s.", func->PrintableName.GetChars());
 	}
-	
-	static_cast<VMScriptFunction*>(func)->JitCompile();
+#ifdef HAVE_VM_JIT
+	if (vm_jit && CanJit(static_cast<VMScriptFunction*>(func)))
+	{
+		func->ScriptCall = JitCompile(static_cast<VMScriptFunction*>(func));
+		if (!func->ScriptCall)
+			func->ScriptCall = VMExec;
+	}
+	else
+#endif // HAVE_VM_JIT
+	{
+		func->ScriptCall = VMExec;
+	}
 
 	return func->ScriptCall(func, params, numparams, ret, numret);
 }
@@ -337,7 +320,7 @@ int VMNativeFunction::NativeScriptCall(VMFunction *func, VMValue *params, int nu
 	catch (CVMAbortException &err)
 	{
 		err.MaybePrintMessage();
-		err.stacktrace.AppendFormat("Called from %s\n", func->PrintableName);
+		err.stacktrace.AppendFormat("Called from %s\n", func->PrintableName.GetChars());
 		throw;
 	}
 }
@@ -696,30 +679,33 @@ CVMAbortException::CVMAbortException(EVMAbortException reason, const char *morei
 // Print this only once on the first catch block.
 void CVMAbortException::MaybePrintMessage()
 {
+	if (printedMessage) return;
 	auto m = GetMessage();
 	if (m != nullptr)
 	{
-		Printf(PRINT_NONOTIFY | PRINT_BOLD, TEXTCOLOR_RED "%s\n", m);
-		SetMessage("");
+		printedMessage = true;
+		Printf(TEXTCOLOR_RED);
+		Printf("%s\n", m);
+		//SetMessage("");
 	}
 }
 
 
-[[noreturn]] void ThrowAbortException(EVMAbortException reason, const char *moreinfo, ...)
+void ThrowAbortException(EVMAbortException reason, const char *moreinfo, ...)
 {
 	va_list ap;
 	va_start(ap, moreinfo);
 	throw CVMAbortException(reason, moreinfo, ap);
 }
 
-[[noreturn]] void ThrowAbortException(VMScriptFunction *sfunc, VMOP *line, EVMAbortException reason, const char *moreinfo, ...)
+void ThrowAbortException(VMScriptFunction *sfunc, VMOP *line, EVMAbortException reason, const char *moreinfo, ...)
 {
 	va_list ap;
 	va_start(ap, moreinfo);
 
 	CVMAbortException err(reason, moreinfo, ap);
 
-	err.stacktrace.AppendFormat("Called from %s at %s, line %d\n", sfunc->PrintableName, sfunc->SourceFileName.GetChars(), sfunc->PCToLine(line));
+	err.stacktrace.AppendFormat("Called from %s at %s, line %d\n", sfunc->PrintableName.GetChars(), sfunc->SourceFileName.GetChars(), sfunc->PCToLine(line));
 	throw err;
 }
 
@@ -728,9 +714,10 @@ DEFINE_ACTION_FUNCTION(DObject, ThrowAbortException)
 	PARAM_PROLOGUE;
 	FString s = FStringFormat(VM_ARGS_NAMES);
 	ThrowAbortException(X_OTHER, s.GetChars());
+	return 0;
 }
 
-[[noreturn]] void NullParam(const char *varname)
+void NullParam(const char *varname)
 {
 	ThrowAbortException(X_READ_NIL, "In function parameter %s", varname);
 }

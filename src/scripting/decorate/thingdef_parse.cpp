@@ -49,6 +49,9 @@
 #include "v_text.h"
 #include "m_argv.h"
 #include "v_video.h"
+#ifndef _MSC_VER
+#include "i_system.h"  // for strlwr()
+#endif // !_MSC_VER
 
 void ParseOldDecoration(FScanner &sc, EDefinitionType def, PNamespace *ns);
 EXTERN_CVAR(Bool, strictdecorate);
@@ -141,7 +144,7 @@ FxExpression *ParseParameter(FScanner &sc, PClassActor *cls, PType *type)
 	if (type == TypeSound)
 	{
 		sc.MustGetString();
-		x = new FxConstant(S_FindSound(sc.String), sc);
+		x = new FxConstant(FSoundID(sc.String), sc);
 	}
 	else if (type == TypeBool || type == TypeSInt32 || type == TypeFloat64)
 	{
@@ -455,7 +458,7 @@ static void ParseActorFlag (FScanner &sc, Baggage &bag, int mod)
 		sc.MustGetString ();
 		part2 = sc.String;
 	}
-	HandleActorFlag(sc, bag, part1.GetChars(), part2, mod);
+	HandleActorFlag(sc, bag, part1, part2, mod);
 }
 
 //==========================================================================
@@ -472,7 +475,7 @@ void HandleActorFlag(FScanner &sc, Baggage &bag, const char *part1, const char *
 		AActor *defaults = (AActor*)bag.Info->Defaults;
 		if (fd->structoffset == -1)	// this is a deprecated flag that has been changed into a real property
 		{
-			HandleDeprecatedFlags(defaults, mod=='+', fd->flagbit);
+			HandleDeprecatedFlags(defaults, bag.Info, mod=='+', fd->flagbit);
 		}
 		else
 		{
@@ -719,12 +722,12 @@ static bool ParsePropertyParams(FScanner &sc, FPropertyInfo *prop, AActor *defau
 
 			case 'S':
 				sc.MustGetString();
-				conv.s = (strings[strings.Reserve(1)] = sc.String).GetChars();
+				conv.s = strings[strings.Reserve(1)] = sc.String;
 				break;
 
 			case 'T':
 				sc.MustGetString();
-				conv.s = (strings[strings.Reserve(1)] = strbin1(sc.String)).GetChars();
+				conv.s = strings[strings.Reserve(1)] = strbin1(sc.String);
 				break;
 
 			case 'C':
@@ -744,7 +747,7 @@ static bool ParsePropertyParams(FScanner &sc, FPropertyInfo *prop, AActor *defau
 				else
 				{
 					sc.MustGetString ();
-					conv.s = (strings[strings.Reserve(1)] = sc.String).GetChars();
+					conv.s = strings[strings.Reserve(1)] = sc.String;
 					pref.i = 1;
 				}
 				break;
@@ -772,7 +775,7 @@ static bool ParsePropertyParams(FScanner &sc, FPropertyInfo *prop, AActor *defau
 					do
 					{
 						sc.MustGetString ();
-						conv.s = (strings[strings.Reserve(1)] = sc.String).GetChars();
+						conv.s = strings[strings.Reserve(1)] = sc.String;
 						params.Push(conv);
 						params[0].i++;
 					}
@@ -876,7 +879,7 @@ static void DispatchScriptProperty(FScanner &sc, PProperty *prop, AActor *defaul
 		else if (f->Type == TypeSound)
 		{
 			sc.MustGetString();
-			*(FSoundID*)addr = S_FindSound(sc.String);
+			*(FSoundID*)addr = sc.String;
 		}
 		else if (f->Type == TypeColor)
 		{
@@ -942,12 +945,15 @@ static void ParseActorProperty(FScanner &sc, Baggage &bag)
 		"Spawn", "See", "Melee", "Missile", "Pain", "Death", "XDeath", "Burn", 
 		"Ice", "Raise", "Crash", "Crush", "Wound", "Disintegrate", "Heal", NULL };
 
+	strlwr (sc.String);
+
 	FString propname = sc.String;
 
 	if (sc.CheckString ("."))
 	{
 		sc.MustGetString ();
 		propname += '.';
+		strlwr (sc.String);
 		propname += sc.String;
 	}
 	else
@@ -955,7 +961,7 @@ static void ParseActorProperty(FScanner &sc, Baggage &bag)
 		sc.UnGet ();
 	}
 
-	FPropertyInfo *prop = FindProperty(propname.GetChars());
+	FPropertyInfo *prop = FindProperty(propname);
 
 	if (prop != NULL)
 	{
@@ -970,9 +976,9 @@ static void ParseActorProperty(FScanner &sc, Baggage &bag)
 			FScriptPosition::ErrorCounter++;
 		}
 	}
-	else if (MatchString(propname.GetChars(), statenames) != -1)
+	else if (MatchString(propname, statenames) != -1)
 	{
-		bag.statedef.SetStateLabel(propname.GetChars(), CheckState (sc, bag.Info));
+		bag.statedef.SetStateLabel(propname, CheckState (sc, bag.Info));
 	}
 	else
 	{
@@ -1123,7 +1129,8 @@ static PClassActor *ParseActorHeader(FScanner &sc, Baggage *bag)
 	{
 		PClassActor *info = CreateNewActor(sc, typeName, parentName);
 		info->ActorInfo()->DoomEdNum = DoomEdNum > 0 ? DoomEdNum : -1;
-		info->SourceLumpName = fileSystem.GetFileFullPath(sc.LumpNum).c_str();
+		info->SourceLumpName = fileSystem.GetFileFullPath(sc.LumpNum);
+		info->SourceLump = sc.LumpNum;
 
 		if (!info->SetReplacement(replaceName))
 		{

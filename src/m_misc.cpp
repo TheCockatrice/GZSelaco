@@ -68,14 +68,136 @@
 #include "gstrings.h"
 #include "vm.h"
 
+#include <fstream>
+#include <filesystem>
+
 FGameConfigFile *GameConfig;
 
 CVAR(Bool, screenshot_quiet, false, CVAR_ARCHIVE|CVAR_GLOBALCONFIG);
 CVAR(String, screenshot_type, "png", CVAR_ARCHIVE|CVAR_GLOBALCONFIG);
 CVAR(String, screenshot_dir, "", CVAR_ARCHIVE|CVAR_GLOBALCONFIG);
 EXTERN_CVAR(Bool, longsavemessages);
+EXTERN_CVAR(Int, developer)
 
-static size_t ParseCommandLine (const char *args, int *argc, char **argv);
+TMap<FString, FString> globalStorage;
+
+static long ParseCommandLine (const char *args, int *argc, char **argv);
+void M_LoadGlobalVars(const char* filename);
+bool M_SaveGlobalVars(const char* filename);
+void M_ReadGlobalVars(FileReader& fr, TMap<FString, FString>& map);
+
+
+// Quick funcs for global vars
+DEFINE_ACTION_FUNCTION(_Globals, Get)
+{
+	PARAM_PROLOGUE;
+	PARAM_STRING(key);
+
+	FString *val = globalStorage.CheckKey(key);
+
+	if (numret > 0) ret[0].SetString(val != NULL ? *val : FString(""));
+	if (numret > 1) ret[1].SetInt(val != NULL);
+
+	return numret;
+}
+
+
+DEFINE_ACTION_FUNCTION(_Globals, GetInt)
+{
+	PARAM_PROLOGUE;
+	PARAM_STRING(key);
+
+	FString* val = globalStorage.CheckKey(key);
+
+	if (numret > 0) ret[0].SetInt(val != NULL ? (int)val->ToLong() : 0);
+	if (numret > 1) ret[1].SetInt(val != NULL);
+
+	return numret;
+}
+
+
+DEFINE_ACTION_FUNCTION(_Globals, GetKeys)
+{
+	PARAM_PROLOGUE;
+	PARAM_POINTER(out, TArray<FString>);
+
+	// Copy keys to out
+	TMapIterator<FString, FString> it(globalStorage);
+	TMap<FString, FString>::Pair* pair;
+	int outSize = out->Size();
+
+	while (it.NextPair(pair)) {
+		out->Push(pair->Key);
+	}
+
+	ACTION_RETURN_INT(out->Size() - outSize);
+}
+
+
+DEFINE_ACTION_FUNCTION(_Globals, Set)
+{
+	PARAM_PROLOGUE;
+	PARAM_STRING(key);
+	PARAM_STRING(value);
+
+	if (key.Len() > 0) {
+		if (value.Len() == 0) {
+			globalStorage.Remove(key);
+		}
+		else {
+			globalStorage[key] = value;
+		}
+	}
+
+	return 0;
+}
+
+
+
+DEFINE_ACTION_FUNCTION(_Globals, SetInt)
+{
+	PARAM_PROLOGUE;
+	PARAM_STRING(key);
+	PARAM_INT(value);
+
+	if (key.Len() > 0) {
+		FString v;
+		v.Format("%d", value);
+		globalStorage[key] = v;
+	}
+
+	return 0;
+}
+
+
+DEFINE_ACTION_FUNCTION(_Globals, Save)
+{
+	// Save global vars from the same path as GameConfig
+	if (GameConfig != nullptr && GameConfig->GetPathName() != nullptr) {
+		FString path = M_GetSavegamesPath();
+		path += "selaco.globals";
+		M_SaveGlobalVars(path.GetChars());
+	}
+	else {
+		Printf(TEXTCOLOR_RED"Failed to write globals!");
+	}
+
+	return 0;
+}
+
+
+UNSAFE_CCMD(writeglobals)
+{
+	FString path = M_GetSavegamesPath();
+	path += "selaco.globals";
+	if (M_SaveGlobalVars(path.GetChars())) {
+		Printf(TEXTCOLOR_BLUE"Wrote globals to: %s", path.GetChars());
+	}
+	else {
+		Printf(TEXTCOLOR_RED"Failed to write globals!");
+	}
+}
+
 
 
 //---------------------------------------------------------------------------
@@ -99,9 +221,10 @@ void M_FindResponseFile (void)
 		else
 		{
 			char	**argv;
-			FileSys::FileData file;
+			TArray<uint8_t> file;
 			int		argc = 0;
-			size_t	argsize = 0;
+			int 	size;
+			long	argsize = 0;
 			int 	index;
 
 			// Any more response files after the limit will be removed from the
@@ -117,8 +240,10 @@ void M_FindResponseFile (void)
 				else
 				{
 					Printf ("Found response file %s!\n", Args->GetArg(i) + 1);
-					file = fr.ReadPadded(1);
-					argsize = ParseCommandLine (file.string(), &argc, nullptr);
+					size = (int)fr.GetLength();
+					file = fr.Read (size);
+					file[size] = 0;
+					argsize = ParseCommandLine ((char*)file.Data(), &argc, NULL);
 				}
 			}
 			else
@@ -130,7 +255,7 @@ void M_FindResponseFile (void)
 			{
 				argv = (char **)M_Malloc (argc*sizeof(char *) + argsize);
 				argv[0] = (char *)argv + argc*sizeof(char *);
-				ParseCommandLine (file.string(), nullptr, argv);
+				ParseCommandLine ((char*)file.Data(), NULL, argv);
 
 				// Create a new argument vector
 				FArgs *newargs = new FArgs;
@@ -177,19 +302,17 @@ void M_FindResponseFile (void)
 // This is just like the version in c_dispatch.cpp, except it does not
 // do cvar expansion.
 
-static size_t ParseCommandLine (const char *args, int *argc, char **argv)
+static long ParseCommandLine (const char *args, int *argc, char **argv)
 {
 	int count;
-	char* buffstart;
 	char *buffplace;
 
 	count = 0;
-	buffstart = NULL;
+	buffplace = NULL;
 	if (argv != NULL)
 	{
-		buffstart = argv[0];
+		buffplace = argv[0];
 	}
-	buffplace = buffstart;
 
 	for (;;)
 	{
@@ -257,7 +380,7 @@ static size_t ParseCommandLine (const char *args, int *argc, char **argv)
 	{
 		*argc = count;
 	}
-	return (buffplace - buffstart);
+	return (long)(buffplace - (char *)0);
 }
 
 
@@ -279,20 +402,28 @@ bool M_SaveDefaults (const char *filename)
 	GameConfig->ArchiveGlobalData ();
 	if (gameinfo.ConfigName.IsNotEmpty())
 	{
-		GameConfig->ArchiveGameData (gameinfo.ConfigName.GetChars());
+		GameConfig->ArchiveGameData (gameinfo.ConfigName);
 	}
 	success = GameConfig->WriteConfigFile ();
 	if (filename != nullptr)
 	{
 		GameConfig->ChangePathName (filename);
 	}
+
+	// Save global vars from the same path as GameConfig
+	if (success) {
+		FString path = M_GetSavegamesPath();
+		path += "selaco.globals";
+		M_SaveGlobalVars(path.GetChars());
+	}
+
 	return success;
 }
 
 void M_SaveDefaultsFinal ()
 {
 	if (GameConfig == nullptr) return;
-	while (!M_SaveDefaults (nullptr) && I_WriteIniFailed (GameConfig->GetPathName()))
+	while (!M_SaveDefaults (nullptr) && I_WriteIniFailed ())
 	{
 		/* Loop until the config saves or I_WriteIniFailed() returns false */
 	}
@@ -313,11 +444,156 @@ UNSAFE_CCMD (writeini)
 	}
 }
 
-CCMD(openconfig)
-{
-	M_SaveDefaults(nullptr);
-	I_OpenShellFolder(ExtractFilePath(GameConfig->GetPathName()).GetChars());
+// @Cockatrice - I lazily implemented the first version of the globals file
+// that just copied your .ini path. This doesn't sync between Steam installs
+// so we are going to migrate to something in the Save folder.
+// This function will read the globals file, merge the important fields
+// and then delete the file.
+void M_MigrateGlobalVars(const char* filename, const char *newFilename) {
+	TMap<FString, FString> map;
+
+	FileReader fr;
+	fr.OpenFile(filename);
+	M_ReadGlobalVars(fr, globalStorage);
+	fr.Close();
+
+	// Merge data by adopting the largest number for each value
+	// Legacy data was all INTs so we can just convert everything to INT
+	TMapIterator<FString, FString> it(map);
+	TMap<FString, FString>::Pair* pair;
+
+	while (it.NextPair(pair))
+	{
+		auto data = pair->Value.ToLong();
+
+		if (globalStorage.CheckKey(pair->Key)) {
+			FString sData;
+			sData.Format("%d", max(data, globalStorage[pair->Key].ToLong()));
+			globalStorage[pair->Key] = sData;
+		}
+		else {
+			globalStorage[pair->Key] = pair->Value;
+		}
+	}
+
+	if (FileExists(filename)) {
+		// Don't delete this file unless we can save the new one
+		if (M_SaveGlobalVars(newFilename)) {
+			std::filesystem::remove(filename);
+			Printf("Migrated %s\n", filename);
+		}
+	}
 }
+
+
+// M_LoadGlobalVars
+// @Cockatrice - Simple as fu, load global vars in a silly binary format that is somewhat hard to edit
+// These variables are only used in ZScript for storing game-wide information outside of a save file and outside of CVars
+void M_LoadGlobalVars(const char* filename) {
+	globalStorage.Clear();
+
+	Printf("Loading Globals...\n");
+	FileReader fr;
+	fr.OpenFile(filename);
+	M_ReadGlobalVars(fr, globalStorage);
+	fr.Close();
+}
+
+
+void M_ReadGlobalVars(FileReader& fr, TMap<FString, FString>& map) {
+	const auto fileSize = fr.isOpen() ? fr.GetLength() : 0;
+
+	if (!fr.isOpen() || fileSize < sizeof(uint32_t))
+		return;
+
+	const uint32_t numEntries = fr.ReadUInt32();
+	const char hash = (char)(numEntries % 256);
+	if (numEntries == 0) {
+		fr.Close();
+		return;
+	}
+
+	for (uint32_t x = 0; x < numEntries && fr.isOpen() && fr.Tell() < fileSize; x++) {
+		char buf[256];
+		char bufLen = 0;
+		FString key, value;
+
+		// Length of key
+		const unsigned char keyLen = fr.ReadUInt8();
+
+		// Key
+		for (int k = 0; k < keyLen && k < 255 && fr.Tell() < fileSize; k++) {
+			char tpos = (char)(fr.Tell() % 256);
+			char c = fr.ReadInt8() - hash - tpos;
+			buf[bufLen++] = c;
+		}
+		buf[bufLen] = '\0';
+		key = buf;
+
+		// Length of value
+		const unsigned char valLen = fr.ReadUInt8();
+
+		// Value
+		bufLen = 0;
+		for (int k = 0; k < valLen && k < 255 && fr.Tell() < fileSize; k++) {
+			char tpos = (char)(fr.Tell() % 256);
+			char c = fr.ReadInt8() - hash - tpos;
+			buf[bufLen++] = c;
+		}
+		buf[bufLen] = '\0';
+		value = buf;
+
+		if (!key.Len() == 0 && !value.Len() == 0) {
+			map[key] = value;
+			if(developer) Printf("Globals Read: %s = %s\n", key.GetChars(), value.GetChars());
+		}
+	}
+}
+
+
+bool M_SaveGlobalVars(const char* filename) {
+	std::ofstream fw(filename, std::ios_base::binary | std::ios_base::out);
+	
+	if (!fw.is_open()) return false;
+
+	const uint32_t numEntries = globalStorage.CountUsed();
+	const char hash = (char)(numEntries % 256);
+	uint32_t ne = LittleLong(numEntries);
+	fw.write(reinterpret_cast<char*>(&ne), sizeof(ne));
+	
+	if (numEntries == 0) {
+		fw.close();
+		return true;
+	}
+
+	TMapIterator<FString, FString> it(globalStorage);
+	TMap<FString, FString>::Pair* pair;
+
+	while (it.NextPair(pair))
+	{
+		unsigned char keyLen = (unsigned char)clamp(pair->Key.Len(), (size_t)0, (size_t)255);
+		unsigned char valLen = (unsigned char)clamp(pair->Value.Len(), (size_t)0, (size_t)255);
+
+		fw.write(reinterpret_cast<char*>(&keyLen), sizeof(keyLen));
+		for (char x = 0; x < keyLen; x++) {
+			char tpos = (char)(fw.tellp() % 256);
+			char c = pair->Key[x] + hash + tpos;
+			fw.write(&c, sizeof(c));
+		}
+
+		fw.write(reinterpret_cast<char*>(&valLen), sizeof(valLen));
+		for (char x = 0; x < valLen; x++) {
+			char tpos = (char)(fw.tellp() % 256);
+			char c = pair->Value[x] + hash + tpos;
+			fw.write(&c, sizeof(c));
+		}
+	}
+
+	fw.close();
+
+	return true;
+}
+
 
 //
 // M_LoadDefaults
@@ -327,6 +603,41 @@ void M_LoadDefaults ()
 {
 	GameConfig = new FGameConfigFile;
 	GameConfig->DoGlobalSetup ();
+
+	FString path = M_GetSavegamesPath();
+	path += "selaco.globals";
+	M_LoadGlobalVars(path.GetChars());
+
+	// Migrate old global vars from the same path as GameConfig
+	if (GameConfig->GetPathName() != nullptr) {
+		FString iniName = GameConfig->GetPathName();
+		FString iniGlobals = iniName + ".globals";
+
+		M_MigrateGlobalVars(iniGlobals.GetChars(), path.GetChars());
+
+		// Attempt to migrate any .globals files in the same folder, and in the program folder
+		std::filesystem::path iniFilePath(iniName.GetChars());
+		std::filesystem::path iniPath = iniFilePath.parent_path();
+
+		if (!iniPath.empty() && std::filesystem::exists(iniPath)) {
+			for (auto const& entry : std::filesystem::directory_iterator{ iniPath }) {
+				if (!entry.is_directory() && entry.path().extension() == ".globals") {
+					M_MigrateGlobalVars(entry.path().string().c_str(), path.GetChars());
+				}
+			}
+		}
+
+		// Attempt to migrate .globals file in the program directory
+		std::filesystem::path localPath(".");
+
+		if (!localPath.empty() && std::filesystem::exists(localPath)) {
+			for (auto const& entry : std::filesystem::directory_iterator{ localPath }) {
+				if (!entry.is_directory() && entry.path().extension() == ".globals") {
+					M_MigrateGlobalVars(entry.path().string().c_str(), path.GetChars());
+				}
+			}
+		}
+	}
 }
 
 
@@ -520,7 +831,7 @@ void WritePNGfile (FileWriter *file, const uint8_t *buffer, const PalEntry *pale
 		!M_AppendPNGText (file, "Software", software) ||
 		!M_FinishPNG (file))
 	{
-		Printf ("%s\n", GStrings.GetString("TXT_SCREENSHOTERR"));
+		Printf ("%s\n", GStrings("TXT_SCREENSHOTERR"));
 	}
 }
 
@@ -535,7 +846,7 @@ static bool FindFreeName (FString &fullname, const char *extension)
 
 	for (i = 0; i <= 9999; i++)
 	{
-		const char *gamename = gameinfo.ConfigName.GetChars();
+		const char *gamename = gameinfo.ConfigName;
 
 		time_t now;
 		tm *tm;
@@ -599,8 +910,8 @@ void M_ScreenShot (const char *filename)
 				autoname += '/';
 			}
 		}
-		autoname = NicePath(autoname.GetChars());
-		CreatePath(autoname.GetChars());
+		autoname = NicePath(autoname);
+		CreatePath(autoname);
 		if (!FindFreeName (autoname, writepcx ? "pcx" : "png"))
 		{
 			Printf ("M_ScreenShot: Delete some screenshots\n");
@@ -621,7 +932,7 @@ void M_ScreenShot (const char *filename)
 	auto buffer = screen->GetScreenshotBuffer(pitch, color_type, gamma);
 	if (buffer.Size() > 0)
 	{
-		file = FileWriter::Open(autoname.GetChars());
+		file = FileWriter::Open(autoname);
 		if (file == NULL)
 		{
 			Printf ("Could not open %s\n", autoname.GetChars());
@@ -661,45 +972,5 @@ UNSAFE_CCMD (screenshot)
 		G_ScreenShot (NULL);
 	else
 		G_ScreenShot (argv[1]);
-}
-
-CCMD(openscreenshots)
-{
-	size_t dirlen;
-	FString autoname;
-	autoname = Args->CheckValue("-shotdir");
-	if (autoname.IsEmpty())
-	{
-		autoname = screenshot_dir;
-	}
-	dirlen = autoname.Len();
-	if (dirlen == 0)
-	{
-		autoname = M_GetScreenshotsPath();
-		dirlen = autoname.Len();
-	}
-	if (dirlen > 0)
-	{
-		if (autoname[dirlen-1] != '/' && autoname[dirlen-1] != '\\')
-		{
-			autoname += '/';
-		}
-	}
-	autoname = NicePath(autoname.GetChars());
-
-	CreatePath(autoname.GetChars());
-
-	I_OpenShellFolder(autoname.GetChars());
-}
-
-static int SaveConfig()
-{
-	return M_SaveDefaults(nullptr);
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(_CVar, SaveConfig, SaveConfig)
-{
-	PARAM_PROLOGUE;
-	ACTION_RETURN_INT(M_SaveDefaults(nullptr));
 }
 

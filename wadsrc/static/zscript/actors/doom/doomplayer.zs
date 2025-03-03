@@ -15,16 +15,16 @@ class DoomPlayer : PlayerPawn
 		PainChance 255;
 		Player.DisplayName "Marine";
 		Player.CrouchSprite "PLYC";
-		Player.StartItem "Pistol";
-		Player.StartItem "Fist";
-		Player.StartItem "Clip", 50;
-		Player.WeaponSlot 1, "Fist", "Chainsaw";
-		Player.WeaponSlot 2, "Pistol";
-		Player.WeaponSlot 3, "Shotgun", "SuperShotgun";
-		Player.WeaponSlot 4, "Chaingun";
-		Player.WeaponSlot 5, "RocketLauncher";
-		Player.WeaponSlot 6, "ID24Incinerator", "PlasmaRifle";
-		Player.WeaponSlot 7, "ID24CalamityBlade", "BFG9000";
+		//Player.StartItem "Pistol";
+		//Player.StartItem "Fist";
+		//Player.StartItem "Clip", 50;
+		//Player.WeaponSlot 1, "Fist", "Chainsaw";
+		//Player.WeaponSlot 2, "Pistol";
+		//Player.WeaponSlot 3, "Shotgun", "SuperShotgun";
+		//Player.WeaponSlot 4, "Chaingun";
+		//Player.WeaponSlot 5, "RocketLauncher";
+		//Player.WeaponSlot 6, "PlasmaRifle";
+		//Player.WeaponSlot 7, "BFG9000";
 		
 		Player.ColorRange 112, 127;
 		Player.Colorset 0, "$TXT_COLOR_GREEN",		0x70, 0x7F,  0x72;

@@ -42,6 +42,9 @@
 #include "d_main.h"
 
 EXTERN_CVAR(Bool, gl_precache)
+EXTERN_CVAR(Bool, gl_precache_actors)
+EXTERN_CVAR(Bool, gl_texture_thread)
+EXTERN_CVAR(Bool, debug_precache_actor)
 
 //==========================================================================
 //
@@ -57,6 +60,8 @@ static void PrecacheTexture(FGameTexture *tex, int cache)
 		if (shouldUpscale(tex, UF_Texture)) scaleflags |= CTF_Upscale;
 
 		FMaterial * gltex = FMaterial::ValidateTexture(tex, scaleflags);
+		//if (gltex) screen->BackgroundCacheMaterial(gltex, 0);
+		//if(gltex && gltex->Source()) Printf("Precaching texture: %s\n", gltex->Source()->GetName().GetChars());
 		if (gltex) screen->PrecacheMaterial(gltex, 0);
 	}
 }
@@ -70,7 +75,16 @@ static void PrecacheList(FMaterial *gltex, SpriteHits& translations)
 {
 	SpriteHits::Iterator it(translations);
 	SpriteHits::Pair* pair;
-	while (it.NextPair(pair)) screen->PrecacheMaterial(gltex, pair->Key);
+	//while (it.NextPair(pair)) screen->BackgroundCacheMaterial(gltex, pair->Key);
+	while (it.NextPair(pair)) {
+		//if (gltex && gltex->Source()) Printf("Precaching sprite tex: %s\n", gltex->Source()->GetName().GetChars());
+		//screen->PrecacheMaterial(gltex, pair->Key);
+		if(screen->SupportsBackgroundCache()) {
+			screen->PrequeueMaterial(gltex, pair->Key);
+		} else {
+			screen->PrecacheMaterial(gltex, pair->Key);
+		}
+	}
 }
 
 //==========================================================================
@@ -86,6 +100,16 @@ static void PrecacheSprite(FGameTexture *tex, SpriteHits &hits)
 
 	FMaterial * gltex = FMaterial::ValidateTexture(tex, scaleflags);
 	if (gltex) PrecacheList(gltex, hits);
+
+	auto useType = tex->GetUseType();
+	if (useType == ETextureType::Any ||
+		useType == ETextureType::Sprite ||
+		useType == ETextureType::Decal ||
+		useType == ETextureType::SkinSprite) {
+		//tex->GetSpritePositioning(1);		// @Cockatrice Precalc sprite positioning so we aren't loading images at play time as often
+		// TODO: Improve this, since we end up reading the texture from disk multiple times!! Maybe generate the necessary data the first time the image is actually loaded from disk
+		// Currently this is noticably increasing load times because of the double-disk reads for texture data
+	}
 }
 
 
@@ -152,29 +176,34 @@ void hw_PrecacheTexture(uint8_t *texhitlist, TMap<PClassActor*, bool> &actorhitl
 	while (it.NextPair(pair))
 	{
 		PClassActor *cls = pair->Key;
-		auto remap = GPalette.TranslationToTable(GetDefaultByType(cls)->Translation.index());
+		auto remap = GPalette.TranslationToTable(GetDefaultByType(cls)->Translation);
 		int gltrans = remap == nullptr ? 0 : remap->Index;
 
-		for (unsigned i = 0; i < cls->GetStateCount(); i++)
-		{
-			auto &state = cls->GetStates()[i];
-			spritelist[state.sprite].Insert(gltrans, true);
-			FSpriteModelFrame * smf = FindModelFrameRaw(cls, state.sprite, state.Frame, false);
-			if (smf != NULL)
+		// @Cockatrice - If the texture thread is enabled, and the sprite has a PRECACHE state, only load frames from that state
+		FState *precacheState = cls->FindStateByString("precache", true);
+		if (!precacheState || !gl_texture_thread || debug_precache_actor) {
+			for (unsigned i = 0; i < cls->GetStateCount(); i++)
 			{
-				for (int i = 0; i < smf->modelsAmount; i++)
+				auto &state = cls->GetStates()[i];
+				spritelist[state.sprite].Insert(gltrans, true);
+				FSpriteModelFrame * smf = FindModelFrame(cls, state.sprite, state.Frame, false);
+				if (smf != NULL)
 				{
-					if (smf->skinIDs[i].isValid())
+					for (int i = 0; i < smf->modelsAmount; i++)
 					{
-						texhitlist[smf->skinIDs[i].GetIndex()] |= FTextureManager::HIT_Flat;
-					}
-					else if (smf->modelIDs[i] != -1)
-					{
-						Models[smf->modelIDs[i]]->AddSkins(texhitlist, (unsigned)(i * MD3_MAX_SURFACES) < smf->surfaceskinIDs.Size()? &smf->surfaceskinIDs[i * MD3_MAX_SURFACES] : nullptr);
-					}
-					if (smf->modelIDs[i] != -1)
-					{
-						modellist[smf->modelIDs[i]] = 1;
+						if (smf->skinIDs[i].isValid())
+						{
+							texhitlist[smf->skinIDs[i].GetIndex()] |= FTextureManager::HIT_Flat;
+						}
+						else if (smf->modelIDs[i] != -1)
+						{
+							Models[smf->modelIDs[i]]->PushSpriteMDLFrame(smf, i);
+							Models[smf->modelIDs[i]]->AddSkins(texhitlist);
+						}
+						if (smf->modelIDs[i] != -1)
+						{
+							modellist[smf->modelIDs[i]] = 1;
+						}
 					}
 				}
 			}
@@ -203,6 +232,75 @@ void hw_PrecacheTexture(uint8_t *texhitlist, TMap<PClassActor*, bool> &actorhitl
 		}
 	}
 
+	it.Reset();
+	while (it.NextPair(pair)) {
+		PClassActor *cls = pair->Key;
+		auto remap = GPalette.TranslationToTable(GetDefaultByType(cls)->Translation);
+		int gltrans = remap == nullptr ? 0 : remap->Index;
+		FState *precacheState = cls->FindStateByString("precache", true);
+
+		// Now use the precache state to generate more single-frame hits. 
+		// This must be done after collecting full sprite frame lists above so we don't add every single frame of a sprite here
+		if (precacheState && gl_texture_thread && !(precacheState->sprite == 0 && precacheState->GetNextState() == nullptr)) {
+			if (precacheState->sprite == 0) {
+				precacheState = precacheState->GetNextState();
+				continue;
+			}
+
+			//Printf("%s found precache state: %s\n", cls->GetDisplayName().GetChars(), FState::StaticGetStateName(precacheState, cls).GetChars());
+			int failsafeCounter = 0;		// If someone forgot to add a stop; to the Precache state, we don't want to loop endlessly
+
+			while (precacheState && failsafeCounter < 1000) {
+				//Printf("   Precaching sprite: %s frame: %d State: %s \n", sprites[precacheState->sprite].name, precacheState->Frame, FState::StaticGetStateName(precacheState, cls).GetChars());
+
+				spritelist[precacheState->sprite].Insert(gltrans, true);
+
+				// Just in case the frame indexes are not verified when building the states...
+				if (precacheState->Frame < sprites[precacheState->sprite].numframes) {
+					const spriteframe_t *frame = &SpriteFrames[sprites[precacheState->sprite].spriteframes + precacheState->Frame];
+
+					for (int k = 0; k < 16; k++) {
+						FTextureID pic = frame->Texture[k];
+						if (pic.isValid()) {
+							spritehitlist[pic.GetIndex()] = &spritelist[precacheState->sprite];
+						}
+					}
+				}
+
+				// If these are model frames we still want to cache them
+				FSpriteModelFrame * smf = FindModelFrame(cls, precacheState->sprite, precacheState->Frame, false);
+				if (smf != NULL)
+				{
+					for (int i = 0; i < smf->modelsAmount; i++)
+					{
+						if (smf->skinIDs[i].isValid())
+						{
+							texhitlist[smf->skinIDs[i].GetIndex()] |= FTextureManager::HIT_Flat;
+						}
+						else if (smf->modelIDs[i] != -1)
+						{
+							Models[smf->modelIDs[i]]->PushSpriteMDLFrame(smf, i);
+							Models[smf->modelIDs[i]]->AddSkins(texhitlist);
+						}
+						if (smf->modelIDs[i] != -1)
+						{
+							modellist[smf->modelIDs[i]] = 1;
+						}
+					}
+				}
+
+				precacheState = precacheState->GetNextState();
+				failsafeCounter++;
+			}
+
+			if (failsafeCounter >= 999) {
+				Printf(TEXTCOLOR_RED"Pre-Cache error: 1000+ states encountered in %s!\n", cls->GetDisplayName().GetChars());
+			}
+		}
+
+	}
+
+	
 	// delete everything unused before creating any new resources to avoid memory usage peaks.
 
 	// delete unused models
@@ -314,6 +412,13 @@ void hw_PrecacheTexture(uint8_t *texhitlist, TMap<PClassActor*, bool> &actorhitl
 
 
 		FImageSource::EndPrecaching();
+
+		/*while (screen->CachingActive()) {
+			screen->UpdateBackgroundCache();
+			Printf("Cache Progress: %.2f\n", screen->CacheProgress());
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		}*/
+		
 
 		// cache all used models
 		FModelRenderer* renderer = new FHWModelRenderer(nullptr, *screen->RenderState(), -1);

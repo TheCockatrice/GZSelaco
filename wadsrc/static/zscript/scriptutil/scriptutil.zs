@@ -120,7 +120,7 @@ class ScriptUtil play
 	{
 		if(activator != NULL && activator.player != NULL && cls != null)
 		{
-			let item = Weapon(activator.FindInventory(cls));
+			let item = WeaponBase(activator.FindInventory(cls));
 
 			if(item != NULL)
 			{
@@ -133,7 +133,7 @@ class ScriptUtil play
 				}
 				else
 				{
-					if(item.CheckAmmo(Weapon.EitherFire, false))
+					if(item.CheckAmmo(WeaponBase.EitherFire, false))
 					{
 						// There's enough ammo, so switch to it.
 						activator.player.PendingWeapon = item;
@@ -145,68 +145,6 @@ class ScriptUtil play
 		return 0;
 	}
 
-	//==========================================================================
-	//
-	//
-	//
-	//==========================================================================
-
-	static void SetMarineWeapon(LevelLocals Level, Actor activator, int tid, int marineweapontype)
-	{
-		if (tid != 0)
-		{
-			let it = Level.CreateActorIterator(tid, 'ScriptedMarine');
-			ScriptedMarine marine;
-
-			while ((marine = ScriptedMarine(it.Next())) != NULL)
-			{
-				marine.SetWeapon(marineweapontype);
-			}
-		}
-		else
-		{
-			let marine = ScriptedMarine(activator);
-			if (marine != null)
-			{
-				marine.SetWeapon(marineweapontype);
-			}
-		}
-	}
-
-	//==========================================================================
-	//
-	//
-	//
-	//==========================================================================
-
-	static void SetMarineSprite(LevelLocals Level, Actor activator, int tid, class<Actor> type)
-	{
-		if (type != NULL)
-		{
-			if (tid != 0)
-			{
-				let it = Level.CreateActorIterator(tid, 'ScriptedMarine');
-				ScriptedMarine marine;
-
-				while ((marine = ScriptedMarine(it.Next())) != NULL)
-				{
-					marine.SetSprite(type);
-				}
-			}
-			else
-			{
-				let marine = ScriptedMarine(activator);
-				if (marine != null)
-				{
-					marine.SetSprite(type);
-				}
-			}
-		}
-		else
-		{
-			Console.Printf ("Unknown actor type: %s\n", type.GetClassName());
-		}
-	}
 	
 
 	//==========================================================================

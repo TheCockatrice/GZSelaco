@@ -66,7 +66,7 @@ public:
 	}
 
 	IHardwareTexture *GetLayer(int i, int translation, MaterialLayerInfo **pLayer = nullptr) const;
-
+	bool IsHardwareCached(int translation);	// @Cockatrice - Check each layer and make sure it's cached
 
 	static FMaterial *ValidateTexture(FGameTexture * tex, int scaleflags, bool create = true);
 	const TArray<MaterialLayerInfo> &GetLayerArray() const

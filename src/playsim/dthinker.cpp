@@ -89,7 +89,15 @@ void FThinkerCollection::Link(DThinker *thinker, int statnum)
 		if (statnum != STAT_TRAVELLING) thinker->ObjectFlags &= ~OF_JustSpawned;
 		list = &Thinkers[statnum];
 	}
+
 	list->AddTail(thinker);
+}
+
+// Insert the sleeper at the head of the list
+void FThinkerCollection::LinkSleeper(DThinker* thinker, int statnum)
+{
+	Thinkers[statnum].AddHead(thinker);
+	//if (statnum != STAT_TRAVELLING) thinker->ObjectFlags &= ~OF_JustSpawned;
 }
 
 //==========================================================================
@@ -109,6 +117,20 @@ void FThinkerCollection::RunThinkers(FLevelLocals *Level)
 	BotWTG = 0;
 
 	ThinkCycles.Clock();
+
+	// Handle sleeping thinkers, allow them to slip back into the regular pool when unnecessary
+	inSleepCycle = true;
+	Thinkers[STAT_SLEEP].CheckSleepingThinkers(1);
+	FreshThinkers[STAT_SLEEP].CheckSleepingThinkers(1);
+
+	// Wake the waiting dreamers
+	for (auto dreamer : tempWakers) {
+		if (dreamer) dreamer->ChangeStatNum(STAT_DEFAULT);
+	}
+	tempWakers.Clear();
+
+	inSleepCycle = false;
+
 
 	bool dolights;
 	if ((gl_lights && vid_rendermode == 4) || (r_dynlights && vid_rendermode != 4))
@@ -141,11 +163,13 @@ void FThinkerCollection::RunThinkers(FLevelLocals *Level)
 		}
 	};
 
+
 	if (!profilethinkers)
 	{
 		// Tick every thinker left from last time
 		for (i = STAT_FIRST_THINKING; i <= MAX_STATNUM; ++i)
 		{
+			if (i == STAT_SLEEP || i == STAT_SLEEP_FOREVER) { continue; }
 			Thinkers[i].TickThinkers(nullptr);
 		}
 
@@ -155,6 +179,7 @@ void FThinkerCollection::RunThinkers(FLevelLocals *Level)
 			count = 0;
 			for (i = STAT_FIRST_THINKING; i <= MAX_STATNUM; ++i)
 			{
+				if (i == STAT_SLEEP || i == STAT_SLEEP_FOREVER) { continue; }
 				count += FreshThinkers[i].TickThinkers(&Thinkers[i]);
 			}
 		} while (count != 0);
@@ -176,6 +201,7 @@ void FThinkerCollection::RunThinkers(FLevelLocals *Level)
 		// Tick every thinker left from last time
 		for (i = STAT_FIRST_THINKING; i <= MAX_STATNUM; ++i)
 		{
+			if (i == STAT_SLEEP || i == STAT_SLEEP_FOREVER) { continue; }
 			Thinkers[i].ProfileThinkers(nullptr);
 		}
 
@@ -185,6 +211,7 @@ void FThinkerCollection::RunThinkers(FLevelLocals *Level)
 			count = 0;
 			for (i = STAT_FIRST_THINKING; i <= MAX_STATNUM; ++i)
 			{
+				if (i == STAT_SLEEP || i == STAT_SLEEP_FOREVER) { continue; }
 				count += FreshThinkers[i].ProfileThinkers(&Thinkers[i]);
 			}
 		} while (count != 0);
@@ -380,11 +407,22 @@ void FThinkerCollection::SerializeThinkers(FSerializer &arc, bool hubLoad)
 //
 //==========================================================================
 
+inline void FThinkerList::AssertSentinel() {
+	if (Sentinel != nullptr) return;
+
+	Sentinel = (DThinker*)RUNTIME_CLASS(DThinker)->CreateNew();
+	Sentinel->ObjectFlags |= OF_Sentinel;
+	Sentinel->NextThinker = Sentinel;
+	Sentinel->PrevThinker = Sentinel;
+	GC::WriteBarrier(Sentinel);
+}
+
+
 void FThinkerList::AddTail(DThinker *thinker)
 {
 	assert(thinker->PrevThinker == nullptr && thinker->NextThinker == nullptr);
 	assert(!(thinker->ObjectFlags & OF_EuthanizeMe));
-	if (Sentinel == nullptr)
+	/*if (Sentinel == nullptr)
 	{
 		// This cannot use CreateThinker because it must not be added to the list automatically.
 		Sentinel = (DThinker*)RUNTIME_CLASS(DThinker)->CreateNew();
@@ -392,7 +430,9 @@ void FThinkerList::AddTail(DThinker *thinker)
 		Sentinel->NextThinker = Sentinel;
 		Sentinel->PrevThinker = Sentinel;
 		GC::WriteBarrier(Sentinel);
-	}
+	}*/
+	AssertSentinel();
+
 	DThinker *tail = Sentinel->PrevThinker;
 	assert(tail->NextThinker == Sentinel);
 	thinker->PrevThinker = tail;
@@ -404,6 +444,117 @@ void FThinkerList::AddTail(DThinker *thinker)
 	GC::WriteBarrier(tail, thinker);
 	GC::WriteBarrier(Sentinel, thinker);
 }
+
+
+void FThinkerList::AddHead(DThinker *thinker)
+{
+	assert(thinker->PrevThinker == nullptr && thinker->NextThinker == nullptr);
+	assert(!(thinker->ObjectFlags & OF_EuthanizeMe));
+
+	AssertSentinel();
+
+	DThinker *head = Sentinel->NextThinker;
+	assert(head->PrevThinker == Sentinel);
+	thinker->PrevThinker = Sentinel;
+	thinker->NextThinker = head;
+	head->PrevThinker = thinker;
+	Sentinel->NextThinker = thinker;
+	GC::WriteBarrier(thinker, head);
+	GC::WriteBarrier(thinker, Sentinel);
+	GC::WriteBarrier(head, thinker);
+	GC::WriteBarrier(Sentinel, thinker);
+}
+
+
+void FThinkerList::AddAfter(DThinker *after, DThinker *thinker)
+{
+	assert(after != nullptr && after->NextThinker != Sentinel);
+	assert(!(thinker->ObjectFlags & OF_EuthanizeMe));
+
+	DThinker *nnext = after->NextThinker;
+	thinker->PrevThinker = after;
+	thinker->NextThinker = nnext;
+	nnext->PrevThinker = thinker;
+	after->NextThinker = thinker;
+
+	// I actually have no idea what I'm doing here, more research is needed. Please don't crash.
+	GC::WriteBarrier(thinker, after);
+	GC::WriteBarrier(after, thinker);
+	GC::WriteBarrier(nnext, thinker);
+	GC::WriteBarrier(thinker, nnext);
+}
+
+/*  Sorting ended up causing tiny little lag spikes and will no longer be used in favor of a slower but more stable method
+void FThinkerList::AddSleeper(DThinker *thinker) {
+
+	DThinker *node = GetHead();
+	DThinker *tail = GetTail();
+	DThinker *head = node;
+
+	if (Sentinel == nullptr || !node || node == GetTail()) {
+		AddTail(thinker);
+		sleepCount = 0;
+		thinker->sleepTimer = thinker->sleepInterval;
+		return;
+	}
+
+	thinker->sleepTimer = thinker->sleepInterval + sleepCount;
+
+	// Find location to add to
+	if (thinker->sleepTimer == 0 || head->sleepTimer >= thinker->sleepTimer) {
+		AddHead(thinker);
+		return;
+	}
+	else if (tail->sleepTimer <= thinker->sleepTimer) {
+		AddTail(thinker);
+		return;
+	}
+	else {
+		// Determine direction
+		if (thinker->sleepTimer > head->sleepTimer + (tail->sleepTimer - head->sleepTimer / 2)) {
+			// Backwards
+			node = tail;
+			while (node != Sentinel) {
+				assert(node != nullptr);
+				auto prev = node->PrevThinker;
+
+				if (node->sleepTimer <= thinker->sleepTimer) {
+					AddAfter(node, thinker);
+					return;
+				}
+
+				if (node == head) {
+					AddHead(thinker);
+					return;
+				}
+
+				node = prev;
+			}
+		}
+		else {
+			// Forwards
+			while (node != Sentinel) {
+				assert(node != nullptr);
+				auto next = node->NextThinker;
+
+				if (node->sleepTimer >= thinker->sleepTimer) {
+					AddAfter(node->PrevThinker, thinker);
+					return;
+				}
+
+				if (node == tail) {
+					AddTail(thinker);
+					return;
+				}
+
+				node = next;
+			}
+		}
+	}
+
+	// We shouldn't be here
+	assert(0);
+}*/
 
 //==========================================================================
 //
@@ -579,6 +730,41 @@ void FThinkerList::SaveList(FSerializer &arc)
 	}
 }
 
+
+int FThinkerList::CheckSleepingThinkers(int ticsElapsed) {
+	int count = 0;
+	DThinker *node = GetHead();
+	DThinker *nextNode = nullptr;
+
+	if (node == nullptr) {
+		//sleepCount = 0;
+		return 0;
+	}
+
+	while (node != Sentinel)
+	{
+		nextNode = node->NextThinker;
+
+		if (!(node->ObjectFlags & OF_EuthanizeMe))
+		{ // Only check thinkers not scheduled for destruction
+			node->sleepTimer -= ticsElapsed;
+			if (node->sleepTimer  <= 0) {
+				if (node->sleepInterval <= 0 || node->CallShouldWake()) {
+					++count;
+					node->CallWake();
+				}
+			}
+		}
+
+		node = nextNode;
+	}
+
+	// TODO: Might have to perform some maintenance on sleepCount to prevent it from getting too big
+
+	return count;
+}
+
+
 //==========================================================================
 //
 //
@@ -620,6 +806,7 @@ int FThinkerList::TickThinkers(FThinkerList *dest)
 			node->CallTick();
 			node->ObjectFlags &= ~OF_JustSpawned;
 		}
+		
 		node = NextToThink;
 	}
 	return count;
@@ -702,6 +889,8 @@ void DThinker::Serialize(FSerializer &arc)
 {
 	Super::Serialize(arc);
 	arc("level", Level);
+	arc("sleepInterval", sleepInterval);
+	arc("sleepTimer", sleepTimer);
 }
 
 //==========================================================================
@@ -772,6 +961,122 @@ void DThinker::CallPostBeginPlay()
 void DThinker::PostSerialize()
 {
 }
+
+//==========================================================================
+//
+// 
+//
+//==========================================================================
+
+// Sleep =========================================================================
+DEFINE_ACTION_FUNCTION(DThinker, Sleep)
+{
+	PARAM_SELF_PROLOGUE(DThinker);
+	PARAM_INT(tics);
+	self->Sleep(tics);
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(DThinker, SleepIndefinite)
+{
+	PARAM_SELF_PROLOGUE(DThinker);
+	self->SleepIndefinite();
+	return 0;
+}
+
+
+DEFINE_ACTION_FUNCTION(DThinker, ShouldWake)
+{
+	PARAM_SELF_PROLOGUE(DThinker);
+	ACTION_RETURN_BOOL(self->ShouldWake());
+}
+
+DEFINE_ACTION_FUNCTION(DThinker, Wake)
+{
+	PARAM_SELF_PROLOGUE(DThinker);
+	self->Wake();
+	return 0;
+}
+
+
+void DThinker::CallSleep(int tics) {
+	IFVIRTUAL(DThinker, Sleep)
+	{
+		VMValue params[] = { (DObject*)this, tics };
+		VMCall(func, params, 2, nullptr, 0);
+	}
+	else return Sleep(tics);
+}
+
+void DThinker::CallWake() {
+	IFVIRTUAL(DThinker, Wake)
+	{
+		VMValue params[] = { (DObject*)this };
+		VMCall(func, params, 1, nullptr, 0);
+	}
+	else return Wake();
+}
+
+bool DThinker::CallShouldWake() {
+	IFVIRTUAL(DThinker, ShouldWake)
+	{
+		VMValue params[] = { (DObject*)this };
+		int retb;
+		VMReturn ret(&retb);
+		VMCall(func, params, 1, &ret, 1);
+		return !!retb;
+	}
+	return ShouldWake();
+}
+
+bool DThinker::ShouldWake() {
+	return true;	// Default thinkers are undefined and shouldn't sleep
+}
+
+// TODO: Provide WAKE with the amount of tics slept
+void DThinker::Wake() {
+	if (ObjectFlags & OF_EuthanizeMe) { return; }
+
+	//if (sleepInterval <= 0) { // only wake if asleep
+	if(sleepInterval == 0) {	// only wake if asleep
+		return;
+	}
+
+	// If we are in the sleep/wake cycle, don't change statnums until after
+	// Send to temporary storage first
+	if (Level->Thinkers.IsSleepCycle()) {
+		Level->Thinkers.AddWaker(this);
+	}
+	else {
+		ChangeStatNum(STAT_DEFAULT);
+	}
+
+	
+	sleepInterval = 0;
+	sleepTimer = 0;
+}
+
+void DThinker::Sleep(int tics) {
+	//ChangeStatNum(STAT_SLEEP);
+	// Only sleep if we are not going to be destroyed
+	if ((ObjectFlags & OF_EuthanizeMe) || tics <= 0) { return; }
+
+	Remove();
+	sleepInterval = tics;
+	sleepTimer = tics;
+	Level->Thinkers.LinkSleeper(this, STAT_SLEEP);
+}
+
+void DThinker::SleepIndefinite() {
+	// Only sleep if we are not going to be destroyed
+	if (ObjectFlags & OF_EuthanizeMe) { return; }
+
+	ChangeStatNum(STAT_SLEEP_FOREVER);
+	sleepInterval = -1;
+	sleepTimer = -1;
+}
+
+
 
 //==========================================================================
 //

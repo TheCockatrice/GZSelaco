@@ -59,6 +59,14 @@
 
 EXTERN_CVAR(Int, screenblocks)
 
+CUSTOM_CVAR(Int, gl_max_transfer_threads, 2, CVAR_ARCHIVE | CVAR_GLOBALCONFIG | CVAR_NOINITCALL)
+{
+	if (self < 0) self = 0;
+	else if (self > 4) self = 4;
+
+	Printf("This won't take effect until " GAMENAME " is restarted.\n");
+}
+
 namespace OpenGLRenderer
 {
 

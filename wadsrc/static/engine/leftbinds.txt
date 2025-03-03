@@ -1,18 +1,16 @@
-/* Default keybindings (keypad) for all games */
+/* ESDF keybindings for pro players */
 
-KP8 +forward
-KP5 +back
-KP4 +moveleft
-KP6 +moveright
-KP7 +jump
-KP1 crouch
-KP0 +use
-UpArrow +forward
-DownArrow +back
-LeftArrow +moveleft
-RightArrow +moveright
+e +forward
+d +back
+s +moveleft
+f +moveright
+space +jump
+ctrl crouch
+z +crouch
+w +use
 mouse2 +altattack
-
-
-
-
+h usemeds
+a Toggle_Flashlight
+t switchGadget
+v LastWeapon
+mapbind r am_togglefollow

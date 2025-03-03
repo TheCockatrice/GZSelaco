@@ -400,7 +400,7 @@ public:
 public:
 
 	void CreateVertices(HWDrawInfo *di);
-	void PutSprite(HWDrawInfo *di, bool translucent);
+	void PutSprite(HWDrawInfo *di, bool translucent, double ticFrac = 1.0);
 	void Process(HWDrawInfo *di, AActor* thing,sector_t * sector, area_t in_area, int thruportal = false, bool isSpriteShadow = false);
 	void ProcessParticle(HWDrawInfo *di, particle_t *particle, sector_t *sector, class DVisualThinker *spr);//, int shade, int fakeside)
 	void AdjustVisualThinker(HWDrawInfo *di, DVisualThinker *spr, sector_t *sector);
@@ -446,13 +446,13 @@ inline float Dist2(float x1,float y1,float x2,float y2)
 }
 
 bool hw_SetPlaneTextureRotation(const HWSectorPlane * secplane, FGameTexture * gltexture, VSMatrix &mat);
-void hw_GetDynModelLight(AActor *self, FDynLightData &modellightdata);
+void hw_GetDynModelLight(AActor *self, FDynLightData &modellightdata, double ticFrac = 1.0);
 LightProbe* FindLightProbe(FLevelLocals* level, float x, float y, float z);
 
 extern const float LARGE_VALUE;
 
 struct FDynLightData;
 struct FDynamicLight;
-bool GetLight(FDynLightData& dld, int group, Plane& p, FDynamicLight* light, bool checkside);
-void AddLightToList(FDynLightData &dld, int group, FDynamicLight* light, bool forceAttenuate);
+bool GetLight(FDynLightData& dld, int group, Plane& p, FDynamicLight* light, bool checkside, double ticFrac);
+void AddLightToList(FDynLightData &dld, int group, FDynamicLight* light, bool forceAttenuate, double ticFrac);
 void SetSplitPlanes(FRenderState& state, const secplane_t& top, const secplane_t& bottom);

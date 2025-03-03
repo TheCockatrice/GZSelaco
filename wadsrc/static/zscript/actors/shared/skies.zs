@@ -60,16 +60,20 @@ class SkyViewpoint : Actor
 
 	override void OnDestroy ()
 	{
-		// remove all sector references to ourselves.
-		for (int i = 0; i < level.sectorPortals.Size(); i++)
-		{
-			SectorPortal s = level.sectorPortals[i];
-			if (s.mSkybox == self)
-			{
-				s.mSkybox = null;
-				// This is necessary to entirely disable EE-style skyboxes
-				// if their viewpoint gets deleted.
-				s.mFlags |= SectorPortal.FLAG_SKYFLATONLY;
+		if(!bDestroyed) {
+			// remove all sector references to ourselves.
+			if(level && level.sectorPortals) {
+				for (int i = 0; i < level.sectorPortals.Size(); i++)
+				{
+					SectorPortal s = level.sectorPortals[i];
+					if (s.mSkybox == self)
+					{
+						s.mSkybox = null;
+						// This is necessary to entirely disable EE-style skyboxes
+						// if their viewpoint gets deleted.
+						s.mFlags |= SectorPortal.FLAG_SKYFLATONLY;
+					}
+				}
 			}
 		}
 

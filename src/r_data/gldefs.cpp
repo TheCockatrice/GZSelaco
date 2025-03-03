@@ -1785,10 +1785,46 @@ class GLDefsParser
 			sc.MustGetString();
 			FTextureID no = TexMan.CheckForTexture(sc.String, type);
 			auto tex = TexMan.GetGameTexture(no);
-			if (tex) tex->AddAutoMaterials();
+			
+			bool skipOpeningBrace = false;
+			if (!tex) {
+				sc.ScriptMessage("GLDefs defined hardware shader for non-existent texture %s\n", sc.String);
+			}
+			else {
+				// @Cockatrice - Check for a second texture name so we can copy and redefine this texture, leaving the original alone
+				// This allows us to define shaders for textures and still use the original without a shader
+				// This has limited use of course, since you can't use these generated textures in an editor as they don't exist outside the game
+				// But will work great for automatic replacement of certain textures that need shaders in some conditions without breaking the original texture
+				if (sc.GetString()) {
+					if (sc.Compare("{")) {
+						skipOpeningBrace = true;
+					}
+					else {
+						//Printf("Duplicating texture, making new tex with name: %s\n", sc.String);
+						auto orig = tex->GetTexture();
+						auto newTex = MakeGameTexture(orig, sc.String, type);
+						tex->CopySize(tex, false);
+						TexMan.AddGameTexture(newTex);
+
+						// I have no idea if this will actually work
+						if (tex->GetBrightmap()) newTex->Brightmap = tex->GetBrightmap();
+						if (tex->Normal.get()) newTex->Normal = tex->Normal;
+						if (tex->AmbientOcclusion.get()) newTex->AmbientOcclusion = tex->AmbientOcclusion;
+						if (tex->Roughness.get()) newTex->Roughness = tex->Roughness;
+						if (tex->Metallic.get()) newTex->Metallic = tex->Metallic;
+						if (tex->Specular.get()) newTex->Specular = tex->Specular;
+						if (tex->Glowmap.get()) newTex->Glowmap = tex->Glowmap;
+						if (tex->Detailmap.get()) newTex->Detailmap = tex->Detailmap;
+
+						tex = newTex;
+					}
+				}
+
+				tex->AddAutoMaterials();
+			}
 			MaterialLayers mlay = { -1000, -1000 };
 
-			sc.MustGetToken('{');
+			if(!skipOpeningBrace) sc.MustGetToken('{');
 			while (!sc.CheckToken('}'))
 			{
 				sc.MustGetString();

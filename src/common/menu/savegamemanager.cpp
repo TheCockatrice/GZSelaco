@@ -46,12 +46,9 @@
 #include "findfile.h"
 #include "v_draw.h"
 #include "savegamemanager.h"
-#include "m_argv.h"
-#include "i_specialpaths.h"
+#include "events.h"
 
-CVAR(String, save_dir, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG | CVAR_SYSTEM_ONLY);
-FString SavegameFolder;
-CVAR(Int, save_sort_order, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+EXTERN_CVAR(Int, developer);
 
 //=============================================================================
 //
@@ -85,7 +82,7 @@ int FSavegameManagerBase::RemoveSaveSlot(int index)
 	int listindex = SaveGames[0]->bNoDelete ? index - 1 : index;
 	if (listindex < 0) return index;
 
-	RemoveFile(SaveGames[index]->Filename.GetChars());
+	remove(SaveGames[index]->Filename.GetChars());
 	UnloadSaveData();
 
 	FSaveGameNode *file = SaveGames[index];
@@ -137,19 +134,7 @@ int FSavegameManagerBase::InsertSaveNode(FSaveGameNode *node)
 		//if (SaveGames[0] == &NewSaveNode) i++; // To not insert above the "new savegame" dummy entry.
 		for (; i < SaveGames.Size(); i++)
 		{
-			bool sortcmp = false;
-			switch(save_sort_order)
-			{
-			case 1:
-				sortcmp = node->CreationTime.CompareNoCase(SaveGames[i]->CreationTime) > 0;
-				break;
-			default:
-			case 0:
-				sortcmp = node->SaveTitle.CompareNoCase(SaveGames[i]->SaveTitle) <= 0;
-				break;
-			}
-
-			if (SaveGames[i]->bOldVersion || sortcmp)
+			if (SaveGames[i]->saveDate < node->saveDate || (SaveGames[i]->saveDate == node->saveDate && node->SaveTitle.CompareNoCase(SaveGames[i]->SaveTitle) <= 0))
 			{
 				break;
 			}
@@ -165,7 +150,7 @@ int FSavegameManagerBase::InsertSaveNode(FSaveGameNode *node)
 //
 //=============================================================================
 
-void FSavegameManagerBase::NotifyNewSave(const FString &file, const FString &title, bool okForQuicksave, bool forceQuicksave)
+void FSavegameManagerBase::NotifyNewSave(const FString &file, const FString &title, int saveDate, bool okForQuicksave, bool forceQuicksave)
 {
 	if (file.IsEmpty())
 		return;
@@ -183,18 +168,17 @@ void FSavegameManagerBase::NotifyNewSave(const FString &file, const FString &tit
 #endif
 		{
 			node->SaveTitle = title;
-			node->CreationTime = myasctime();
+			node->saveDate = saveDate;
 			node->bOldVersion = false;
 			node->bMissingWads = false;
 
-			// refresh my game's position on the list (needed if time/name changed)
 			SaveGames.Delete(i);
-			int index = InsertSaveNode(node);
+			i = InsertSaveNode(node);
 
 			if (okForQuicksave)
 			{
 				if (quickSaveSlot == nullptr || quickSaveSlot == (FSaveGameNode*)1 || forceQuicksave) quickSaveSlot = node;
-				LastAccessed = LastSaved = index;
+				LastAccessed = LastSaved = i;
 			}
 			return;
 		}
@@ -202,10 +186,10 @@ void FSavegameManagerBase::NotifyNewSave(const FString &file, const FString &tit
 
 	auto node = new FSaveGameNode;
 	node->SaveTitle = title;
-	node->CreationTime = myasctime();
 	node->Filename = file;
 	node->bOldVersion = false;
 	node->bMissingWads = false;
+	node->saveDate = saveDate;
 	int index = InsertSaveNode(node);
 
 	if (okForQuicksave)
@@ -253,6 +237,13 @@ DEFINE_ACTION_FUNCTION(FSavegameManager, LoadSavegame)
 
 void FSavegameManagerBase::DoSave(int Selected, const char *savegamestring)
 {
+	// @Cockatrice - Consult the event managers to determine if we are actually allowed to save at this moment
+	if (!staticEventManager.IsSaveAllowed(false)) {
+		if (developer > 0)
+			Printf("Save \"%s\" rejected by event manager.", savegamestring);
+		return;
+	}
+
 	if (Selected != 0)
 	{
 		auto node = SaveGames[Selected];
@@ -266,13 +257,13 @@ void FSavegameManagerBase::DoSave(int Selected, const char *savegamestring)
 
 		for (i = 0;; ++i)
 		{
-			filename = BuildSaveName("save", i);
+			filename = BuildSaveName("save_manual", i);
 			if (!FileExists(filename))
 			{
 				break;
 			}
 		}
-		PerformSaveGame(filename.GetChars(), savegamestring);
+		PerformSaveGame(filename, savegamestring);
 	}
 	M_ClearMenus();
 }
@@ -282,7 +273,7 @@ DEFINE_ACTION_FUNCTION(FSavegameManager, DoSave)
 	PARAM_SELF_STRUCT_PROLOGUE(FSavegameManagerBase);
 	PARAM_INT(sel);
 	PARAM_STRING(name);
-	self->DoSave(sel, name.GetChars());
+	self->DoSave(sel, name);
 	return 0;
 }
 
@@ -294,7 +285,7 @@ DEFINE_ACTION_FUNCTION(FSavegameManager, DoSave)
 
 unsigned FSavegameManagerBase::ExtractSaveData(int index)
 {
-	std::unique_ptr<FResourceFile> resf;
+	FResourceFile *resf;
 	FSaveGameNode *node;
 
 	if (index == -1)
@@ -315,29 +306,39 @@ unsigned FSavegameManagerBase::ExtractSaveData(int index)
 		(node = SaveGames[index]) &&
 		!node->Filename.IsEmpty() &&
 		!node->bOldVersion &&
-		( (resf.reset(FResourceFile::OpenResourceFile(node->Filename.GetChars(), true))), resf != nullptr))
+		(resf = FResourceFile::OpenResourceFile(node->Filename.GetChars(), true)) != nullptr)
 	{
-		auto info = resf->FindEntry("info.json");
-		if (info < 0)
+		FResourceLump *info = resf->FindLump("info.json");
+		if (info == nullptr)
 		{
 			// this should not happen because the file has already been verified.
 			return index;
 		}
 
-		auto data = resf->Read(info);
+		void* data = info->Lock();
 		FSerializer arc;
-		if (!arc.OpenReader(data.string(), data.size()))
+		if (!arc.OpenReader((const char*)data, info->LumpSize))
 		{
+			info->Unlock();
 			return index;
 		}
+		info->Unlock();
 
 		SaveCommentString = ExtractSaveComment(arc);
 
-		auto pic = resf->FindEntry("savepic.png");
-		if (pic >= 0)
+		FResourceLump *pic = resf->FindLump("savepic.png");
+		if (pic != nullptr)
 		{
-			// This must use READER_CACHED or it will lock the savegame file.
-			FileReader picreader = resf->GetEntryReader(pic, FileSys::READER_CACHED, FileSys::READERFLAG_SEEKABLE);
+			FileReader picreader;
+
+			picreader.OpenMemoryArray([=](TArray<uint8_t> &array)
+			{
+				auto cache = pic->Lock();
+				array.Resize(pic->LumpSize);
+				memcpy(&array[0], cache, pic->LumpSize);
+				pic->Unlock();
+				return true;
+			});
 			PNGHandle *png = M_VerifyPNG(picreader);
 			if (png != nullptr)
 			{
@@ -350,6 +351,7 @@ unsigned FSavegameManagerBase::ExtractSaveData(int index)
 				}
 			}
 		}
+		delete resf;
 	}
 	return index;
 }
@@ -406,10 +408,10 @@ DEFINE_ACTION_FUNCTION(FSavegameManager, ClearSaveStuff)
 //
 //=============================================================================
 
-bool FSavegameManagerBase::DrawSavePic(int x, int y, int w, int h)
+bool FSavegameManagerBase::DrawSavePic(int x, int y, int w, int h, bool filter)
 {
 	if (SavePic == nullptr) return false;
-	DrawTexture(twod, SavePic, x, y, 	DTA_DestWidth, w, DTA_DestHeight, h, DTA_Masked, false,	TAG_DONE);
+	DrawTexture(twod, SavePic, x, y, 	DTA_DestWidth, w, DTA_DestHeight, h, DTA_Masked, false, DTA_BilinearFilter, filter,	TAG_DONE);
 	return true;
 }
 
@@ -420,7 +422,8 @@ DEFINE_ACTION_FUNCTION(FSavegameManager, DrawSavePic)
 	PARAM_INT(y);
 	PARAM_INT(w);
 	PARAM_INT(h);
-	ACTION_RETURN_BOOL(self->DrawSavePic(x, y, w, h));
+	PARAM_BOOL(filter);
+	ACTION_RETURN_BOOL(self->DrawSavePic(x, y, w, h, filter));
 }
 
 //=============================================================================
@@ -490,7 +493,7 @@ DEFINE_ACTION_FUNCTION(FSavegameManager, GetSavegame)
 
 void FSavegameManagerBase::InsertNewSaveNode()
 {
-	NewSaveNode.SaveTitle = GStrings.GetString("NEWSAVE");
+	NewSaveNode.SaveTitle = GStrings("NEWSAVE");
 	NewSaveNode.bNoDelete = true;
 	SaveGames.Insert(0, &NewSaveNode);
 }
@@ -549,57 +552,4 @@ DEFINE_FIELD(FSaveGameNode, bNoDelete);
 DEFINE_FIELD_X(SavegameManager, FSavegameManagerBase, WindowSize);
 DEFINE_FIELD_X(SavegameManager, FSavegameManagerBase, quickSaveSlot);
 DEFINE_FIELD_X(SavegameManager, FSavegameManagerBase, SaveCommentString);
-
-//=============================================================================
-//
-// todo: cache this - it never changes once set up.
-//
-//=============================================================================
-
-FString G_GetSavegamesFolder()
-{
-	FString name;
-	bool usefilter;
-
-	if (const char* const dir = Args->CheckValue("-savedir"))
-	{
-		name = dir;
-		usefilter = false; //-savedir specifies an absolute save directory path.
-	}
-	else
-	{
-		name = **save_dir ? FString(save_dir) : M_GetSavegamesPath();
-		usefilter = true;
-	}
-
-	const size_t len = name.Len();
-	if (len > 0)
-	{
-		FixPathSeperator(name);
-		if (name[len - 1] != '/')
-			name << '/';
-	}
-
-	if (usefilter && SavegameFolder.IsNotEmpty())
-		name << SavegameFolder << '/';
-
-	name = NicePath(name.GetChars());
-	CreatePath(name.GetChars());
-	return name;
-}
-
-//=============================================================================
-//
-//
-//
-//=============================================================================
-
-FString G_BuildSaveName(const char* prefix)
-{
-	FString name = G_GetSavegamesFolder() + prefix;
-	DefaultExtension(name, "." SAVEGAME_EXT); // only add an extension if the prefix doesn't have one already.
-	name = NicePath(name.GetChars());
-	name.Substitute("\\", "/");
-	return name;
-}
 

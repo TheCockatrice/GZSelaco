@@ -298,6 +298,8 @@ FMaterial* DFrameBuffer::CreateMaterial(FGameTexture* tex, int scaleflags)
 
 static int ScreenGetWidth() { return twod->GetWidth(); }
 static int ScreenGetHeight() { return twod->GetHeight(); }
+static int ScreenGetWindowWidth() { return screen->GetClientWidth(); }
+static int ScreenGetWindowHeight() { return screen->GetClientHeight(); }
 
 DEFINE_ACTION_FUNCTION_NATIVE(_Screen, GetWidth, ScreenGetWidth)
 {
@@ -309,6 +311,18 @@ DEFINE_ACTION_FUNCTION_NATIVE(_Screen, GetHeight, ScreenGetHeight)
 {
 	PARAM_PROLOGUE;
 	ACTION_RETURN_INT(twod->GetHeight());
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(_Screen, GetWindowWidth, ScreenGetWindowWidth)
+{
+	PARAM_PROLOGUE;
+	ACTION_RETURN_INT(screen->GetClientWidth());
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(_Screen, GetWindowHeight, ScreenGetWindowHeight)
+{
+	PARAM_PROLOGUE;
+	ACTION_RETURN_INT(screen->GetClientHeight());
 }
 
 DEFINE_ACTION_FUNCTION(_Screen, PaletteColor)

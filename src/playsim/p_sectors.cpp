@@ -1041,7 +1041,9 @@ double NextHighestCeilingAt(sector_t *sec, double x, double y, double bottomz, d
 		for (int i = sec->e->XFloor.ffloors.Size() - 1; i >= 0; --i)
 		{
 			F3DFloor *rover = sec->e->XFloor.ffloors[i];
-			if (!(rover->flags & FF_SOLID) || !(rover->flags & FF_EXISTS)) continue;
+
+			if (!(rover->flags & FF_EXISTS)) continue;
+			if (!(rover->flags & FF_SOLID) && !(flags & FFCF_ALLOWWATER && rover->flags & FF_SWIMMABLE)) continue;
 
 			double ff_bottom = rover->bottom.plane->ZatPoint(x, y);
 			double ff_top = rover->top.plane->ZatPoint(x, y);
@@ -1055,6 +1057,7 @@ double NextHighestCeilingAt(sector_t *sec, double x, double y, double bottomz, d
 				if (resultffloor) *resultffloor = rover;
 				return ff_bottom;
 			}
+
 		}
 		if ((flags & FFCF_NOPORTALS) || sec->PortalBlocksMovement(sector_t::ceiling) || planeheight >= sec->GetPortalPlaneZ(sector_t::ceiling))
 		{ // Use sector's ceiling
@@ -1089,20 +1092,19 @@ double NextLowestFloorAt(sector_t *sec, double x, double y, double z, int flags,
 		for (unsigned i = 0; i < numff; ++i)
 		{
 			F3DFloor *ff = sec->e->XFloor.ffloors[i];
-
+			
+			if (!(ff->flags & FF_EXISTS)) continue;
+			if (!(ff->flags & FF_SOLID) && !(flags & FFCF_ALLOWWATER && ff->flags & FF_SWIMMABLE)) continue;
 
 			// either with feet above the 3D floor or feet with less than 'stepheight' map units inside
-			if ((ff->flags & (FF_EXISTS | FF_SOLID)) == (FF_EXISTS | FF_SOLID))
-			{
-				double ffz = ff->top.plane->ZatPoint(x, y);
-				double ffb = ff->bottom.plane->ZatPoint(x, y);
+			double ffz = ff->top.plane->ZatPoint(x, y);
+			double ffb = ff->bottom.plane->ZatPoint(x, y);
 
-				if (ffz > realfloor && (z >= ffz || (!(flags & FFCF_3DRESTRICT) && (ffb < z && ffz < z + steph))))
-				{ // This floor is beneath our feet.
-					if (resultsec) *resultsec = sec;
-					if (resultffloor) *resultffloor = ff;
-					return ffz;
-				}
+			if (ffz > realfloor && (z >= ffz || (!(flags & FFCF_3DRESTRICT) && (ffb < z && ffz < z + steph))))
+			{ // This floor is beneath our feet.
+				if (resultsec) *resultsec = sec;
+				if (resultffloor) *resultffloor = ff;
+				return ffz;
 			}
 		}
 		if ((flags & FFCF_NOPORTALS) || sec->PortalBlocksMovement(sector_t::floor) || planeheight <= sec->GetPortalPlaneZ(sector_t::floor))

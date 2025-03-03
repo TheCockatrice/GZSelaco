@@ -107,6 +107,7 @@ enum EVMAbortException
 class CVMAbortException : public CEngineError
 {
 public:
+	bool printedMessage = false;
 	static FString stacktrace;
 	CVMAbortException(EVMAbortException reason, const char *moreinfo, va_list ap);
 	void MaybePrintMessage();

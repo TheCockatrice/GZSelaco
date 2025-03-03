@@ -8,13 +8,12 @@ extend struct _
 	native readonly Array<@TerrainDef> Terrains;
 	native int validcount;
 	native play @DehInfo deh;
-	native readonly ui bool automapactive;	// is automap enabled?
-	native readonly ui bool viewactive;		// if automap is active, true = main automap, false = overlay automap.
+	native readonly bool automapactive;
 	native readonly TextureID skyflatnum;
 	native readonly int gametic;
 	native readonly int Net_Arbitrator;
 	native ui BaseStatusBar StatusBar;
-	native readonly Weapon WP_NOCHANGE;
+	native readonly WeaponBase WP_NOCHANGE;
 	deprecated("3.8", "Use Actor.isFrozen() or Level.isFrozen() instead") native readonly bool globalfreeze;
 	native int LocalViewPitch;
 	
@@ -52,21 +51,25 @@ extend struct Console
 
 extend struct Translation
 {
+	Color colors[256];
+	
+	native int AddTranslation();
 	native static bool SetPlayerTranslation(int group, int num, int plrnum, PlayerClass pclass);
+	native static int GetID(Name transname);
 }
 
 // This is needed because Actor contains a field named 'translation' which shadows the above.
 struct Translate version("4.5")
 {
-	static TranslationID MakeID(int group, int num)
+	static int MakeID(int group, int num)
 	{
-		return Translation.MakeID(group, num);
+		return (group << 16) + num;
 	}
 	static bool SetPlayerTranslation(int group, int num, int plrnum, PlayerClass pclass)
 	{
 		return Translation.SetPlayerTranslation(group, num, plrnum, pclass);
 	}
-	static TranslationID GetID(Name transname)
+	static int GetID(Name transname)
 	{
 		return Translation.GetID(transname);
 	}
@@ -89,8 +92,6 @@ extend struct GameInfoStruct
 	native double Armor2Percent;
 	native String ArmorIcon1;
 	native String ArmorIcon2;
-	native Name BasicArmorClass;
-	native Name HexenArmorClass;
 	native bool norandomplayerclass;
 	native Array<Name> infoPages;
 	native GIFont mStatscreenMapNameFont;
@@ -114,7 +115,6 @@ extend struct GameInfoStruct
 extend class Object
 {
 	private native static Object BuiltinNewDoom(Class<Object> cls, int outerclass, int compatibility);
-	private native static TranslationID BuiltinFindTranslation(Name nm);
 	private native static int BuiltinCallLineSpecial(int special, Actor activator, int arg1, int arg2, int arg3, int arg4, int arg5);
 	// These really should be global functions...
 	native static String G_SkillName();
@@ -122,27 +122,23 @@ extend class Object
 	native static double G_SkillPropertyFloat(int p);
 	deprecated("3.8", "Use Level.PickDeathMatchStart() instead") static vector3, int G_PickDeathmatchStart()
 	{
-		let [a,b] = level.PickDeathmatchStart();
-		return a, b;
+		return level.PickDeathmatchStart();
 	}
 	deprecated("3.8", "Use Level.PickPlayerStart() instead") static vector3, int G_PickPlayerStart(int pnum, int flags = 0)
 	{
-		let [a,b] = level.PickPlayerStart(pnum, flags);
-		return a, b;
+		return level.PickPlayerStart(pnum, flags);
 	}
 	deprecated("4.3", "Use S_StartSound() instead") native static void S_Sound (Sound sound_id, int channel, float volume = 1, float attenuation = ATTN_NORM, float pitch = 0.0, float startTime = 0.0);
-	native static void S_StartSound (Sound sound_id, int channel, int flags = 0, float volume = 1, float attenuation = ATTN_NORM, float pitch = 0.0, float startTime = 0.0);
-	native static void S_StartSoundAt(Vector3 pos, Sound sound_id, int channel, int flags = 0, double volume = 1, double attenuation = ATTN_NORM, double pitch = 0.0, double startTime = 0.0);
+	native static SoundHandle S_StartSound (Sound sound_id, int channel, int flags = 0, float volume = 1, float attenuation = ATTN_NORM, float pitch = 0.0, float startTime = 0.0);
+	native static void S_StopSound (int channel, Sound sound_id = -1);
 	native static void S_PauseSound (bool notmusic, bool notsfx);
 	native static void S_ResumeSound (bool notsfx);
+	native static void S_SoundPitch(int channel, float pitch = 1.0);
 	native static bool S_ChangeMusic(String music_name, int order = 0, bool looping = true, bool force = false);
 	native static float S_GetLength(Sound sound_id);
 	native static void MarkSound(Sound snd);
 	native static uint BAM(double angle);
 	native static void SetMusicVolume(float vol);
-	native clearscope static Object GetNetworkEntity(uint id);
-	native play void EnableNetworking(bool enable);
-	native clearscope uint GetNetworkID() const;
 }
 
 class Thinker : Object native play
@@ -171,6 +167,9 @@ class Thinker : Object native play
 		STAT_MAPMARKER,							// Map marker actors
 		STAT_DLIGHT,							// Dynamic lights
 
+		STAT_SLEEP = 60,						// Pool of sleepers, don't add to this without Sleep()
+		STAT_SLEEP_FOREVER = 61,				// Pool if indefinite sleepers. Adding to this pool is OK.
+
 		STAT_USER = 70,
 		STAT_USER_MAX = 90,
 
@@ -188,7 +187,12 @@ class Thinker : Object native play
 	virtual native void Tick();
 	virtual native void PostBeginPlay();
 	native void ChangeStatNum(int stat);
-	
+
+	virtual native void Sleep(int tics);
+	virtual native bool ShouldWake();
+	virtual native void Wake();
+	virtual native void SleepIndefinite();
+
 	static clearscope int Tics2Seconds(int tics)
 	{
 		return int(tics / TICRATE);
@@ -298,14 +302,14 @@ struct TraceResults native
 
 	native Sector CrossedWater;		// For Boom-style, Transfer_Heights-based deep water
 	native vector3 CrossedWaterPos;	// remember the position so that we can use it for spawning the splash
-	native F3DFloor Crossed3DWater;	// For 3D floor-based deep water
+	native F3DFloor Crossed3DWater;		// For 3D floor-based deep water
 	native vector3 Crossed3DWaterPos;
 }
 
 class LineTracer : Object native
 {
 	native @TraceResults Results;
-	native bool Trace(vector3 start, Sector sec, vector3 direction, double maxDist, ETraceFlags traceFlags, /* Line::ELineFlags */ uint wallMask = 0xFFFFFFFF, bool ignoreAllActors = false, Actor ignore = null);
+	native bool Trace(vector3 start, Sector sec, vector3 direction, double maxDist, ETraceFlags traceFlags);
 
 	virtual ETraceStatus TraceCallback()
 	{
@@ -331,7 +335,9 @@ struct DropItem native
 struct LevelInfo native
 {
 	native readonly int levelnum;
+	native readonly int levelgroup, areaNum;
 	native readonly String MapName;
+	native readonly String Description;
 	native readonly String NextMap;
 	native readonly String NextSecretMap;
 	native readonly String SkyPic1;
@@ -340,13 +346,13 @@ struct LevelInfo native
 	native readonly int cluster;
 	native readonly int partime;
 	native readonly int sucktime;
+	native readonly int invasiontier;
+	native readonly double tilt, tiltAngle;
 	native readonly int flags;
 	native readonly int flags2;
 	native readonly int flags3;
-	native readonly String LightningSound;
 	native readonly String Music;
 	native readonly String LevelName;
-	native readonly String MapLabel;
 	native readonly String AuthorName;
 	native readonly int musicorder;
 	native readonly float skyspeed1;
@@ -377,29 +383,6 @@ struct LevelInfo native
 	native static String MapChecksum(String mapname);
 }
 
-struct FSpawnParticleParams
-{
-	native Color color1;
-	native TextureID texture;
-	native int style;
-	native int flags;
-	native int lifetime;
-
-	native double size;
-	native double sizestep;
-
-	native Vector3 pos;
-	native Vector3 vel;
-	native Vector3 accel;
-	
-	native double startalpha;
-	native double fadestep;
-
-	native double startroll;
-	native double rollvel;
-	native double rollacc;
-};
-
 struct LevelLocals native
 {
 	enum EUDMF
@@ -417,8 +400,7 @@ struct LevelLocals native
 	native Array<@Line> Lines;
 	native Array<@Side> Sides;
 	native readonly Array<@Vertex> Vertexes;
-	native readonly Array<@LinePortal> LinePortals;
-	native internal readonly Array<@SectorPortal> SectorPortals;
+	native internal Array<@SectorPortal> SectorPortals;
 	
 	native readonly int time;
 	native readonly int maptime;
@@ -426,9 +408,11 @@ struct LevelLocals native
 	native readonly int starttime;
 	native readonly int partime;
 	native readonly int sucktime;
+	
 	native readonly int cluster;
 	native readonly int clusterflags;
 	native readonly int levelnum;
+	native readonly int levelgroup, areaNum;
 	native readonly String LevelName;
 	native readonly String MapName;
 	native String NextMap;
@@ -436,7 +420,6 @@ struct LevelLocals native
 	native readonly String F1Pic;
 	native readonly int maptype;
 	native readonly String AuthorName;
-	native String LightningSound;
 	native readonly String Music;
 	native readonly int musicorder;
 	native readonly TextureID skytexture1;
@@ -449,6 +432,8 @@ struct LevelLocals native
 	native int found_items;
 	native int total_monsters;
 	native int killed_monsters;
+	native int invasiontier;
+	native double tilt, tiltAngle;
 	native play double gravity;
 	native play double aircontrol;
 	native play double airfriction;
@@ -465,12 +450,13 @@ struct LevelLocals native
 	native readonly bool polygrind;
 	native readonly bool nomonsters;
 	native readonly bool allowrespawn;
+	native readonly bool rainymap;
+	native readonly bool saferoom;
 	deprecated("3.8", "Use Level.isFrozen() instead") native bool frozen;
 	native readonly bool infinite_flight;
 	native readonly bool no_dlg_freeze;
 	native readonly bool keepfullinventory;
 	native readonly bool removeitems;
-	native readonly bool useplayerstartz;
 	native readonly int fogdensity;
 	native readonly int outsidefogdensity;
 	native readonly int skyfog;
@@ -489,6 +475,7 @@ struct LevelLocals native
 	native void StartSlideshow(Name whichone = 'none');
 	native static void MakeScreenShot();
 	native static void MakeAutoSave();
+	native static bool MakeQuickSave();
 	native void WorldDone();
 	deprecated("3.8", "This function does nothing") static void RemoveAllBots(bool fromlist) { /* intentionally left as no-op. */ }
 	native ui Vector2 GetAutomapPosition();
@@ -507,7 +494,6 @@ struct LevelLocals native
 	native vector3, int PickPlayerStart(int pnum, int flags = 0);
 	native int isFrozen() const;
 	native void setFrozen(bool on);
-	native string LookupString(uint index);
 
 	native clearscope Sector PointInSector(Vector2 pt) const;
 
@@ -524,16 +510,10 @@ struct LevelLocals native
 	native clearscope vector2 Vec2Offset(vector2 pos, vector2 dir, bool absolute = false) const;
 	native clearscope vector3 Vec2OffsetZ(vector2 pos, vector2 dir, double atz, bool absolute = false) const;
 	native clearscope vector3 Vec3Offset(vector3 pos, vector3 dir, bool absolute = false) const;
-	native clearscope Vector2 GetDisplacement(int pg1, int pg2) const;
-	native clearscope int GetPortalGroupCount() const;
-	native clearscope int PointOnLineSide(Vector2 pos, Line l, bool precise = false) const;
-	native clearscope int ActorOnLineSide(Actor mo, Line l) const;
-	native clearscope int BoxOnLineSide(Vector2 pos, double radius, Line l) const;
 
 	native String GetChecksum() const;
 
 	native void ChangeSky(TextureID sky1, TextureID sky2 );
-	native void ForceLightning(int mode = 0, sound tempSound = "");
 
 	native SectorTagIterator CreateSectorTagIterator(int tag, line defline = null);
 	native LineIdIterator CreateLineIdIterator(int tag);
@@ -552,11 +532,11 @@ struct LevelLocals native
 	native void SecretExitLevel(int position);
 	native void ChangeLevel(string levelname, int position = 0, int flags = 0, int skill = -1);
 
-	native String GetClusterName();
-	native String GetEpisodeName();
+	native void StartNewGame(int episode, int skill = -1, string className = "", string levelName = "");
+	native void ReturnToTitle();
+	native void QuitGame();
 
-	native void SpawnParticle(FSpawnParticleParams p);
-	native VisualThinker SpawnVisualThinker(Class<VisualThinker> type);
+	native void SetNewSkill(int newSkill);
 }
 
 // a few values of this need to be readable by the play code.
@@ -590,10 +570,10 @@ struct State native
 	native readonly bool bCanRaise;
 	native readonly bool bDehacked;
 	
-	native int DistanceTo(state other) const;
-	native bool ValidateSpriteFrame() const;
-	native TextureID, bool, Vector2 GetSpriteTexture(int rotation, int skin = 0, Vector2 scale = (0,0), int spritenum = -1, int framenum = -1) const;
-	native bool InStateSequence(State base) const;
+	native int DistanceTo(state other);
+	native bool ValidateSpriteFrame();
+	native TextureID, bool, Vector2 GetSpriteTexture(int rotation, int skin = 0, Vector2 scale = (0,0));
+	native bool InStateSequence(State base);
 }
 
 struct TerrainDef native
@@ -614,9 +594,6 @@ struct TerrainDef native
 	native bool DamageOnLand;
 	native double Friction;
 	native double MoveFactor;
-	native Sound StepSound;
-	native double StepDistance;
-	native double StepDistanceMinVel;
 };
 
 enum EPickStart
@@ -625,13 +602,6 @@ enum EPickStart
 	PPS_NOBLOCKINGCHECK		= 2,
 }
 
-
-enum EMissileHitResult
-{
-	MHIT_DEFAULT = -1,
-	MHIT_DESTROY = 0,
-	MHIT_PASS = 1,
-}
 
 class SectorEffect : Thinker native
 {
@@ -806,3 +776,4 @@ struct FRailParams
 	native int SpiralOffset;
 	native int limit;
 };	// [RH] Shoot a railgun
+

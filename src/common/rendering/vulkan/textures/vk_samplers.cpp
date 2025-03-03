@@ -20,13 +20,13 @@
 **
 */
 
-#include <zvulkan/vulkanobjects.h>
-#include <zvulkan/vulkandevice.h>
-#include <zvulkan/vulkanbuilders.h>
+#include "volk/volk.h"
 #include "c_cvars.h"
 #include "v_video.h"
 #include "hw_cvars.h"
-#include "vulkan/system/vk_renderdevice.h"
+#include "vulkan/system/vk_device.h"
+#include "vulkan/system/vk_builders.h"
+#include "vulkan/system/vk_framebuffer.h"
 #include "vulkan/system/vk_commandbuffer.h"
 #include "vk_samplers.h"
 #include "hw_material.h"
@@ -66,7 +66,7 @@ static VkTexClamp TexClamp[] =
 	{ VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE },
 };
 
-VkSamplerManager::VkSamplerManager(VulkanRenderDevice* fb) : fb(fb)
+VkSamplerManager::VkSamplerManager(VulkanFrameBuffer* fb) : fb(fb)
 {
 	CreateHWSamplers();
 	CreateShadowmapSampler();
@@ -104,7 +104,7 @@ void VkSamplerManager::CreateHWSamplers()
 			builder.MaxLod(0.25f);
 		}
 		builder.DebugName("VkSamplerManager.mSamplers");
-		mSamplers[i] = builder.Create(fb->device.get());
+		mSamplers[i] = builder.Create(fb->device);
 	}
 
 	mSamplers[CLAMP_XY_NOMIP] = SamplerBuilder()
@@ -114,7 +114,7 @@ void VkSamplerManager::CreateHWSamplers()
 		.MipmapMode(VK_SAMPLER_MIPMAP_MODE_NEAREST)
 		.MaxLod(0.25f)
 		.DebugName("VkSamplerManager.mSamplers")
-		.Create(fb->device.get());
+		.Create(fb->device);
 
 	for (int i = CLAMP_NOFILTER; i <= CLAMP_NOFILTER_XY; i++)
 	{
@@ -125,7 +125,7 @@ void VkSamplerManager::CreateHWSamplers()
 			.MipmapMode(VK_SAMPLER_MIPMAP_MODE_NEAREST)
 			.MaxLod(0.25f)
 			.DebugName("VkSamplerManager.mSamplers")
-			.Create(fb->device.get());
+			.Create(fb->device);
 	}
 
 	// CAMTEX is repeating with texture filter and no mipmap
@@ -136,7 +136,32 @@ void VkSamplerManager::CreateHWSamplers()
 		.MipmapMode(VK_SAMPLER_MIPMAP_MODE_NEAREST)
 		.MaxLod(0.25f)
 		.DebugName("VkSamplerManager.mSamplers")
-		.Create(fb->device.get());
+		.Create(fb->device);
+
+
+	// Set up forced filters for UI drawing
+	{
+		SamplerBuilder builder;
+		builder.MagFilter(VK_FILTER_LINEAR);
+		builder.MinFilter(VK_FILTER_LINEAR);
+		builder.AddressMode(VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_REPEAT);
+		builder.MipmapMode(VK_SAMPLER_MIPMAP_MODE_NEAREST);
+		builder.MaxLod(0.25f);
+		mSamplers[CLAMP_NONE_FORCE_FILTER] = builder.Create(fb->device);
+		mSamplers[CLAMP_NONE_FORCE_FILTER]->SetDebugName("VkSamplerManager.mSamplers");
+	}
+
+	// And for clamped version
+	{
+		SamplerBuilder builder;
+		builder.MagFilter(VK_FILTER_LINEAR);
+		builder.MinFilter(VK_FILTER_LINEAR);
+		builder.AddressMode(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_SAMPLER_ADDRESS_MODE_REPEAT);
+		builder.MipmapMode(VK_SAMPLER_MIPMAP_MODE_NEAREST);
+		builder.MaxLod(0.25f);
+		mSamplers[CLAMP_XY_NOMIP_FORCE_FILTER] = builder.Create(fb->device);
+		mSamplers[CLAMP_XY_NOMIP_FORCE_FILTER]->SetDebugName("VkSamplerManager.mSamplers");
+	}
 }
 
 void VkSamplerManager::DeleteHWSamplers()
@@ -161,7 +186,7 @@ VulkanSampler* VkSamplerManager::Get(PPFilterMode filter, PPWrapMode wrap)
 		.MagFilter(filter == PPFilterMode::Nearest ? VK_FILTER_NEAREST : VK_FILTER_LINEAR)
 		.AddressMode(wrap == PPWrapMode::Clamp ? VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE : VK_SAMPLER_ADDRESS_MODE_REPEAT)
 		.DebugName("VkPostprocess.mSamplers")
-		.Create(fb->device.get());
+		.Create(fb->device);
 
 	return sampler.get();
 }
@@ -174,7 +199,7 @@ void VkSamplerManager::CreateShadowmapSampler()
 		.MagFilter(VK_FILTER_NEAREST)
 		.AddressMode(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
 		.DebugName("VkRenderBuffers.ShadowmapSampler")
-		.Create(fb->device.get());
+		.Create(fb->device);
 }
 
 void VkSamplerManager::CreateLightmapSampler()
@@ -185,5 +210,5 @@ void VkSamplerManager::CreateLightmapSampler()
 		.MagFilter(VK_FILTER_LINEAR)
 		.AddressMode(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
 		.DebugName("VkRenderBuffers.LightmapSampler")
-		.Create(fb->device.get());
+		.Create(fb->device);
 }

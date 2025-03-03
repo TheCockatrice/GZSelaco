@@ -69,13 +69,13 @@
 #include "s_music.h"
 #include "texturemanager.h"
 #include "v_draw.h"
-#include "d_main.h"
-#include "savegamemanager.h"
+#include "events.h"
+
 
 extern FILE *Logfile;
 extern bool insave;
 
-CVAR (Bool, sv_cheats, false, CVAR_SERVERINFO)
+CVAR (Bool, sv_cheats, false, CVAR_SERVERINFO | CVAR_LATCH)
 CVAR (Bool, sv_unlimited_pickup, false, CVAR_SERVERINFO)
 CVAR (Int, cl_blockcheats, 0, 0)
 
@@ -120,8 +120,8 @@ CCMD (god)
 	if (CheckCheatmode ())
 		return;
 
-	Net_WriteInt8 (DEM_GENERICCHEAT);
-	Net_WriteInt8 (CHT_GOD);
+	Net_WriteByte (DEM_GENERICCHEAT);
+	Net_WriteByte (CHT_GOD);
 }
 
 CCMD(god2)
@@ -129,8 +129,8 @@ CCMD(god2)
 	if (CheckCheatmode())
 		return;
 
-	Net_WriteInt8(DEM_GENERICCHEAT);
-	Net_WriteInt8(CHT_GOD2);
+	Net_WriteByte(DEM_GENERICCHEAT);
+	Net_WriteByte(CHT_GOD2);
 }
 
 CCMD (iddqd)
@@ -138,8 +138,8 @@ CCMD (iddqd)
 	if (CheckCheatmode ())
 		return;
 
-	Net_WriteInt8 (DEM_GENERICCHEAT);
-	Net_WriteInt8 (CHT_IDDQD);
+	Net_WriteByte (DEM_GENERICCHEAT);
+	Net_WriteByte (CHT_IDDQD);
 }
 
 CCMD (buddha)
@@ -147,8 +147,8 @@ CCMD (buddha)
 	if (CheckCheatmode())
 		return;
 
-	Net_WriteInt8(DEM_GENERICCHEAT);
-	Net_WriteInt8(CHT_BUDDHA);
+	Net_WriteByte(DEM_GENERICCHEAT);
+	Net_WriteByte(CHT_BUDDHA);
 }
 
 CCMD(buddha2)
@@ -156,8 +156,8 @@ CCMD(buddha2)
 	if (CheckCheatmode())
 		return;
 
-	Net_WriteInt8(DEM_GENERICCHEAT);
-	Net_WriteInt8(CHT_BUDDHA2);
+	Net_WriteByte(DEM_GENERICCHEAT);
+	Net_WriteByte(CHT_BUDDHA2);
 }
 
 CCMD (notarget)
@@ -165,8 +165,8 @@ CCMD (notarget)
 	if (CheckCheatmode ())
 		return;
 
-	Net_WriteInt8 (DEM_GENERICCHEAT);
-	Net_WriteInt8 (CHT_NOTARGET);
+	Net_WriteByte (DEM_GENERICCHEAT);
+	Net_WriteByte (CHT_NOTARGET);
 }
 
 CCMD (fly)
@@ -174,8 +174,8 @@ CCMD (fly)
 	if (CheckCheatmode ())
 		return;
 
-	Net_WriteInt8 (DEM_GENERICCHEAT);
-	Net_WriteInt8 (CHT_FLY);
+	Net_WriteByte (DEM_GENERICCHEAT);
+	Net_WriteByte (CHT_FLY);
 }
 
 /*
@@ -190,8 +190,8 @@ CCMD (noclip)
 	if (CheckCheatmode ())
 		return;
 
-	Net_WriteInt8 (DEM_GENERICCHEAT);
-	Net_WriteInt8 (CHT_NOCLIP);
+	Net_WriteByte (DEM_GENERICCHEAT);
+	Net_WriteByte (CHT_NOCLIP);
 }
 
 CCMD (noclip2)
@@ -199,8 +199,8 @@ CCMD (noclip2)
 	if (CheckCheatmode())
 		return;
 
-	Net_WriteInt8 (DEM_GENERICCHEAT);
-	Net_WriteInt8 (CHT_NOCLIP2);
+	Net_WriteByte (DEM_GENERICCHEAT);
+	Net_WriteByte (CHT_NOCLIP2);
 }
 
 CCMD (powerup)
@@ -208,8 +208,8 @@ CCMD (powerup)
 	if (CheckCheatmode ())
 		return;
 
-	Net_WriteInt8 (DEM_GENERICCHEAT);
-	Net_WriteInt8 (CHT_POWER);
+	Net_WriteByte (DEM_GENERICCHEAT);
+	Net_WriteByte (CHT_POWER);
 }
 
 CCMD (morphme)
@@ -219,12 +219,12 @@ CCMD (morphme)
 
 	if (argv.argc() == 1)
 	{
-		Net_WriteInt8 (DEM_GENERICCHEAT);
-		Net_WriteInt8 (CHT_MORPH);
+		Net_WriteByte (DEM_GENERICCHEAT);
+		Net_WriteByte (CHT_MORPH);
 	}
 	else
 	{
-		Net_WriteInt8 (DEM_MORPHEX);
+		Net_WriteByte (DEM_MORPHEX);
 		Net_WriteString (argv[1]);
 	}
 }
@@ -234,8 +234,8 @@ CCMD (anubis)
 	if (CheckCheatmode ())
 		return;
 
-	Net_WriteInt8 (DEM_GENERICCHEAT);
-	Net_WriteInt8 (CHT_ANUBIS);
+	Net_WriteByte (DEM_GENERICCHEAT);
+	Net_WriteByte (CHT_ANUBIS);
 }
 
 // [GRB]
@@ -244,8 +244,8 @@ CCMD (resurrect)
 	if (CheckCheatmode ())
 		return;
 
-	Net_WriteInt8 (DEM_GENERICCHEAT);
-	Net_WriteInt8 (CHT_RESSURECT);
+	Net_WriteByte (DEM_GENERICCHEAT);
+	Net_WriteByte (CHT_RESSURECT);
 }
 
 EXTERN_CVAR (Bool, chasedemo)
@@ -276,8 +276,8 @@ CCMD (chase)
 		if (gamestate != GS_LEVEL || (!(dmflags2 & DF2_CHASECAM) && deathmatch && CheckCheatmode ()))
 			return;
 
-		Net_WriteInt8 (DEM_GENERICCHEAT);
-		Net_WriteInt8 (CHT_CHASECAM);
+		Net_WriteByte (DEM_GENERICCHEAT);
+		Net_WriteByte (CHT_CHASECAM);
 	}
 }
 
@@ -309,12 +309,12 @@ CCMD (idclev)
 		// Catch invalid maps.
 		mapname = CalcMapName (epsd, map);
 
-		if (!P_CheckMapData(mapname.GetChars()))
+		if (!P_CheckMapData(mapname))
 			return;
 
 		// So be it.
-		Printf ("%s\n", GStrings.GetString("STSTR_CLEV"));
-      	G_DeferedInitNew (mapname.GetChars());
+		Printf ("%s\n", GStrings("STSTR_CLEV"));
+      	G_DeferedInitNew (mapname);
 		//players[0].health = 0;		// Force reset
 	}
 }
@@ -334,11 +334,11 @@ CCMD (hxvisit)
 		{
 			// Just because it's in MAPINFO doesn't mean it's in the wad.
 
-			if (P_CheckMapData(mapname.GetChars()))
+			if (P_CheckMapData(mapname))
 			{
 				// So be it.
-				Printf ("%s\n", GStrings.GetString("STSTR_CLEV"));
-      			G_DeferedInitNew (mapname.GetChars());
+				Printf ("%s\n", GStrings("STSTR_CLEV"));
+      			G_DeferedInitNew (mapname);
 				return;
 			}
 		}
@@ -386,12 +386,12 @@ CCMD (changemap)
 			{
 				if (argv.argc() > 2)
 				{
-					Net_WriteInt8 (DEM_CHANGEMAP2);
-					Net_WriteInt8 (atoi(argv[2]));
+					Net_WriteByte (DEM_CHANGEMAP2);
+					Net_WriteByte (atoi(argv[2]));
 				}
 				else
 				{
-					Net_WriteInt8 (DEM_CHANGEMAP);
+					Net_WriteByte (DEM_CHANGEMAP);
 				}
 				Net_WriteString (mapname);
 			}
@@ -408,51 +408,17 @@ CCMD (changemap)
 	}
 }
 
-CCMD (changeskill)
-{
-	if (!players[consoleplayer].mo || !usergame)
-	{
-		Printf ("Cannot change skills while not in a game.\n");
-		return;
-	}
-
-	if (!players[consoleplayer].settings_controller && netgame)
-	{
-		Printf ("Only setting controllers can change the skill.\n");
-		return;
-	}
-
-	if (argv.argc() == 2)
-	{
-		int skill = atoi(argv[1]);
-		if ((unsigned)skill >= AllSkills.Size())
-		{
-			Printf ("Skill %d is out of range.\n", skill);
-		}
-		else
-		{
-			Net_WriteInt8(DEM_CHANGESKILL);
-			Net_WriteInt32(skill);
-			Printf ("Skill %d will take effect on the next map.\n", skill);
-		}
-	}
-	else
-	{
-		Printf ("Usage: changeskill <skill>\n");
-	}
-}
-
 CCMD (give)
 {
 	if (CheckCheatmode () || argv.argc() < 2)
 		return;
 
-	Net_WriteInt8 (DEM_GIVECHEAT);
+	Net_WriteByte (DEM_GIVECHEAT);
 	Net_WriteString (argv[1]);
 	if (argv.argc() > 2)
-		Net_WriteInt32(atoi(argv[2]));
+		Net_WriteLong(atoi(argv[2]));
 	else
-		Net_WriteInt32(0);
+		Net_WriteLong(0);
 }
 
 CCMD (take)
@@ -460,12 +426,12 @@ CCMD (take)
 	if (CheckCheatmode () || argv.argc() < 2)
 		return;
 
-	Net_WriteInt8 (DEM_TAKECHEAT);
+	Net_WriteByte (DEM_TAKECHEAT);
 	Net_WriteString (argv[1]);
 	if (argv.argc() > 2)
-		Net_WriteInt32(atoi (argv[2]));
+		Net_WriteLong(atoi (argv[2]));
 	else
-		Net_WriteInt32 (0);
+		Net_WriteLong (0);
 }
 
 CCMD(setinv)
@@ -473,17 +439,17 @@ CCMD(setinv)
 	if (CheckCheatmode() || argv.argc() < 2)
 		return;
 
-	Net_WriteInt8(DEM_SETINV);
+	Net_WriteByte(DEM_SETINV);
 	Net_WriteString(argv[1]);
 	if (argv.argc() > 2)
-		Net_WriteInt32(atoi(argv[2]));
+		Net_WriteLong(atoi(argv[2]));
 	else
-		Net_WriteInt32(0);
+		Net_WriteLong(0);
 
 	if (argv.argc() > 3)
-		Net_WriteInt8(!!atoi(argv[3]));
+		Net_WriteByte(!!atoi(argv[3]));
 	else
-		Net_WriteInt8(0);
+		Net_WriteByte(0);
 
 }
 
@@ -514,18 +480,18 @@ CCMD (puke)
 
 		if (script > 0)
 		{
-			Net_WriteInt8 (DEM_RUNSCRIPT);
-			Net_WriteInt16 (script);
+			Net_WriteByte (DEM_RUNSCRIPT);
+			Net_WriteWord (script);
 		}
 		else
 		{
-			Net_WriteInt8 (DEM_RUNSCRIPT2);
-			Net_WriteInt16 (-script);
+			Net_WriteByte (DEM_RUNSCRIPT2);
+			Net_WriteWord (-script);
 		}
-		Net_WriteInt8 (argn);
+		Net_WriteByte (argn);
 		for (i = 0; i < argn; ++i)
 		{
-			Net_WriteInt32 (arg[i]);
+			Net_WriteLong (arg[i]);
 		}
 	}
 }
@@ -558,12 +524,12 @@ CCMD (pukename)
 				arg[i] = atoi(argv[argstart + i]);
 			}
 		}
-		Net_WriteInt8(DEM_RUNNAMEDSCRIPT);
+		Net_WriteByte(DEM_RUNNAMEDSCRIPT);
 		Net_WriteString(argv[1]);
-		Net_WriteInt8(argn | (always << 7));
+		Net_WriteByte(argn | (always << 7));
 		for (i = 0; i < argn; ++i)
 		{
-			Net_WriteInt32(arg[i]);
+			Net_WriteLong(arg[i]);
 		}
 	}
 }
@@ -604,12 +570,12 @@ CCMD (special)
 				return;
 			}
 		}
-		Net_WriteInt8(DEM_RUNSPECIAL);
-		Net_WriteInt16(specnum);
-		Net_WriteInt8(argc - 2);
+		Net_WriteByte(DEM_RUNSPECIAL);
+		Net_WriteWord(specnum);
+		Net_WriteByte(argc - 2);
 		for (int i = 2; i < argc; ++i)
 		{
-			Net_WriteInt32(atoi(argv[i]));
+			Net_WriteLong(atoi(argv[i]));
 		}
 	}
 }
@@ -640,10 +606,10 @@ CCMD (warp)
 	}
 	else
 	{
-		Net_WriteInt8 (DEM_WARPCHEAT);
-		Net_WriteInt16 (atoi (argv[1]));
-		Net_WriteInt16 (atoi (argv[2]));
-		Net_WriteInt16 (argv.argc() == 3 ? ONFLOORZ/65536 : atoi (argv[3]));
+		Net_WriteByte (DEM_WARPCHEAT);
+		Net_WriteWord (atoi (argv[1]));
+		Net_WriteWord (atoi (argv[2]));
+		Net_WriteWord (argv.argc() == 3 ? ONFLOORZ/65536 : atoi (argv[3]));
 	}
 }
 
@@ -668,27 +634,8 @@ UNSAFE_CCMD (load)
 		return;
 	}
 	FString fname = argv[1];
-	FixPathSeperator(fname);
-	if (fname[0] == '/')
-	{
-		Printf("saving to an absolute path is not allowed\n");
-		return;
-	}
-	if (fname.IndexOf("..") > 0)
-	{
-		Printf("'..' not allowed in file names\n");
-		return;
-	}
-#ifdef _WIN32
-	// block all invalid characters for Windows file names
-	if (fname.IndexOfAny(":?*<>|") >= 0)
-	{
-		Printf("file name contains invalid characters\n");
-		return;
-	}
-#endif
-	fname = G_BuildSaveName(fname.GetChars());
-	G_LoadGame (fname.GetChars());
+	DefaultExtension (fname, "." SAVEGAME_EXT);
+    G_LoadGame (fname);
 }
 
 //==========================================================================
@@ -699,35 +646,24 @@ UNSAFE_CCMD (load)
 //
 //==========================================================================
 
-UNSAFE_CCMD(save)
+UNSAFE_CCMD (save)
 {
-	if (argv.argc() < 2 || argv.argc() > 3 || argv[1][0] == 0)
+    if (argv.argc() < 2 || argv.argc() > 3)
 	{
         Printf ("usage: save <filename> [description]\n");
         return;
     }
-	FString fname = argv[1];
-	FixPathSeperator(fname);
-	if (fname[0] == '/')
-	{
-		Printf("saving to an absolute path is not allowed\n");
+
+	// @Cockatrice - Consult the event managers to determine if we are actually allowed to save at this moment
+	if (!staticEventManager.IsSaveAllowed(false)) {
+		if (developer > 0)
+			Printf("Save \"%s\" rejected by event manager.", argv[1]);
 		return;
 	}
-	if (fname.IndexOf("..") > 0)
-	{
-		Printf("'..' not allowed in file names\n");
-		return;
-	}
-#ifdef _WIN32
-	// block all invalid characters for Windows file names
-	if (fname.IndexOfAny(":?*<>|") >= 0)
-	{
-		Printf("file name contains invalid characters\n");
-		return;
-	}
-#endif
-    fname = G_BuildSaveName(fname.GetChars());
-	G_SaveGame (fname.GetChars(), argv.argc() > 2 ? argv[2] : argv[1]);
+
+    FString fname = argv[1];
+	DefaultExtension (fname, "." SAVEGAME_EXT);
+	G_SaveGame (fname, argv.argc() > 2 ? argv[2] : argv[1]);
 }
 
 
@@ -952,8 +888,8 @@ CCMD(thaw)
 	if (CheckCheatmode())
 		return;
 
-	Net_WriteInt8 (DEM_GENERICCHEAT);
-	Net_WriteInt8 (CHT_CLEARFROZENPROPS);
+	Net_WriteByte (DEM_GENERICCHEAT);
+	Net_WriteByte (CHT_CLEARFROZENPROPS);
 }
 
 //-----------------------------------------------------------------------------
@@ -972,7 +908,7 @@ CCMD(nextmap)
 	
 	if (primaryLevel->NextMap.Len() > 0 && primaryLevel->NextMap.Compare("enDSeQ", 6))
 	{
-		G_DeferedInitNew(primaryLevel->NextMap.GetChars());
+		G_DeferedInitNew(primaryLevel->NextMap);
 	}
 	else
 	{
@@ -996,7 +932,7 @@ CCMD(nextsecret)
 
 	if (primaryLevel->NextSecretMap.Len() > 0 && primaryLevel->NextSecretMap.Compare("enDSeQ", 6))
 	{
-		G_DeferedInitNew(primaryLevel->NextSecretMap.GetChars());
+		G_DeferedInitNew(primaryLevel->NextSecretMap);
 	}
 	else
 	{
@@ -1016,7 +952,7 @@ CCMD(currentpos)
 	if(mo)
 	{
 		Printf("Current player position: (%1.3f,%1.3f,%1.3f), angle: %1.3f, floorheight: %1.3f, sector:%d, sector lightlevel: %d, actor lightlevel: %d\n",
-			mo->X(), mo->Y(), mo->Z(), mo->Angles.Yaw.Normalized360().Degrees(), mo->floorz, mo->Sector->sectornum, mo->Sector->lightlevel, mo->LightLevel);
+			mo->X(), mo->Y(), mo->Z(), mo->Angles.Yaw.Normalized360().Degrees, mo->floorz, mo->Sector->sectornum, mo->Sector->lightlevel, mo->LightLevel);
 	}
 	else
 	{
@@ -1050,7 +986,7 @@ static void PrintSecretString(const char *string, bool thislevel)
 			}
 			else if (string[1] == 'T' || string[1] == 't')
 			{
-				int tid = (int)strtoll(string+2, (char**)&string, 10);
+				long tid = (long)strtoll(string+2, (char**)&string, 10);
 				if (*string == ';') string++;
 				auto it = primaryLevel->GetActorIterator(tid);
 				AActor *actor;
@@ -1068,7 +1004,7 @@ static void PrintSecretString(const char *string, bool thislevel)
 				else colstr = TEXTCOLOR_GREEN;
 			}
 		}
-		auto brok = V_BreakLines(CurrentConsoleFont, twod->GetWidth()*95/100, *string == '$' ? GStrings.GetString(++string) : string);
+		auto brok = V_BreakLines(CurrentConsoleFont, twod->GetWidth()*95/100, *string == '$' ? GStrings(++string) : string);
 
 		for (auto &line : brok)
 		{
@@ -1086,7 +1022,7 @@ static void PrintSecretString(const char *string, bool thislevel)
 CCMD(secret)
 {
 	const char *mapname = argv.argc() < 2? primaryLevel->MapName.GetChars() : argv[1];
-	bool thislevel = !stricmp(mapname, primaryLevel->MapName.GetChars());
+	bool thislevel = !stricmp(mapname, primaryLevel->MapName);
 	bool foundsome = false;
 
 	int lumpno=fileSystem.CheckNumForName("SECRETS");
@@ -1106,13 +1042,13 @@ CCMD(secret)
 		{
 			if (readbuffer[0] == '[')
 			{
-				inlevel = !strnicmp(readbuffer, maphdr.GetChars(), maphdr.Len());
+				inlevel = !strnicmp(readbuffer, maphdr, maphdr.Len());
 				if (!foundsome)
 				{
 					FString levelname;
 					level_info_t *info = FindLevelInfo(mapname);
-					FString ln = info->LookupLevelName();
-					levelname.Format("%s - %s", mapname, ln.GetChars());
+					const char *ln = !(info->flags & LEVEL_LOOKUPLEVELNAME)? info->LevelName.GetChars() : GStrings[info->LevelName.GetChars()];
+					levelname.Format("%s - %s", mapname, ln);
 					Printf(TEXTCOLOR_YELLOW "%s\n", levelname.GetChars());
 					size_t llen = levelname.Len();
 					levelname = "";
@@ -1133,7 +1069,7 @@ CCMD(secret)
 					// line complete so print it.
 					linebuild.Substitute("\r", "");
 					linebuild.StripRight(" \t\n");
-					PrintSecretString(linebuild.GetChars(), thislevel);
+					PrintSecretString(linebuild, thislevel);
 					linebuild = "";
 				}
 			}
@@ -1147,7 +1083,7 @@ CCMD(angleconvtest)
 	Printf("Testing degrees to angle conversion:\n");
 	for (double ang = -5 * 180.; ang < 5 * 180.; ang += 45.)
 	{
-		unsigned ang1 = DAngle::fromDeg(ang).BAMs();
+		unsigned ang1 = DAngle(ang).BAMs();
 		unsigned ang2 = (unsigned)(ang * (0x40000000 / 90.));
 		unsigned ang3 = (unsigned)(int)(ang * (0x40000000 / 90.));
 		Printf("Angle = %.5f: xs_RoundToInt = %08x, unsigned cast = %08x, signed cast = %08x\n",
@@ -1201,7 +1137,7 @@ CCMD(idmus)
 				}
 				else
 				{
-					Printf("%s\n", GStrings.GetString("STSTR_NOMUS"));
+					Printf("%s\n", GStrings("STSTR_NOMUS"));
 					return;
 				}
 			}
@@ -1210,17 +1146,17 @@ CCMD(idmus)
 				map = CalcMapName(argv[1][0] - '0', argv[1][1] - '0');
 			}
 
-			if ((info = FindLevelInfo(map.GetChars())))
+			if ((info = FindLevelInfo(map)))
 			{
 				if (info->Music.IsNotEmpty())
 				{
-					S_ChangeMusic(info->Music.GetChars(), info->musicorder);
-					Printf("%s\n", GStrings.GetString("STSTR_MUS"));
+					S_ChangeMusic(info->Music, info->musicorder);
+					Printf("%s\n", GStrings("STSTR_MUS"));
 				}
 			}
 			else
 			{
-				Printf("%s\n", GStrings.GetString("STSTR_NOMUS"));
+				Printf("%s\n", GStrings("STSTR_NOMUS"));
 			}
 		}
 	}
@@ -1271,85 +1207,3 @@ CCMD(dumpactors)
 		}
 	}
 }
-
-const char* testlocalised(const char* in)
-{
-	const char *out = GStrings.GetLanguageString(in, FStringTable::default_table);
-	if (in[0] == '$')
-		out = GStrings.GetLanguageString(in + 1, FStringTable::default_table);
-	if (out)
-		return out;
-	return in;
-}
-
-CCMD (mapinfo)
-{
-	level_info_t *myLevel = nullptr;
-	if (players[consoleplayer].mo && players[consoleplayer].mo->Level)
-		myLevel = players[consoleplayer].mo->Level->info;
-
-	if (argv.argc() > 1)
-	{
-		if (P_CheckMapData(argv[1]))
-			myLevel = FindLevelInfo(argv[1]);
-		else
-		{
-			Printf("Mapname '%s' not found\n", argv[1]);
-			return;
-		}
-	}
-
-	if (!myLevel)
-	{
-		Printf("Not in a level\n");
-		return;
-	}
-
-	Printf("[ Map Info For: '%s' ]\n\n", myLevel->MapName.GetChars());
-
-	if (myLevel->LevelName.IsNotEmpty())
-		Printf("           LevelName: %s\n", myLevel->LookupLevelName().GetChars());
-
-	if (myLevel->AuthorName.IsNotEmpty())
-		Printf("          AuthorName: %s\n", testlocalised(myLevel->AuthorName.GetChars()));
-
-	if (myLevel->levelnum)
-		Printf("            LevelNum: %i\n", myLevel->levelnum);
-
-	if (myLevel->NextMap.IsNotEmpty())
-		Printf("                Next: %s\n", myLevel->NextMap.GetChars());
-
-	if (myLevel->NextSecretMap.IsNotEmpty())
-		Printf("          SecretNext: %s\n", myLevel->NextSecretMap.GetChars());
-
-	if (myLevel->Music.IsNotEmpty())
-		Printf("               Music: %s%s\n", myLevel->Music[0] == '$'? "D_" : "", testlocalised(myLevel->Music.GetChars()));
-
-		Printf("        PixelStretch: %f\n", myLevel->pixelstretch);
-
-	if (myLevel->RedirectType != NAME_None)
-		Printf("     Redirect (Item): %s\n", myLevel->RedirectType.GetChars());
-
-	if (myLevel->RedirectMapName.IsNotEmpty())
-		Printf("      Redirect (Map): %s\n", myLevel->RedirectMapName.GetChars());
-
-	if (myLevel->RedirectCVAR != NAME_None)
-		Printf("CVAR_Redirect (CVAR): %s\n", myLevel->RedirectCVAR.GetChars());
-
-	if (myLevel->RedirectCVARMapName.IsNotEmpty())
-		Printf(" CVAR_Redirect (Map): %s\n", myLevel->RedirectCVARMapName.GetChars());
-
-		Printf("           LightMode: %i\n", (int8_t)myLevel->lightmode);
-
-	if (players[consoleplayer].mo && players[consoleplayer].mo->Level)
-	{
-		level_info_t *check = myLevel->CheckLevelRedirect();
-		if (check)
-			Printf("Level IS currently being redirected to '%s'!\n", check->MapName.GetChars());
-		else
-			Printf("Level is currently NOT being redirected!\n");
-	}
-	else
-		Printf("Level redirection is currently not being tested - not in game!\n");
-}
-

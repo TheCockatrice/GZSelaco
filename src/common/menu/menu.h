@@ -237,6 +237,8 @@ public:
 	bool DontBlur;
 	bool Animated;
 	bool AnimatedTransition;
+	bool ReceiveAllInputEvents;
+	float BlurAmount;
 	static int InMenu;
 
 	DMenu(DMenu *parent = NULL);

@@ -167,17 +167,15 @@ std2:
 		'vector2'					{ RET(TK_Vector2); }
 		'vector3'					{ RET(TK_Vector3); }
 		'map'						{ RET(TK_Map); }
-		'mapiterator'				{ RET(ParseVersion >= MakeVersion(4, 10, 0)? TK_MapIterator : TK_Identifier); }
 		'array'						{ RET(TK_Array); }
-		'function'					{ RET(ParseVersion >= MakeVersion(4, 12, 0)? TK_FunctionType : TK_Identifier); }
 		'in'						{ RET(TK_In); }
 		'sizeof'					{ RET(TK_SizeOf); }
 		'alignof'					{ RET(TK_AlignOf); }
 
 		/* Other keywords from UnrealScript */
 		'abstract'					{ RET(TK_Abstract); }
-		'foreach'					{ RET(ParseVersion >= MakeVersion(4, 10, 0)? TK_ForEach : TK_Identifier); }
-		'unsafe'					{ RET(ParseVersion >= MakeVersion(4, 15, 1)? TK_Unsafe : TK_Identifier); }
+		'singleunit'				{ RET(TK_Unit); }
+		'foreach'					{ RET(TK_ForEach); }
 		'true'						{ RET(TK_True); }
 		'false'						{ RET(TK_False); }
 		'none'						{ RET(TK_None); }
@@ -205,8 +203,6 @@ std2:
 		'super'						{ RET(ParseVersion >= MakeVersion(1, 0, 0)? TK_Super : TK_Identifier); }
 		'stop'						{ RET(TK_Stop); }
 		'null'						{ RET(TK_Null); }
-		'nullptr'					{ RET(ParseVersion >= MakeVersion(4, 9, 0)? TK_Null : TK_Identifier); }
-		'sealed'					{ RET(ParseVersion >= MakeVersion(4, 12, 0)? TK_Sealed : TK_Identifier); }
 
 		'is'						{ RET(ParseVersion >= MakeVersion(1, 0, 0)? TK_Is : TK_Identifier); }
 		'replaces'					{ RET(ParseVersion >= MakeVersion(1, 0, 0)? TK_Replaces : TK_Identifier); }
@@ -223,7 +219,6 @@ std2:
 		'bright'					{ RET(StateOptions ? TK_Bright : TK_Identifier); }
 		'fast'						{ RET(StateOptions ? TK_Fast : TK_Identifier); }
 		'slow'						{ RET(StateOptions ? TK_Slow : TK_Identifier); }
-		'ticadjust'					{ RET(StateOptions ? TK_NoDelay : TK_Identifier); }	
 		'nodelay'					{ RET(StateOptions ? TK_NoDelay : TK_Identifier); }
 		'canraise'					{ RET(StateOptions ? TK_CanRaise : TK_Identifier); }
 		'offset'					{ RET(StateOptions ? TK_Offset : TK_Identifier); }

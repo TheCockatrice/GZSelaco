@@ -5,6 +5,8 @@ s +back
 a +moveleft
 d +moveright
 space +jump
-x crouch
+ctrl +crouch
 e +use
+t LastWeapon
 mouse2 +altattack
+mapbind f am_togglefollow

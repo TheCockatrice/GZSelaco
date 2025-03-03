@@ -44,7 +44,6 @@
 #include "c_functions.h"
 #include "gstrings.h"
 #include "texturemanager.h"
-#include "d_main.h"
 
 //==========================================================================
 //
@@ -75,7 +74,7 @@ CCMD(listlights)
 			
 			if (dl->target)
 			{
-				FTextureID spr = sprites[dl->target->sprite].GetSpriteFrame(dl->target->frame, 0, nullAngle, nullptr);
+				FTextureID spr = sprites[dl->target->sprite].GetSpriteFrame(dl->target->frame, 0, 0., nullptr);
 				Printf(", frame = %s ", TexMan.GetGameTexture(spr)->GetName().GetChars());
 			}
 			
@@ -129,7 +128,7 @@ CCMD (spray)
 		return;
 	}
 	
-	Net_WriteInt8 (DEM_SPRAY);
+	Net_WriteByte (DEM_SPRAY);
 	Net_WriteString (argv[1]);
 }
 
@@ -141,58 +140,30 @@ CCMD (spray)
 
 CCMD (mapchecksum)
 {
-	if (argv.argc() == 1)
-	{  //current map
-		const char *wadname = fileSystem.GetResourceFileName(fileSystem.GetFileContainer(level.lumpnum));
-
-		for (size_t i = 0; i < 16; ++i)
-		{
-			Printf("%02X", level.md5[i]);
-		}
-
-		Printf(" // %s %s\n", wadname, level.MapName.GetChars());
-	}
-	else if (argv.argc() < 2)
+	MapData *map;
+	uint8_t cksum[16];
+	
+	if (argv.argc() < 2)
 	{
 		Printf("Usage: mapchecksum <map> ...\n");
 	}
-	else
+	for (int i = 1; i < argv.argc(); ++i)
 	{
-		MapData *map;
-		uint8_t cksum[16];
-
-		for (int i = 1; i < argv.argc(); ++i)
+		map = P_OpenMapData(argv[i], true);
+		if (map == NULL)
 		{
-			if(!strcmp(argv[i], "*"))
+			Printf("Cannot load %s as a map\n", argv[i]);
+		}
+		else
+		{
+			map->GetChecksum(cksum);
+			const char *wadname = fileSystem.GetResourceFileName(fileSystem.GetFileContainer(map->lumpnum));
+			delete map;
+			for (size_t j = 0; j < sizeof(cksum); ++j)
 			{
-				const char *wadname = fileSystem.GetResourceFileName(fileSystem.GetFileContainer(level.lumpnum));
-
-				for (size_t i = 0; i < 16; ++i)
-				{
-					Printf("%02X", level.md5[i]);
-				}
-
-				Printf(" // %s %s\n", wadname, level.MapName.GetChars());
+				Printf("%02X", cksum[j]);
 			}
-			else
-			{
-				map = P_OpenMapData(argv[i], true);
-				if (map == NULL)
-				{
-					Printf("Cannot load %s as a map\n", argv[i]);
-				}
-				else
-				{
-					map->GetChecksum(cksum);
-					const char *wadname = fileSystem.GetResourceFileName(fileSystem.GetFileContainer(map->lumpnum));
-					delete map;
-					for (size_t j = 0; j < sizeof(cksum); ++j)
-					{
-						Printf("%02X", cksum[j]);
-					}
-					Printf(" // %s %s\n", wadname, argv[i]);
-				}
-			}
+			Printf(" // %s %s\n", wadname, argv[i]);
 		}
 	}
 }
@@ -389,29 +360,37 @@ CCMD(targetinv)
 
 CCMD(listmaps)
 {
-	int iwadNum = fileSystem.GetIwadNum();
+	bool all = argv.argc() > 1 && strcmp(argv[1], "all") == 0;
 
 	for (unsigned i = 0; i < wadlevelinfos.Size(); i++)
 	{
 		level_info_t *info = &wadlevelinfos[i];
-		MapData *map = P_OpenMapData(info->MapName.GetChars(), true);
+		MapData *map = P_OpenMapData(info->MapName, true);
 
 		if (map != NULL)
 		{
-			int mapWadNum = fileSystem.GetFileContainer(map->lumpnum);
-
-			if (argv.argc() == 1 
+			if (argv.argc() == 1 || all
 			    || CheckWildcards(argv[1], info->MapName.GetChars()) 
 			    || CheckWildcards(argv[1], info->LookupLevelName().GetChars())
-			    || CheckWildcards(argv[1], fileSystem.GetResourceFileName(mapWadNum)))
+			    || CheckWildcards(argv[1], fileSystem.GetResourceFileName(fileSystem.GetFileContainer(map->lumpnum))))
 			{
-				bool isFromPwad = mapWadNum != iwadNum;
-
-				const char* lineColor = isFromPwad ? TEXTCOLOR_LIGHTBLUE : "";
-
-				Printf("%s%s: '%s' (%s)\n", lineColor, info->MapName.GetChars(),
-					info->LookupLevelName().GetChars(),
-					fileSystem.GetResourceFileName(mapWadNum));
+				if (all) {
+					Printf("\n%s: '%s' (%s)\n\tLevelNum: %d\n\tAreaNum: %d\n\tCluster: %d\n",
+						info->MapName.GetChars(),
+						info->LookupLevelName().GetChars(),
+						fileSystem.GetResourceFileName(fileSystem.GetFileContainer(map->lumpnum)),
+						info->levelnum,
+						info->areaNum,
+						info->cluster
+					);
+				}
+				else {
+					Printf("%s: '%s' (%s)\n",
+						info->MapName.GetChars(),
+						info->LookupLevelName().GetChars(),
+						fileSystem.GetResourceFileName(fileSystem.GetFileContainer(map->lumpnum))
+					);
+				}
 			}
 			delete map;
 		}

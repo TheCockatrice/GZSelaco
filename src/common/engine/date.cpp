@@ -219,7 +219,7 @@ static void FormatTime(const FString& timeForm, int timeVal, FString* result)
 	if (!error.IsEmpty())
 		ThrowAbortException(X_FORMAT_ERROR, "'%s' is not a valid format specifier of SystemTime.Format()", error.GetChars());
 
-	time_t val = timeVal;
+	time_t val = timeVal != -1 ? timeVal : GetEpochTime();
 	struct tm* timeinfo = localtime(&val);
 	if (timeinfo != nullptr)
 	{

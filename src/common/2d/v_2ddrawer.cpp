@@ -275,6 +275,10 @@ bool F2DDrawer::SetStyle(FGameTexture *tex, DrawParms &parms, PalEntry &vertexco
 	float alpha;
 	bool stencilling;
 
+	if (parms.bilinear) {
+		quad.mFlags |= DTF_ForceFilter;
+	}
+
 	if (style.Flags & STYLEF_TransSoulsAlpha)
 	{
 		alpha = transsouls;

@@ -99,6 +99,20 @@ void I_DebugPrintf(const char *fmt,...)
 	throw CRecoverableError(errortext);
 }
 
+
+void I_Error2(int type, const char* error, ...)
+{
+	va_list argptr;
+	char errortext[MAX_ERRORTEXT];
+
+	va_start(argptr, error);
+	vsnprintf(errortext, MAX_ERRORTEXT, error, argptr);
+	va_end(argptr);
+	I_DebugPrint(errortext);
+
+	throw CRecoverableError2(type, errortext);
+}
+
 //==========================================================================
 //
 // I_FatalError

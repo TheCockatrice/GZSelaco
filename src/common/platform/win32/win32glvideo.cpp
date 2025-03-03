@@ -61,11 +61,14 @@ extern "C" {
 HGLRC zd_wglCreateContext(HDC Arg1);
 BOOL zd_wglDeleteContext(HGLRC Arg1);
 BOOL zd_wglMakeCurrent(HDC Arg1, HGLRC Arg2);
+HGLRC zd_wglGetCurrentContext(void);
+BOOL zd_wglShareContext(HGLRC contextA, HGLRC contextB);
 PROC zd_wglGetProcAddress(LPCSTR name);
 }
 
 EXTERN_CVAR(Int, vid_adapter)
 EXTERN_CVAR(Bool, vid_hdr)
+EXTERN_CVAR(Int, gl_max_transfer_threads)
 
 CUSTOM_CVAR(Bool, gl_debug, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG | CVAR_NOINITCALL)
 {
@@ -85,6 +88,9 @@ extern bool vid_hdr_active;
 // these get used before GLEW is initialized so we have to use separate pointers with different names
 PFNWGLCHOOSEPIXELFORMATARBPROC myWglChoosePixelFormatARB; // = (PFNWGLCHOOSEPIXELFORMATARBPROC)zd_wglGetProcAddress("wglChoosePixelFormatARB");
 PFNWGLCREATECONTEXTATTRIBSARBPROC myWglCreateContextAttribsARB;
+
+// @Cockatrice - Additional contexts may be fetched for background loading
+HGLRC gl_auxContexts[4] = { NULL, NULL, NULL, NULL };		
 
 
 //==========================================================================
@@ -382,6 +388,8 @@ bool Win32GLVideo::SetupPixelFormat(int multisample)
 
 bool Win32GLVideo::InitHardware(HWND Window, int multisample)
 {
+	static int versions[] = { 46, 45, 44, 43, 42, 41, 40, 33, -1 };
+
 	m_Window = Window;
 	m_hDC = GetDC(Window);
 
@@ -395,11 +403,12 @@ bool Win32GLVideo::InitHardware(HWND Window, int multisample)
 	for (; prof <= WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB; prof++)
 	{
 		m_hRC = NULL;
+		int version = -2;
+
 		if (myWglCreateContextAttribsARB != NULL)
 		{
 			// let's try to get the best version possible. Some drivers only give us the version we request
 			// which breaks all version checks for feature support. The highest used features we use are from version 4.4, and 3.3 is a requirement.
-			static int versions[] = { 46, 45, 44, 43, 42, 41, 40, 33, -1 };
 
 			for (int i = 0; versions[i] > 0; i++)
 			{
@@ -412,7 +421,10 @@ bool Win32GLVideo::InitHardware(HWND Window, int multisample)
 				};
 
 				m_hRC = myWglCreateContextAttribsARB(m_hDC, 0, ctxAttribs);
-				if (m_hRC != NULL) break;
+				if (m_hRC != NULL) {
+					version = versions[i];
+					break;
+				}
 			}
 		}
 
@@ -422,6 +434,67 @@ bool Win32GLVideo::InitHardware(HWND Window, int multisample)
 			if (m_hRC == NULL)
 			{
 				I_FatalError("R_OPENGL: Unable to create an OpenGL render context.\n");
+			}
+		}
+
+		// @Cockatrice - Attempt to create additional contexts to be used as background loaders
+		// It's critical these be created and shared before the contexts are used so there is no better place to do it
+		if (m_hRC != NULL)
+		{
+			zd_wglMakeCurrent(m_hDC, m_hRC);
+			Printf("R_OPENGL: Creating additional contexts...\n");
+
+			char err[256] = {'\0'};
+			const int numAux = min((int)gl_max_transfer_threads, 4);
+			int numCreated = 0;
+
+			for (int x = 0; x < numAux; x++) {
+				if (version > -2) {
+					int ctxAttribs[] = {
+						WGL_CONTEXT_MAJOR_VERSION_ARB, version / 10,
+						WGL_CONTEXT_MINOR_VERSION_ARB, version % 10,
+						WGL_CONTEXT_FLAGS_ARB, gl_debug ? WGL_CONTEXT_DEBUG_BIT_ARB : 0,
+						WGL_CONTEXT_PROFILE_MASK_ARB, prof,
+						0
+					};
+
+					gl_auxContexts[x] = myWglCreateContextAttribsARB(m_hDC, m_hRC, ctxAttribs);
+				}
+				else {
+					gl_auxContexts[x] = zd_wglCreateContext(m_hDC);
+				}
+
+				
+				if (gl_auxContexts[x] == NULL) {
+					break;
+				}
+				else {
+					if (version <= -2 && !zd_wglShareContext(gl_auxContexts[x], m_hRC)) {
+						FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, GetLastError(), 0, err, 255, NULL);
+						Printf("R_OPENGL: Warning - Unable to share additional context [%d] (%d : %s)\n", x + 1, GetLastError(), err);
+						zd_wglDeleteContext(gl_auxContexts[x]);
+						gl_auxContexts[x] = NULL;
+						break;
+					}
+					else {
+						numCreated++;
+					}
+				}
+			}
+
+			if (numAux > 0) {
+				if (numCreated < numAux) {
+					FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, GetLastError(), 0, err, 255, NULL);
+
+					if (numCreated == 0) {
+						Printf("R_OPENGL: Warning - Unable to create any additional context(s) [0/%d] (%d : %s) \n\tTexture loading may be main-thread only.\n", numAux, GetLastError(), err);
+					} else {
+						Printf("R_OPENGL: Warning - %d Contexts could not be created. Created %d of %d requested.\n\t(%d : %s)\n", numAux - numCreated, numCreated, numAux, GetLastError(), err);
+					}
+				}
+				else {
+					Printf("R_OPENGL: Created %d additional contexts\n", numCreated);
+				}
 			}
 		}
 
@@ -447,6 +520,7 @@ void Win32GLVideo::Shutdown()
 	if (m_hRC)
 	{
 		zd_wglMakeCurrent(0, 0);
+		for(int x = 0; x < 4; x++) zd_wglDeleteContext(gl_auxContexts[x]);
 		zd_wglDeleteContext(m_hRC);
 	}
 	if (m_hDC) ReleaseDC(m_Window, m_hDC);
@@ -454,5 +528,23 @@ void Win32GLVideo::Shutdown()
 
 
 
+// @Cockatrice - This is messy but these are some accessors for basic context usage
+// Aux and null contexts should only be used in texture load threads
+void Win32GLVideo::setNULLContext() {
+	zd_wglMakeCurrent(0, 0);
+}
 
+void Win32GLVideo::setMainContext() {
+	zd_wglMakeCurrent(m_hDC, m_hRC);
+}
+
+void Win32GLVideo::setAuxContext(int index) {
+	zd_wglMakeCurrent(m_hDC, gl_auxContexts[index]);
+}
+
+int Win32GLVideo::numAuxContexts() {
+	int num = 0;
+	for (int x = 0; x < 4; x++) if (gl_auxContexts[x] != NULL) num++;
+	return num;
+}
 

@@ -7,6 +7,7 @@ class Unknown : Actor
 	{
 		Radius 32;
 		Height 56;
+		Scale 0.2;
 		+NOGRAVITY
 		+NOBLOCKMAP
 		+DONTSPLASH
@@ -66,6 +67,13 @@ class MapSpot : Actor
 		+NOTONAUTOMAP
 		RenderStyle "None";
 		CameraHeight 0;
+	}
+
+	override void Tick() {
+		Super.Tick();
+
+		// Instead of sleeping
+		ChangeStatNum(STAT_FIRST_THINKING - 2);
 	}
 }	
 
@@ -243,5 +251,54 @@ class SpeakerIcon : Unknown
 	Default
 	{
 		Scale 0.125;
+	}
+}
+
+
+class BulletPuff : Actor
+{
+	Default
+	{
+		+NOBLOCKMAP
+		+NOGRAVITY
+		+ALLOWPARTICLES
+		+RANDOMIZE
+		+ZDOOMTRANS
+		RenderStyle "Translucent";
+		Alpha 0.5;
+		VSpeed 1;
+		Mass 5;
+	}
+	States
+	{
+	Spawn:
+		PUFF A 4 Bright;
+		PUFF B 4;
+	Melee:
+		PUFF CD 4;
+		Stop;
+	}
+}
+
+
+class ArmorBonus : BasicArmorBonus
+{
+	Default
+	{
+		Radius 20;
+		Height 16;
+		Inventory.Pickupmessage "$GOTARMBONUS";
+		Inventory.Icon "BON2A0";
+		Armor.Savepercent 33.335;
+		Armor.Saveamount 1;
+		Armor.Maxsaveamount 200;
+		+COUNTITEM
+		+INVENTORY.ALWAYSPICKUP
+	}
+	States
+	{
+	Spawn:
+		BON2 ABCDCB 6;
+		loop;
 	}
 }

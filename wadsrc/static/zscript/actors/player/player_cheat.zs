@@ -179,8 +179,8 @@ extend class PlayerPawn
 			let savedpending = player.PendingWeapon;
 			for (i = 0; i < AllActorClasses.Size(); ++i)
 			{
-				let type = (class<Weapon>)(AllActorClasses[i]);
-				if (type != null && type != "Weapon" && !type.isAbstract())
+				let type = (class<WeaponBase>)(AllActorClasses[i]);
+				if (type != null && type != "WeaponBase" && !type.isAbstract())
 				{
 					// Don't give replaced weapons unless the replacement was done by Dehacked.
 					let rep = GetReplacement(type);
@@ -189,7 +189,7 @@ extend class PlayerPawn
 						// Give the weapon only if it is set in a weapon slot.
 						if (player.weapons.LocateWeapon(type))
 						{
-							readonly<Weapon> def = GetDefaultByType (type);
+							readonly<WeaponBase> def = GetDefaultByType (type);
 							if (giveall == ALL_YESYES || !def.bCheatNotWeapon)
 							{
 								GiveInventory(type, 1, true);
@@ -354,7 +354,7 @@ extend class PlayerPawn
 
 		if (takeall || name ~== "weapons")
 		{
-			CheatTakeType("Weapon");
+			CheatTakeType("WeaponBase");
 			CheatTakeType("WeaponHolder");
 			player.ReadyWeapon = null;
 			player.PendingWeapon = WP_NOCHANGE;
@@ -468,7 +468,7 @@ extend class PlayerPawn
 		// Take away all weapons that are either non-wimpy or use ammo.
 		for(let item = Inv; item; item = item.Inv)
 		{
-			let weap = Weapon(item);
+			let weap = WeaponBase(item);
 			if (weap && (!weap.bWimpy_Weapon || weap.AmmoType1 != null))
 			{
 				collect.Push(item);

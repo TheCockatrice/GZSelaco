@@ -59,6 +59,7 @@ struct FHubInfo
 	int			maxitems;
 	int			maxsecret;
 	int			maxfrags;
+	int			mapversion = 0;		// @Cockatrice - Used when returning to map to know what version to load
 
 	wbplayerstruct_t	plyr[MAXPLAYERS];
 
@@ -70,6 +71,7 @@ struct FHubInfo
 		maxsecret	= wbs.maxsecret;
 		maxitems	= wbs.maxitems;
 		maxfrags	= wbs.maxfrags;
+		mapversion	= 0;
 		memcpy(plyr, wbs.plyr, sizeof(plyr));
 		return *this;
 	}
@@ -77,6 +79,20 @@ struct FHubInfo
 
 
 static TArray<FHubInfo> hubdata;
+
+
+// Get previously stored hub level version
+int G_GetHubLevelVersion(int levelnum) {
+	for (unsigned int i = 0; i < hubdata.Size(); i++) {
+		if (hubdata[i].levelnum == levelnum)
+		{
+			return hubdata[i].mapversion;
+		}
+	}
+
+	return -1;
+}
+
 
 void G_LeavingHub(FLevelLocals *Level, int mode, cluster_info_t * cluster, wbstartstruct_t * wbs)
 {
@@ -98,6 +114,8 @@ void G_LeavingHub(FLevelLocals *Level, int mode, cluster_info_t * cluster, wbsta
 		}
 
 		hubdata[i].levelnum = Level->levelnum;
+		hubdata[i].mapversion = Level->mapVersion;
+
 		if (!multiplayer && !deathmatch)
 		{
 			// The player counters don't work in hubs
@@ -171,12 +189,17 @@ FSerializer &Serialize(FSerializer &arc, const char *key, FHubInfo &h, FHubInfo 
 {
 	if (arc.BeginObject(key))
 	{
+		int zero = 0;
+		if(arc.isReading())
+			h.mapversion = 0;
+
 		arc("levelnum", h.levelnum)
 			("totalkills", h.totalkills)
 			("maxkills", h.maxkills)
 			("maxitems", h.maxitems)
 			("maxsecret", h.maxsecret)
 			("maxfrags", h.maxfrags)
+			("mapversion", h.mapversion)
 			.Array("players", h.plyr, MAXPLAYERS)
 			.EndObject();
 	}

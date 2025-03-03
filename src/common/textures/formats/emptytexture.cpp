@@ -49,7 +49,9 @@ class FEmptyTexture : public FImageSource
 {
 public:
 	FEmptyTexture (int lumpnum);
-	PalettedPixels CreatePalettedPixels(int conversion, int frame = 0) override;
+	TArray<uint8_t> CreatePalettedPixels(int conversion) override;
+	FImageLoadParams* NewLoaderParams(int conversion, int translation, FRemapTable* remap) override { return nullptr; }
+	//bool BackgroundSupport() override { return false; }
 };
 
 //==========================================================================
@@ -94,10 +96,10 @@ FEmptyTexture::FEmptyTexture (int lumpnum)
 //
 //==========================================================================
 
-PalettedPixels FEmptyTexture::CreatePalettedPixels(int conversion, int frame)
+TArray<uint8_t> FEmptyTexture::CreatePalettedPixels(int conversion)
 {
-	static uint8_t p;
-	PalettedPixels Pixel(&p, 1);
+	TArray<uint8_t> Pixel(1, true);
+	Pixel[0] = 0;
 	return Pixel;
 }
 

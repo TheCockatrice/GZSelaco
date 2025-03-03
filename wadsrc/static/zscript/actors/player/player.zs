@@ -40,16 +40,13 @@ class PlayerPawn : Actor
 	double		SideMove1, SideMove2;
 	TextureID	ScoreIcon;
 	int			SpawnMask;
-	Name			MorphWeapon;		// This should really be a class<Weapon> but it's too late to change now.
+	Name		MorphWeapon;
 	double		AttackZOffset;			// attack height, relative to player center
 	double		UseRange;				// [NS] Distance at which player can +use
 	double		AirCapacity;			// Multiplier for air supply underwater.
 	Class<Inventory> FlechetteType;
 	color 		DamageFade;				// [CW] Fades for when you are being damaged.
-	double		FlyBob;					// [B] Fly bobbing mulitplier
 	double		ViewBob;				// [SP] ViewBob Multiplier
-	double		ViewBobSpeed;			// [AA] ViewBob speed multiplier
-	double		WaterClimbSpeed;		// [B] Speed when climbing up walls in water
 	double		FullHeight;
 	double		curBob;
 	double		prevBob;
@@ -78,22 +75,12 @@ class PlayerPawn : Actor
 	property FlechetteType: FlechetteType;
 	property Portrait: Portrait;
 	property TeleportFreezeTime: TeleportFreezeTime;
-	property FlyBob: FlyBob;
 	property ViewBob: ViewBob;
-	property ViewBobSpeed: ViewBobSpeed;
-	property WaterClimbSpeed : WaterClimbSpeed;
 	
 	flagdef NoThrustWhenInvul: PlayerFlags, 0;
 	flagdef CanSuperMorph: PlayerFlags, 1;
 	flagdef CrouchableMorph: PlayerFlags, 2;
 	flagdef WeaponLevel2Ended: PlayerFlags, 3;
-	//PF_VOODOO_ZOMBIE
-	flagdef MakeFootsteps: PlayerFlags, 5; //[inkoalawetrust] Use footstep system virtual.
-
-	enum EPrivatePlayerFlags
-	{
-		PF_VOODOO_ZOMBIE = 1<<4,
-	}
 	
 	Default
 	{
@@ -128,12 +115,9 @@ class PlayerPawn : Actor
 		Player.SoundClass "player";
 		Player.DamageScreenColor "ff 00 00";
 		Player.MugShotMaxHealth 0;
-		Player.FlechetteType "ArtiPoisonBag3";
+		Player.FlechetteType "";
 		Player.AirCapacity 1;
-		Player.FlyBob 1;
 		Player.ViewBob 1;
-		Player.ViewBobSpeed 20;
-		Player.WaterClimbSpeed 3.5;
 		Player.TeleportFreezeTime 18;
 		Obituary "$OB_MPDEFAULT";
 	}
@@ -156,7 +140,7 @@ class PlayerPawn : Actor
 			if (health > 0) Height = FullHeight;
 		}
 
-		if (player && bWeaponLevel2Ended && !(player.cheats & CF_PREDICTING))
+		if (player && bWeaponLevel2Ended)
 		{
 			bWeaponLevel2Ended = false;
 			if (player.ReadyWeapon != NULL && player.ReadyWeapon.bPowered_Up)
@@ -181,9 +165,6 @@ class PlayerPawn : Actor
 
 	override void BeginPlay()
 	{
-		// Force create this since players can predict.
-		SetViewPos((0.0, 0.0, 0.0));
-
 		Super.BeginPlay ();
 		ChangeStatNum (STAT_PLAYER);
 		FullHeight = Height;
@@ -317,22 +298,6 @@ class PlayerPawn : Actor
 			return message;
 		}
 	}
-
-	override String GetSelfObituary(Actor inflictor, Name mod)
-	{
-		String message;
-
-		if (inflictor && inflictor != self)
-		{
-			message = inflictor.GetSelfObituary(inflictor, mod);
-		}
-		if (message.Length() == 0)
-		{
-			message = SelfObituary;
-		}
-
-		return message;
-	}
 	
 	//----------------------------------------------------------------------------
 	//
@@ -392,7 +357,7 @@ class PlayerPawn : Actor
 		let player = self.player;
 		
 		let weapn = player.ReadyWeapon;
-		if (weapn == null || !weapn.CheckAmmo (Weapon.PrimaryFire, true))
+		if (weapn == null || !weapn.CheckAmmo (WeaponBase.PrimaryFire, true))
 		{
 			return;
 		}
@@ -420,7 +385,7 @@ class PlayerPawn : Actor
 	virtual void FireWeaponAlt (State stat)
 	{
 		let weapn = player.ReadyWeapon;
-		if (weapn == null || weapn.FindState('AltFire') == null || !weapn.CheckAmmo (Weapon.AltFire, true))
+		if (weapn == null || weapn.FindState('AltFire') == null || !weapn.CheckAmmo (WeaponBase.AltFire, true))
 		{
 			return;
 		}
@@ -498,7 +463,7 @@ class PlayerPawn : Actor
 		let player = self.player;
 		if (!player) return;	
 		if ((player.WeaponState & WF_DISABLESWITCH) || // Weapon changing has been disabled.
-			Alternative)					// Morphed classes cannot change weapons.
+			player.morphTics != 0)					// Morphed classes cannot change weapons.
 		{ // ...so throw away any pending weapon requests.
 			player.PendingWeapon = WP_NOCHANGE;
 		}
@@ -530,7 +495,7 @@ class PlayerPawn : Actor
 			// or if it's from an inventory item that the player no longer owns. 
 			if ((pspr.Caller == null ||
 				(pspr.Caller is "Inventory" && Inventory(pspr.Caller).Owner != pspr.Owner.mo) ||
-				(pspr.Caller is "Weapon" && pspr.Caller != pspr.Owner.ReadyWeapon)))
+				(pspr.Caller is "WeaponBase" && pspr.Caller != pspr.Owner.ReadyWeapon)))
 			{
 				pspr.Destroy();
 			}
@@ -595,7 +560,7 @@ class PlayerPawn : Actor
 		}
 		else if (bNoGravity && !player.onground)
 		{
-			player.bob = min(abs(0.5 * FlyBob), MAXBOB);
+			player.bob = 0.5;
 		}
 		else
 		{
@@ -625,11 +590,7 @@ class PlayerPawn : Actor
 			return;
 		}
 
-		if (bFly && !GetCVar("FViewBob"))
-		{
-			bob = 0;
-		}
-		else if (still)
+		if (still)
 		{
 			if (player.health > 0)
 			{
@@ -643,7 +604,7 @@ class PlayerPawn : Actor
 		}
 		else
 		{
-			angle = Level.maptime / (ViewBobSpeed * TICRATE / 35.) * 360.;
+			angle = Level.maptime / (20 * TICRATE / 35.) * 360.;
 			bob = player.bob * sin(angle) * (waterlevel > 1 ? 0.25f : 0.5f);
 		}
 
@@ -672,12 +633,11 @@ class PlayerPawn : Actor
 			}
 		}
 
-		if (Alternative)
+		if (player.morphTics)
 		{
 			bob = 0;
 		}
 		player.viewz = pos.Z + player.viewheight + (bob * clamp(ViewBob, 0. , 1.5)); // [SP] Allow DECORATE changes to view bobbing speed.
-
 		if (Floorclip && player.playerstate != PST_DEAD
 			&& pos.Z <= floorz)
 		{
@@ -806,16 +766,14 @@ class PlayerPawn : Actor
 		Super.Die (source, inflictor, dmgflags, MeansOfDeath);
 
 		if (player != NULL && player.mo == self) player.bonuscount = 0;
-		
-		// [RL0] To allow voodoo zombies, don't kill the player together with voodoo dolls if the compat flag is enabled
-		if (player != NULL && player.mo != self && !(Level.compatflags2 & COMPATF2_VOODOO_ZOMBIES))
+
+		if (player != NULL && player.mo != self)
 		{ // Make the real player die, too
 			player.mo.Die (source, inflictor, dmgflags, MeansOfDeath);
 		}
 		else
 		{
-			// [RL0] player.mo == self will always be true if COMPATF2_VOODOO_ZOMBIES is false, so there's no need to check the compatflag here too, just self
-			if (player != NULL && sv_weapondrop && player.mo == self)
+			if (player != NULL && sv_weapondrop)
 			{ // Voodoo dolls don't drop weapons
 				let weap = player.ReadyWeapon;
 				if (weap != NULL)
@@ -838,7 +796,7 @@ class PlayerPawn : Actor
 					else if (weap.SpawnState != NULL &&
 						weap.SpawnState != GetDefaultByType('Actor').SpawnState)
 					{
-						let weapitem = Weapon(A_DropItem (weap.GetClass(), -1, 256));
+						let weapitem = WeaponBase(A_DropItem (weap.GetClass(), -1, 256));
 						if (weapitem)
 						{
 							if (weap.AmmoGive1 && weap.Ammo1)
@@ -888,7 +846,7 @@ class PlayerPawn : Actor
 	//
 	//===========================================================================
 
-	void FilterCoopRespawnInventory (PlayerPawn oldplayer, Weapon curHeldWeapon = null)
+	void FilterCoopRespawnInventory (PlayerPawn oldplayer)
 	{
 		// If we're losing everything, this is really simple.
 		if (sv_cooploseinventory)
@@ -896,10 +854,6 @@ class PlayerPawn : Actor
 			oldplayer.DestroyAllInventory();
 			return;
 		}
-
-		// Make sure to get the real held weapon before messing with the inventory.
-		if (curHeldWeapon && curHeldWeapon.bPowered_Up)
-			curHeldWeapon = curHeldWeapon.SisterWeapon;
 
 		// Walk through the old player's inventory and destroy or modify
 		// according to dmflags.
@@ -913,11 +867,11 @@ class PlayerPawn : Actor
 			// inventory amount.
 			let defitem = FindInventory (item.GetClass());
 
-			if ((sv_cooplosekeys && !sv_coopsharekeys) && defitem == NULL && item is 'Key')
+			if (sv_cooplosekeys && defitem == NULL && item is 'Key')
 			{
 				item.Destroy();
 			}
-			else if (sv_cooploseweapons && defitem == NULL && item is 'Weapon')
+			else if (sv_cooploseweapons && defitem == NULL && item is 'WeaponBase')
 			{
 				item.Destroy();
 			}
@@ -982,15 +936,7 @@ class PlayerPawn : Actor
 		ObtainInventory (oldplayer);
 
 		player.ReadyWeapon = NULL;
-		if (curHeldWeapon && curHeldWeapon.owner == self && curHeldWeapon.CheckAmmo(Weapon.EitherFire, false))
-		{
-			player.PendingWeapon = curHeldWeapon;
-			BringUpWeapon();
-		}
-		else
-		{
-			PickNewWeapon (NULL);
-		}
+		PickNewWeapon (NULL);
 	}
 
 	
@@ -1005,6 +951,8 @@ class PlayerPawn : Actor
 		let player = self.player;
 
 		if (!player) return;
+
+		player.deltaFOV = player.FOV;
 
 		// [RH] Zoom the player's FOV
 		float desired = player.DesiredFOV;
@@ -1105,7 +1053,7 @@ class PlayerPawn : Actor
 
 	virtual bool CanCrouch() const
 	{
-		return !Alternative || bCrouchableMorph;
+		return player.morphTics == 0 || bCrouchableMorph;
 	}
 
 	//----------------------------------------------------------------------------
@@ -1271,7 +1219,7 @@ class PlayerPawn : Actor
 			side *= SideMove2;
 		}
 
-		if (!Alternative)
+		if (!player.morphTics)
 		{
 			double factor = 1.;
 			for(let it = Inv; it != null; it = it.Inv)
@@ -1282,12 +1230,6 @@ class PlayerPawn : Actor
 			side *= factor;
 		}
 		return forward, side;
-	}
-
-	virtual void ApplyAirControl(out double movefactor, out double bobfactor)
-	{
-		movefactor *= level.aircontrol;
-		bobfactor *= level.aircontrol;
 	}
 
 	//----------------------------------------------------------------------------
@@ -1333,8 +1275,8 @@ class PlayerPawn : Actor
 			if (!player.onground && !bNoGravity && !waterlevel)
 			{
 				// [RH] allow very limited movement if not on ground.
-				// [AA] but also allow authors to override it.
-				ApplyAirControl(movefactor, bobfactor);
+				movefactor *= level.aircontrol;
+				bobfactor*= level.aircontrol;
 			}
 
 			fm = cmd.forwardmove;
@@ -1417,17 +1359,15 @@ class PlayerPawn : Actor
 		{
 			if (abs(Pitch) > 2.)
 			{
-				A_SetPitch(Pitch * (2. / 3.), SPF_INTERPOLATE);
+				Pitch *= (2. / 3.);
 			}
 			else
 			{
-				A_SetPitch(Pitch * 0.75, SPF_INTERPOLATE);
-				if (abs(Pitch) <= 0.25)
+				Pitch = 0.;
+				player.centering = false;
+				if (PlayerNumber() == consoleplayer)
 				{
-					A_SetPitch(0., SPF_INTERPOLATE);
-					player.centering = false;
-					if (PlayerNumber() == consoleplayer)
-						LocalViewPitch = 0;
+					LocalViewPitch = 0;
 				}
 			}
 		}
@@ -1519,14 +1459,6 @@ class PlayerPawn : Actor
 					}
 				}
 			}
-			else if (cmd.upmove > 0 && !(player.cheats & CF_PREDICTING))
-			{
-				let fly = FindInventory("ArtiFly");
-				if (fly != NULL)
-				{
-					UseInventory(fly);
-				}
-			}
 		}
 	}
 
@@ -1569,15 +1501,15 @@ class PlayerPawn : Actor
 	{
 		let player = self.player;
 		// Morph counter
-		if (Alternative)
+		if (player.morphTics)
 		{
 			if (player.chickenPeck)
 			{ // Chicken attack counter
 				player.chickenPeck -= 3;
 			}
-			if (player.MorphTics && !--player.MorphTics)
+			if (!--player.morphTics)
 			{ // Attempt to undo the chicken/pig
-				Unmorph(self, MRF_UNDOBYTIMEOUT);
+				player.mo.UndoPlayerMorph(player, MRF_UNDOBYTIMEOUT);
 			}
 		}
 	}
@@ -1660,12 +1592,6 @@ class PlayerPawn : Actor
 	{
 		let player = self.player;
 		UserCmd cmd = player.cmd;
-
-		// [RL0] Mark players that became zombies (this stays even if they 'revive' by healing, until a level change)
-		if((Level.compatflags2 & COMPATF2_VOODOO_ZOMBIES) && player.health <= 0 && player.mo.health > 0)
-		{
-			PlayerFlags |= PF_VOODOO_ZOMBIE;
-		}
 		
 		CheckFOV();
 
@@ -1702,7 +1628,7 @@ class PlayerPawn : Actor
 				player.jumpTics = 0;
 			}
 		}
-		if (Alternative && !(player.cheats & CF_PREDICTING))
+		if (player.morphTics && !(player.cheats & CF_PREDICTING))
 		{
 			MorphPlayerThink ();
 		}
@@ -1710,7 +1636,6 @@ class PlayerPawn : Actor
 		CheckPitch();
 		HandleMovement();
 		CalcHeight ();
-		if (bMakeFootsteps) MakeFootsteps();
 
 		if (!(player.cheats & CF_PREDICTING))
 		{
@@ -1741,106 +1666,6 @@ class PlayerPawn : Actor
 
 	//---------------------------------------------------------------------------
 	//
-	// Handle player footstep sounds.
-	// Default footstep handling.
-	//
-	//---------------------------------------------------------------------------
-
-	int footstepCounter;
-	double footstepLength;
-	bool footstepFoot;
-
-	void DoFootstep(TerrainDef Ground)
-	{
-		Sound Step = Ground.StepSound;
-
-		//Generic foot-agnostic sound takes precedence.
-		if(!Step)
-		{
-			//Apparently most people walk with their right foot first, so assume that here.
-			if (!footstepFoot)
-			{
-				Step = Ground.LeftStepSound;
-			}
-			else
-			{
-				Step = Ground.RightStepSound;
-			}
-
-			footstepFoot = !footstepFoot;
-		}
-
-		if(Step)
-		{
-			A_StartSound(Step, flags: CHANF_OVERLAP, volume: Ground.StepVolume * snd_footstepvolume);
-		}
-
-		//Steps make splashes regardless.
-		bool Heavy = (Mass >= 200) ? 0 : THW_SMALL; //Big player makes big splash.
-		HitWater(CurSector, (Pos.XY, CurSector.FloorPlane.ZatPoint(Pos.XY)), true, false, flags: Heavy | THW_NOVEL);
-	}
-
-	virtual void MakeFootsteps()
-	{
-		if(pos.z > floorz) return;
-
-		let Ground = GetFloorTerrain();
-
-		if(Ground && (player.cmd.forwardMove != 0 || player.cmd.sideMove != 0))
-		{
-			int Delay = (player.cmd.buttons & BT_RUN) ? Ground.RunStepTics : Ground.WalkStepTics;
-
-			if((player.cmd.buttons ^ player.oldbuttons) & BT_RUN)
-			{ // zero out counters when starting/stopping a run
-				footstepCounter = 0;
-				footstepLength = Ground.StepDistance;
-			}
-
-			if(Ground.StepDistance > 0)
-			{ // distance-based terrain
-				footstepCounter = 0;
-
-				double moveVel = vel.xy.length();
-
-				if(moveVel > Ground.StepDistanceMinVel)
-				{
-					footstepLength += moveVel;
-
-					while(footstepLength > Ground.StepDistance)
-					{
-						footstepLength -= Ground.StepDistance;
-						DoFootstep(Ground);
-					}
-				}
-				else
-				{
-					footstepLength = Ground.StepDistance;
-				}
-
-			}
-			else if(Delay > 0)
-			{ // delay-based terrain
-				footstepLength = 0;
-				
-				if(footstepCounter % Delay == 0)
-				{
-					DoFootstep(Ground);
-				}
-
-				footstepCounter = (footstepCounter + 1) % Delay;
-			}
-		}
-		else
-		{
-			footstepCounter = 0;
-			footstepLength = Ground.StepDistance;
-			footstepFoot = false;
-		}
-
-	}
-
-	//---------------------------------------------------------------------------
-	//
 	// PROC P_BringUpWeapon
 	//
 	// Starts bringing the pending weapon up from the bottom of the screen.
@@ -1850,9 +1675,6 @@ class PlayerPawn : Actor
 
 	void BringUpWeapon ()
 	{
-		// [RL0] Don't bring up weapon when in a voodoo zombie state
-		if(PlayerFlags & PF_VOODOO_ZOMBIE) return;
-
 		let player = self.player;
 		if (player.PendingWeapon == WP_NOCHANGE)
 		{
@@ -1908,9 +1730,9 @@ class PlayerPawn : Actor
 	//
 	//===========================================================================
 
-	Weapon BestWeapon(Class<Ammo> ammotype)
+	WeaponBase BestWeapon(Class<Ammo> ammotype)
 	{
-		Weapon bestMatch = NULL;
+		WeaponBase bestMatch = NULL;
 		int bestOrder = int.max;
 		Inventory item;
 		bool tomed = !!FindInventory ('PowerWeaponLevel2', true);
@@ -1918,7 +1740,7 @@ class PlayerPawn : Actor
 		// Find the best weapon the player has.
 		for (item = Inv; item != NULL; item = item.Inv)
 		{
-			let weap = Weapon(item);
+			let weap = WeaponBase(item);
 			if (weap == null)
 				continue;
 
@@ -1942,7 +1764,7 @@ class PlayerPawn : Actor
 
 			// Don't select it if there isn't enough ammo to use its primary fire.
 			if (!(weap.bAMMO_OPTIONAL) &&
-				!weap.CheckAmmo (Weapon.PrimaryFire, false))
+				!weap.CheckAmmo (WeaponBase.PrimaryFire, false))
 				continue;
 
 			// Don't select if if there isn't enough ammo as determined by the weapon's author.
@@ -1976,7 +1798,7 @@ class PlayerPawn : Actor
 		}
 		// Since the weapon is dropping, stop blocking switching.
 		player.WeaponState &= ~WF_DISABLESWITCH;
-		Weapon weap = player.ReadyWeapon;
+		WeaponBase weap = player.ReadyWeapon;
 		if ((weap != null) && (player.health > 0 || !weap.bNoDeathDeselect))
 		{
 			player.SetPsprite(PSP_WEAPON, weap.GetDownState());
@@ -1993,9 +1815,9 @@ class PlayerPawn : Actor
 	//
 	//===========================================================================
 
-	Weapon PickNewWeapon(Class<Ammo> ammotype)
+	WeaponBase PickNewWeapon(Class<Ammo> ammotype)
 	{
-		Weapon best = BestWeapon (ammotype);
+		WeaponBase best = BestWeapon (ammotype);
 
 		if (best != NULL)
 		{
@@ -2027,8 +1849,8 @@ class PlayerPawn : Actor
 		// it provides player class based protection that should not affect
 		// any other protection item.
 		let myclass = GetClass();
-		GiveInventoryType(GetHexenArmorClass());
-		let harmor = HexenArmor(FindInventory('HexenArmor', true));
+		GiveInventoryType('HexenArmor');
+		let harmor = HexenArmor(FindInventory('HexenArmor'));
 
 		harmor.Slots[4] = self.HexenArmor[0];
 		for (int i = 0; i < 4; ++i)
@@ -2039,7 +1861,7 @@ class PlayerPawn : Actor
 		// BasicArmor must come right after that. It should not affect any
 		// other protection item as well but needs to process the damage
 		// before the HexenArmor does.
-		GiveInventoryType(GetBasicArmorClass());
+		GiveInventoryType('BasicArmor');
 
 		// Now add the items from the DECORATE definition
 		let di = GetDropItems();
@@ -2066,9 +1888,8 @@ class PlayerPawn : Actor
 					{
 						item = Inventory(Spawn(ti));
 						item.bIgnoreSkill = true;	// no skill multipliers here
-						item.bDropped = item.bNeverLocal = true; // Avoid possible copies.
 						item.Amount = di.Amount;
-						let weap = Weapon(item);
+						let weap = WeaponBase(item);
 						if (weap)
 						{
 							// To allow better control any weapon is emptied of
@@ -2090,8 +1911,8 @@ class PlayerPawn : Actor
 							ThrowAbortException("Cannot give morph item '%s' when starting a game!", di.Name);
 						}
 					}
-					let weap = Weapon(item);
-					if (weap != NULL && weap.CheckAmmo(Weapon.EitherFire, false))
+					let weap = WeaponBase(item);
+					if (weap != NULL && weap.CheckAmmo(WeaponBase.EitherFire, false))
 					{
 						player.ReadyWeapon = player.PendingWeapon = weap;
 					}
@@ -2169,25 +1990,12 @@ class PlayerPawn : Actor
 
 	void PlayerFinishLevel (int mode, int flags)
 	{
-		// [RL0] Handle player exit behavior for voodoo zombies
-		if(PlayerFlags & PF_VOODOO_ZOMBIE)
-		{
-			if(player.health > 0)
-			{
-				PlayerFlags &= ~PF_VOODOO_ZOMBIE;
-			}
-			else
-			{
-				bShootable = false;
-				bKilled = true;
-			}
-		}
 		Inventory item, next;
 		let p = player;
 
-		if (Alternative)
+		if (p.morphTics != 0)
 		{ // Undo morph
-			Unmorph(self, force: true);
+			Unmorph(self, 0, true);
 		}
 		// 'self' will be no longer valid from here on in case of an unmorph
 		let me = p.mo;
@@ -2257,7 +2065,7 @@ class PlayerPawn : Actor
 				let it = toDelete[i];
 				if (!it.bDestroyed)
 				{
-					it.DepleteOrDestroy();
+					item.DepleteOrDestroy();
 				}
 			}
 		}
@@ -2298,7 +2106,7 @@ class PlayerPawn : Actor
 	//
 	//===========================================================================
 
-	virtual Weapon PickWeapon(int slot, bool checkammo)
+	virtual WeaponBase PickWeapon(int slot, bool checkammo)
 	{
 		int i, j;
 
@@ -2323,11 +2131,11 @@ class PlayerPawn : Actor
 						j = (j == 0 ? Size - 1 : j - 1))
 					{
 						let weapontype2 = player.weapons.GetWeapon(slot, j);
-						let weap = Weapon(player.mo.FindInventory(weapontype2));
+						let weap = WeaponBase(player.mo.FindInventory(weapontype2));
 
 						if (weap != null)
 						{
-							if (!checkammo || weap.CheckAmmo(Weapon.EitherFire, false))
+							if (!checkammo || weap.CheckAmmo(WeaponBase.EitherFire, false))
 							{
 								return weap;
 							}
@@ -2339,11 +2147,11 @@ class PlayerPawn : Actor
 		for (i = Size - 1; i >= 0; i--)
 		{
 			let weapontype = player.weapons.GetWeapon(slot, i);
-			let weap = Weapon(player.mo.FindInventory(weapontype));
+			let weap = WeaponBase(player.mo.FindInventory(weapontype));
 
 			if (weap != null)
 			{
-				if (!checkammo || weap.CheckAmmo(Weapon.EitherFire, false))
+				if (!checkammo || weap.CheckAmmo(WeaponBase.EitherFire, false))
 				{
 					return weap;
 				}
@@ -2412,7 +2220,7 @@ class PlayerPawn : Actor
 	//===========================================================================
 	const NUM_WEAPON_SLOTS = 10;
 
-	virtual Weapon PickNextWeapon()
+	virtual WeaponBase PickNextWeapon()
 	{
 		let player = self.player;
 		bool found;
@@ -2446,8 +2254,8 @@ class PlayerPawn : Actor
 					}
 				}
 				let type = player.weapons.GetWeapon(slot, index);
-				let weap = Weapon(FindInventory(type));
-				if (weap != null && weap.CheckAmmo(Weapon.EitherFire, false))
+				let weap = WeaponBase(FindInventory(type));
+				if (weap != null && weap.CheckAmmo(WeaponBase.EitherFire, false))
 				{
 					return weap;
 				}
@@ -2466,7 +2274,7 @@ class PlayerPawn : Actor
 	//
 	//===========================================================================
 
-	virtual Weapon PickPrevWeapon()
+	virtual WeaponBase PickPrevWeapon()
 	{
 		let player = self.player;
 		int startslot, startindex;
@@ -2499,8 +2307,8 @@ class PlayerPawn : Actor
 					index = player.weapons.SlotSize(slot) - 1;
 				}
 				let type = player.weapons.GetWeapon(slot, index);
-				let weap = Weapon(FindInventory(type));
-				if (weap != null && weap.CheckAmmo(Weapon.EitherFire, false))
+				let weap = WeaponBase(FindInventory(type));
+				if (weap != null && weap.CheckAmmo(WeaponBase.EitherFire, false))
 				{
 					return weap;
 				}
@@ -2623,13 +2431,12 @@ class PlayerPawn : Actor
 		}
 		return p1 * (1. - ticfrac) + p2 * ticfrac;
 	}
-
-	virtual Vector3 /*translation*/ , Vector3 /*rotation*/ BobWeapon3D (double ticfrac)
-	{
-		Vector2 oldBob = BobWeapon(ticfrac);
-		return (0, 0, 0) , ( oldBob.x / 4, oldBob.y / -4, 0);
-	}
 	
+	// @Cockatrice - Per-frame camera offsets
+	virtual Vector3, Vector3 CameraOffsets(double ticfrac) {
+		return (0, 0, 0), (0,0,0);
+	}
+
 	//----------------------------------------------------------------------------
 	//
 	// 
@@ -2716,14 +2523,12 @@ extend class Actor
 	//
 	//----------------------------------------------------------------------------
 
-	void A_SkullPop(class<PlayerChunk> skulltype = "BloodySkull")
+	void A_SkullPop(class<PlayerChunk> skulltype = null)
 	{
 		// [GRB] Parameterized version
 		if (skulltype == NULL || !(skulltype is "PlayerChunk"))
 		{
-			skulltype = "BloodySkull";
-			if (skulltype == NULL)
-				return;
+			return;
 		}
 
 		bSolid = false;
@@ -2810,7 +2615,7 @@ class PSprite : Object native play
 	native Bool firstTic;
 	native bool InterpolateTic;
 	native int Tics;
-	native TranslationID Translation;
+	native uint Translation;
 	native bool bAddWeapon;
 	native bool bAddBob;
 	native bool bPowDouble;
@@ -2833,23 +2638,13 @@ class PSprite : Object native play
 	{
 		if (processPending)
 		{
-			if (Caller)
+			// drop tic count and possibly change state
+			if (Tics != -1)	// a -1 tic count never changes
 			{
-				Caller.PSpriteTick(self);
-				if (bDestroyed)
-					return;
-			}
-
-			if (processPending)
-			{
-				// drop tic count and possibly change state
-				if (Tics != -1)	// a -1 tic count never changes
-				{
-					Tics--;
-					// [BC] Apply double firing speed.
-					if (bPowDouble && Tics && (Owner.mo.FindInventory ("PowerDoubleFiringSpeed", true))) Tics--;
-					if (!Tics && Caller != null) SetState(CurState.NextState);
-				}
+				Tics--;
+				// [BC] Apply double firing speed.
+				if (bPowDouble && Tics && (Owner.mo.FindInventory ("PowerDoubleFiringSpeed", true))) Tics--;
+				if (!Tics && Caller != null) SetState(CurState.NextState);
 			}
 		}
 	}
@@ -2892,6 +2687,7 @@ struct PlayerInfo native play	// self is what internally is known as player_t
 	native Class<PlayerPawn> cls;
 	native float DesiredFOV;
 	native float FOV;
+	native float deltaFOV;
 	native double viewz;
 	native double viewheight;
 	native double deltaviewheight;
@@ -2911,8 +2707,8 @@ struct PlayerInfo native play	// self is what internally is known as player_t
 	native uint8 multicount;
 	native uint8 spreecount;
 	native uint16 WeaponState;
-	native Weapon ReadyWeapon;
-	native Weapon PendingWeapon;
+	native WeaponBase ReadyWeapon;
+	native WeaponBase PendingWeapon;
 	native PSprite psprites;
 	native int cheats;
 	native int timefreezer;
@@ -2939,7 +2735,7 @@ struct PlayerInfo native play	// self is what internally is known as player_t
 	native Class<PlayerPawn>MorphedPlayerClass;
 	native int MorphStyle;
 	native Class<Actor> MorphExitFlash;
-	native Weapon PremorphWeapon;
+	native WeaponBase PremorphWeapon;
 	native int chickenPeck;
 	native int jumpTics;
 	native bool onground;
@@ -2974,7 +2770,7 @@ struct PlayerInfo native play	// self is what internally is known as player_t
 	native bool PoisonPlayer(Actor poisoner, Actor source, int poison);
 	native void PoisonDamage(Actor source, int damage, bool playPainSound);
 	native void SetPsprite(int id, State stat, bool pending = false);
-	native void SetSafeFlash(Weapon weap, State flashstate, int index);
+	native void SetSafeFlash(WeaponBase weap, State flashstate, int index);
 	native PSprite GetPSprite(int id) const;
 	native PSprite FindPSprite(int id) const;
 	native void SetLogNumber (int text);
@@ -2982,13 +2778,12 @@ struct PlayerInfo native play	// self is what internally is known as player_t
 	native void SetSubtitleNumber (int text, Sound sound_id = 0);
 	native bool Resurrect();
 
-	native clearscope String GetUserName(uint charLimit = 0u) const;
+	native clearscope String GetUserName() const;
 	native clearscope Color GetColor() const;
 	native clearscope Color GetDisplayColor() const;
 	native clearscope int GetColorSet() const;
 	native clearscope int GetPlayerClassNum() const;
 	native clearscope int GetSkin() const;
-	native clearscope int GetSkinCount() const;
 	native clearscope bool GetNeverSwitch() const;
 	native clearscope int GetGender() const;
 	native clearscope int GetTeam() const;
@@ -2997,24 +2792,30 @@ struct PlayerInfo native play	// self is what internally is known as player_t
 	native double GetWBobSpeed() const;
 	native double GetWBobFire() const;
 	native double GetMoveBob() const;
-	native bool GetFViewBob() const;
 	native double GetStillBob() const;
 	native void SetFOV(float fov);
-	native int SetSkin(int skinIndex);
 	native clearscope bool GetClassicFlight() const;
 	native void SendPitchLimits();
 	native clearscope bool HasWeaponsInSlot(int slot) const;
 
 	// The actual implementation is on PlayerPawn where it can be overridden. Use that directly in the future.
-	deprecated("3.7", "MorphPlayer() should be used on a PlayerPawn object") bool MorphPlayer(PlayerInfo activator, class<PlayerPawn> spawnType, int duration, EMorphFlags style, class<Actor> enterFlash = "TeleportFog", class<Actor> exitFlash = "TeleportFog")
+	deprecated("3.7", "MorphPlayer() should be used on a PlayerPawn object") bool MorphPlayer(playerinfo p, Class<PlayerPawn> spawntype, int duration, int style, Class<Actor> enter_flash = null, Class<Actor> exit_flash = null)
 	{
-		return mo ? mo.MorphPlayer(activator, spawnType, duration, style, enterFlash, exitFlash) : false;
+		if (mo != null)
+		{
+			return mo.MorphPlayer(p, spawntype, duration, style, enter_flash, exit_flash);
+		}
+		return false;
 	}
 	
 	// This somehow got its arguments mixed up. 'self' should have been the player to be unmorphed, not the activator
-	deprecated("3.7", "UndoPlayerMorph() should be used on a PlayerPawn object") bool UndoPlayerMorph(PlayerInfo player, EMorphFlags unmorphFlags = 0, bool force = false)
+	deprecated("3.7", "UndoPlayerMorph() should be used on a PlayerPawn object") bool UndoPlayerMorph(playerinfo player, int unmorphflag = 0, bool force = false)
 	{
-		return player.mo ? player.mo.UndoPlayerMorph(self, unmorphFlags, force) : false;
+		if (player.mo != null)
+		{
+ 			return player.mo.UndoPlayerMorph(self, unmorphflag, force);
+		}
+		return false;
 	}
 
 	deprecated("3.7", "DropWeapon() should be used on a PlayerPawn object") void DropWeapon()
@@ -3098,7 +2899,7 @@ struct PlayerSkin native
 	native readonly uint8		range0start;
 	native readonly uint8		range0end;
 	native readonly bool		othergame;
-	native readonly Vector2		Scale;
+	native readonly FVector2	Scale;
 	native readonly int			sprite;
 	native readonly int			crouchsprite;
 	native readonly int			namespc;
@@ -3106,17 +2907,7 @@ struct PlayerSkin native
 
 struct Team native
 {
-	const NOTEAM = 255;
-	const MAX = 16;
-
+	const NoTeam = 255;
+	const Max = 16;
 	native String mName;
-
-	native static bool IsValid(uint teamIndex);
-	native play static bool ChangeTeam(uint playerNumber, uint newTeamIndex);
-
-	native Color GetPlayerColor() const;
-	native int GetTextColor() const;
-	native TextureID GetLogo() const;
-	native string GetLogoName() const;
-	native bool AllowsCustomPlayerColor() const;
 }

@@ -194,7 +194,7 @@ int main (int argc, char **argv)
 	}
 #endif
 
-	I_StartupJoysticks();
+	//I_StartupJoysticks(); @Cockatrice - Moved this to hardware.cpp, because it requires the config file to be created
 
 	const int result = GameMain();
 

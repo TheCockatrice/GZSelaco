@@ -91,27 +91,28 @@ FGameConfigFile::FGameConfigFile ()
 
 	OkayToWrite = false;	// Do not allow saving of the config before DoKeySetup()
 	bModSetup = false;
+	bRequiresReset = false;
 	pathname = GetConfigPath (true);
-	ChangePathName (pathname.GetChars());
+	ChangePathName (pathname);
 	LoadConfigFile ();
 
 	// If zdoom.ini was read from the program directory, switch
 	// to the user directory now. If it was read from the user
 	// directory, this effectively does nothing.
 	pathname = GetConfigPath (false);
-	ChangePathName (pathname.GetChars());
+	ChangePathName (pathname);
 
 	// Set default IWAD search paths if none present
 	if (!SetSection ("IWADSearch.Directories"))
 	{
 		SetSection ("IWADSearch.Directories", true);
 		SetValueForKey ("Path", ".", true);
-		SetValueForKey ("Path", "$DOOMWADDIR", true);
+		//SetValueForKey ("Path", "$SELACOWADDIR", true);
 #ifdef __APPLE__
-		SetValueForKey ("Path", user_docs.GetChars(), true);
-		SetValueForKey ("Path", user_app_support.GetChars(), true);
+		SetValueForKey ("Path", user_docs, true);
+		SetValueForKey ("Path", user_app_support, true);
 		SetValueForKey ("Path", "$PROGDIR", true);
-		SetValueForKey ("Path", local_app_support.GetChars(), true);
+		SetValueForKey ("Path", local_app_support, true);
 #elif !defined(__unix__)
 		SetValueForKey ("Path", "$HOME", true);
 		SetValueForKey ("Path", "$PROGDIR", true);
@@ -125,9 +126,6 @@ FGameConfigFile::FGameConfigFile ()
 		SetValueForKey ("Path", "/usr/local/share/games/doom", true);
 		SetValueForKey ("Path", "/usr/share/doom", true);
 		SetValueForKey ("Path", "/usr/share/games/doom", true);
-		SetValueForKey ("Path", SHARE_DIR "/doom", true);
-		SetValueForKey ("Path", SHARE_DIR "/games/doom", true);
-
 #endif
 	}
 
@@ -136,24 +134,22 @@ FGameConfigFile::FGameConfigFile ()
 	{
 		SetSection ("FileSearch.Directories", true);
 #ifdef __APPLE__
-		SetValueForKey ("Path", user_docs.GetChars(), true);
-		SetValueForKey ("Path", user_app_support.GetChars(), true);
+		SetValueForKey ("Path", user_docs, true);
+		SetValueForKey ("Path", user_app_support, true);
 		SetValueForKey ("Path", "$PROGDIR", true);
-		SetValueForKey ("Path", local_app_support.GetChars(), true);
+		SetValueForKey ("Path", local_app_support, true);
 #elif !defined(__unix__)
 		SetValueForKey ("Path", "$PROGDIR", true);
 #else
 		SetValueForKey ("Path", "$HOME/" GAME_DIR, true);
 		SetValueForKey ("Path", "$HOME/.local/share/games/doom", true);
 		SetValueForKey ("Path", SHARE_DIR, true);
-		SetValueForKey ("Path", SHARE_DIR "/doom", true);
-		SetValueForKey ("Path", SHARE_DIR "/games/doom", true);
 		SetValueForKey ("Path", "/usr/local/share/doom", true);
 		SetValueForKey ("Path", "/usr/local/share/games/doom", true);
 		SetValueForKey ("Path", "/usr/share/doom", true);
 		SetValueForKey ("Path", "/usr/share/games/doom", true);
 #endif
-		SetValueForKey ("Path", "$DOOMWADDIR", true);
+		//SetValueForKey ("Path", "$SELACOWADDIR", true);
 	}
 
 	// Set default search paths if none present
@@ -161,14 +157,14 @@ FGameConfigFile::FGameConfigFile ()
 	{
 		SetSection("SoundfontSearch.Directories", true);
 #ifdef __APPLE__
-		SetValueForKey("Path", (user_docs + "/soundfonts").GetChars(), true);
-		SetValueForKey("Path", (user_docs + "/fm_banks").GetChars(), true);
-		SetValueForKey("Path", (user_app_support + "/soundfonts").GetChars(), true);
-		SetValueForKey("Path", (user_app_support + "/fm_banks").GetChars(), true);
+		SetValueForKey("Path", user_docs + "/soundfonts", true);
+		SetValueForKey("Path", user_docs + "/fm_banks", true);
+		SetValueForKey("Path", user_app_support + "/soundfonts", true);
+		SetValueForKey("Path", user_app_support + "/fm_banks", true);
 		SetValueForKey("Path", "$PROGDIR/soundfonts", true);
 		SetValueForKey("Path", "$PROGDIR/fm_banks", true);
-		SetValueForKey("Path", (local_app_support + "/soundfonts").GetChars(), true);
-		SetValueForKey("Path", (local_app_support + "/fm_banks").GetChars(), true);
+		SetValueForKey("Path", local_app_support + "/soundfonts", true);
+		SetValueForKey("Path", local_app_support + "/fm_banks", true);
 #elif !defined(__unix__)
 		SetValueForKey("Path", "$PROGDIR/soundfonts", true);
 		SetValueForKey("Path", "$PROGDIR/fm_banks", true);
@@ -185,11 +181,6 @@ FGameConfigFile::FGameConfigFile ()
 		SetValueForKey("Path", "/usr/share/doom/fm_banks", true);
 		SetValueForKey("Path", "/usr/share/games/doom/soundfonts", true);
 		SetValueForKey("Path", "/usr/share/games/doom/fm_banks", true);
-		SetValueForKey("Path", SHARE_DIR "/doom/soundfonts", true);
-		SetValueForKey("Path", SHARE_DIR "/doom/fm_banks", true);
-		SetValueForKey("Path", SHARE_DIR "/games/doom/soundfonts", true);
-		SetValueForKey("Path", SHARE_DIR "/games/doom/fm_banks", true);
-		SetValueForKey("Path", "/usr/share/soundfonts", true);
 #endif
 	}
 
@@ -228,34 +219,6 @@ void FGameConfigFile::DoAutoloadSetup (FIWadManager *iwad_man)
 		if (lastver != NULL) last = atof(lastver);
 	}
 
-	if (last < 211)
-	{
-		RenameSection("Chex3.Autoload", "chex.chex3.Autoload");
-		RenameSection("Chex1.Autoload", "chex.chex1.Autoload");
-		RenameSection("HexenDK.Autoload", "hexen.deathkings.Autoload");
-		RenameSection("HereticSR.Autoload", "heretic.shadow.Autoload");
-		RenameSection("FreeDM.Autoload", "doom.freedoom.freedm.Autoload");
-		RenameSection("Freedoom2.Autoload", "doom.freedoom.phase2.Autoload");
-		RenameSection("Freedoom1.Autoload", "doom.freedoom.phase1.Autoload");
-		RenameSection("Freedoom.Autoload", "doom.freedoom.Autoload");
-		RenameSection("DoomBFG.Autoload", "doom.id.doom1.bfg.Autoload");
-		RenameSection("DoomU.Autoload", "doom.id.doom1.ultimate.Autoload");
-		RenameSection("Doom1.Autoload", "doom.id.doom1.registered.Autoload");
-		RenameSection("TNT.Autoload", "doom.id.doom2.tnt.Autoload");
-		RenameSection("Plutonia.Autoload", "doom.id.doom2.plutonia.Autoload");
-		RenameSection("Doom2BFG.Autoload", "doom.id.doom2.bfg.Autoload");
-		RenameSection("Doom2.Autoload", "doom.id.doom2.commercial.Autoload");
-	}
-	else if (last < 218)
-	{
-		RenameSection("doom.doom1.bfg.Autoload", "doom.id.doom1.bfg.Autoload");
-		RenameSection("doom.doom1.ultimate.Autoload", "doom.id.doom1.ultimate.Autoload");
-		RenameSection("doom.doom1.registered.Autoload", "doom.id.doom1.registered.Autoload");
-		RenameSection("doom.doom2.tnt.Autoload", "doom.id.doom2.tnt.Autoload");
-		RenameSection("doom.doom2.plutonia.Autoload", "doom.id.doom2.plutonia.Autoload");
-		RenameSection("doom.doom2.bfg.Autoload", "doom.id.doom2.bfg.Autoload");
-		RenameSection("doom.doom2.commercial.Autoload", "doom.id.doom2.commercial.Autoload");
-	}
 	const FString *pAuto;
 	for (int num = 0; (pAuto = iwad_man->GetAutoname(num)) != NULL; num++)
 	{
@@ -276,32 +239,20 @@ void FGameConfigFile::DoAutoloadSetup (FIWadManager *iwad_man)
 	CreateSectionAtStart("Global.Autoload");
 
 	// The same goes for auto-exec files.
-	CreateStandardAutoExec("Chex.AutoExec", true);
-	CreateStandardAutoExec("Strife.AutoExec", true);
-	CreateStandardAutoExec("Hexen.AutoExec", true);
-	CreateStandardAutoExec("Heretic.AutoExec", true);
-	CreateStandardAutoExec("Doom.AutoExec", true);
+	CreateStandardAutoExec("Selaco.AutoExec", true);
 
 	// Move search paths back to the top.
 	MoveSectionToStart("SoundfontSearch.Directories");
 	MoveSectionToStart("FileSearch.Directories");
 	MoveSectionToStart("IWADSearch.Directories");
 
-	SetSectionNote("Doom.AutoExec",
+	SetSectionNote("Selaco.AutoExec",
 		"# Files to automatically execute when running the corresponding game.\n"
 		"# Each file should be on its own line, preceded by Path=\n\n");
 	SetSectionNote("Global.Autoload",
 		"# WAD files to always load. These are loaded after the IWAD but before\n"
 		"# any files added with -file. Place each file on its own line, preceded\n"
 		"# by Path=\n");
-	SetSectionNote("Doom.Autoload",
-		"# Wad files to automatically load depending on the game and IWAD you are\n"
-		"# playing.  You may have have files that are loaded for all similar IWADs\n"
-		"# (the game) and files that are only loaded for particular IWADs. For example,\n"
-		"# any files listed under 'doom.Autoload' will be loaded for any version of Doom,\n"
-		"# but files listed under 'doom.doom2.Autoload' will only load when you are\n"
-		"# playing a Doom 2 based game (doom2.wad, tnt.wad or plutonia.wad), and files listed under\n"
-		"# 'doom.doom2.commercial.Autoload' only when playing doom2.wad.\n\n");
 }
 
 void FGameConfigFile::DoGlobalSetup ()
@@ -317,9 +268,16 @@ void FGameConfigFile::DoGlobalSetup ()
 	if (SetSection ("LastRun"))
 	{
 		const char *lastver = GetValueForKey ("Version");
+		double last = 0, target = atof(LASTRUNVERSION);
 		if (lastver != NULL)
 		{
-			double last = atof (lastver);
+			last = atof(lastver);
+		}
+
+		if (last < target) {
+			
+			bRequiresReset = true;
+			/*
 			if (last < 207)
 			{ // Now that snd_midiprecache works again, you probably don't want it on.
 				FBaseCVar *precache = FindCVar ("snd_midiprecache", NULL);
@@ -608,24 +566,7 @@ void FGameConfigFile::DoGlobalSetup ()
 				// ooooh boy did i open a can of worms with this one.
 				i_pauseinbackground = !(i_soundinbackground);
 			}
-			if (last < 224)
-			{
-				if (const auto var = FindCVar("m_sensitivity_x", NULL))
-				{
-					UCVarValue v = var->GetGenericRep(CVAR_Float);
-					v.Float *= 0.5f;
-					var->SetGenericRep(v, CVAR_Float);
-				}
-			}
-			if (last < 225)
-			{
-				if (const auto var = FindCVar("gl_lightmode", NULL))
-				{
-					UCVarValue v = var->GetGenericRep(CVAR_Int);
-					v.Int = v.Int == 16 ? 2 : v.Int == 8 ? 1 : 0;
-					var->SetGenericRep(v, CVAR_Int);
-				}
-			}
+			*/
 		}
 	}
 }
@@ -732,6 +673,13 @@ void FGameConfigFile::DoKeySetup(const char *gamename)
 		}
 	}
 	OkayToWrite = true;
+}
+
+void FGameConfigFile::FinishStartup() {
+	if (bRequiresReset) {
+		C_SetCVarsToDefaults();
+		bRequiresReset = false;
+	}
 }
 
 // Like DoGameSetup(), but for mod-specific cvars.
@@ -950,40 +898,40 @@ void FGameConfigFile::SetRavenDefaults (bool isHexen)
 	UCVarValue val;
 
 	val.Bool = false;
-	wi_percents->SetGenericRepDefault (val, CVAR_Bool);
+	wi_percents.SetGenericRepDefault (val, CVAR_Bool);
 	val.Bool = true;
-	con_centernotify->SetGenericRepDefault (val, CVAR_Bool);
-	snd_pitched->SetGenericRepDefault (val, CVAR_Bool);
+	con_centernotify.SetGenericRepDefault (val, CVAR_Bool);
+	snd_pitched.SetGenericRepDefault (val, CVAR_Bool);
 	val.Int = 9;
-	msg0color->SetGenericRepDefault (val, CVAR_Int);
+	msg0color.SetGenericRepDefault (val, CVAR_Int);
 	val.Int = CR_WHITE;
-	msgmidcolor->SetGenericRepDefault (val, CVAR_Int);
+	msgmidcolor.SetGenericRepDefault (val, CVAR_Int);
 	val.Int = CR_YELLOW;
-	msgmidcolor2->SetGenericRepDefault (val, CVAR_Int);
+	msgmidcolor2.SetGenericRepDefault (val, CVAR_Int);
 
 	val.Int = 0x543b17;
-	am_wallcolor->SetGenericRepDefault (val, CVAR_Int);
+	am_wallcolor.SetGenericRepDefault (val, CVAR_Int);
 	val.Int = 0xd0b085;
-	am_fdwallcolor->SetGenericRepDefault (val, CVAR_Int);
+	am_fdwallcolor.SetGenericRepDefault (val, CVAR_Int);
 	val.Int = 0x734323;
-	am_cdwallcolor->SetGenericRepDefault (val, CVAR_Int);
+	am_cdwallcolor.SetGenericRepDefault (val, CVAR_Int);
 
 	val.Int = 0;
-	wipetype->SetGenericRepDefault(val, CVAR_Int);
+	wipetype.SetGenericRepDefault(val, CVAR_Int);
 
 	// Fix the Heretic/Hexen automap colors so they are correct.
 	// (They were wrong on older versions.)
 	if (*am_wallcolor == 0x2c1808 && *am_fdwallcolor == 0x887058 && *am_cdwallcolor == 0x4c3820)
 	{
-		am_wallcolor->ResetToDefault ();
-		am_fdwallcolor->ResetToDefault ();
-		am_cdwallcolor->ResetToDefault ();
+		am_wallcolor.ResetToDefault ();
+		am_fdwallcolor.ResetToDefault ();
+		am_cdwallcolor.ResetToDefault ();
 	}
 
 	if (!isHexen)
 	{
 		val.Int = 0x3f6040;
-		color->SetGenericRepDefault (val, CVAR_Int);
+		color.SetGenericRepDefault (val, CVAR_Int);
 	}
 }
 
@@ -991,7 +939,7 @@ void FGameConfigFile::SetStrifeDefaults ()
 {
 	UCVarValue val;
 	val.Int = 3;
-	wipetype->SetGenericRepDefault(val, CVAR_Int);
+	wipetype.SetGenericRepDefault(val, CVAR_Int);
 }
 
 CCMD (whereisini)

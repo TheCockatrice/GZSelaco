@@ -41,7 +41,7 @@
 #include <stdexcept>
 #include "basics.h"
 
-#define MAX_ERRORTEXT	1024
+#define MAX_ERRORTEXT	2048
 
 class CEngineError : public std::exception
 {
@@ -59,13 +59,13 @@ public:
 		strncpy (m_Message, message, MAX_ERRORTEXT-1);
 		m_Message[MAX_ERRORTEXT-1] = '\0';
 	}
-	void AppendMessage(const char *message) noexcept
+	void AppendMessage(const char *message)
 	{
 		size_t len = strlen(m_Message);
 		strncpy(m_Message + len, message, MAX_ERRORTEXT - 1 - len);
 		m_Message[MAX_ERRORTEXT - 1] = '\0';
 	}
-	const char *GetMessage (void) const noexcept
+	const char *GetMessage (void) const
 	{
 		if (m_Message[0] != '\0')
 			return (const char *)m_Message;
@@ -90,6 +90,15 @@ public:
 	CRecoverableError(const char *message) : CEngineError(message) {}
 };
 
+class CRecoverableError2 : public CRecoverableError
+{
+public:
+	int type = -1;
+	CRecoverableError2() : CRecoverableError() {}
+	CRecoverableError2(int errType, const char* message) : CRecoverableError(message) { type = errType; }
+};
+
+
 class CFatalError : public CEngineError
 {
 public:
@@ -110,7 +119,8 @@ public:
 };
 
 void I_ShowFatalError(const char *message);
-[[noreturn]] void I_Error (const char *error, ...) GCCPRINTF(1,2);
-[[noreturn]] void I_FatalError (const char *error, ...) GCCPRINTF(1,2);
+void I_Error (const char *error, ...) GCCPRINTF(1,2);
+void I_Error2(int type, const char* error, ...) GCCPRINTF(2, 3);
+void I_FatalError (const char *error, ...) GCCPRINTF(1,2);
 
 #endif //__ERRORS_H__

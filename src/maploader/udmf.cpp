@@ -1123,6 +1123,11 @@ public:
 				Flag(ld->flags, ML_BLOCKHITSCAN, key); 
 				continue;
 			
+			// @Cockatice - Get line blocker bits
+			case NAME_BlockBits:
+				ld->blockBits = CheckInt(key);
+				continue;
+
 			// [TP] Locks the special with a key
 			case NAME_Locknumber:
 				ld->locknumber = CheckInt(key);

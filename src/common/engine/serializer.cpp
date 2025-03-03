@@ -37,7 +37,7 @@
 #define RAPIDJSON_HAS_CXX11_RANGE_FOR 1
 #define RAPIDJSON_PARSE_DEFAULT_FLAGS kParseFullPrecisionFlag
 
-#include <miniz.h>
+#include <zlib.h>
 #include "rapidjson/rapidjson.h"
 #include "rapidjson/writer.h"
 #include "rapidjson/prettywriter.h"
@@ -55,10 +55,6 @@
 #include "textures.h"
 #include "texturemanager.h"
 #include "base64.h"
-#include "vm.h"
-#include "i_interface.h"
-
-using namespace FileSys;
 
 extern DObject *WP_NOCHANGE;
 bool save_full = false;	// for testing. Should be removed afterward.
@@ -197,10 +193,7 @@ void FSerializer::Close()
 	}
 	if (mErrors > 0)
 	{
-		if (mLumpName.IsNotEmpty())
-			I_Error("%d errors parsing JSON lump %s", mErrors, mLumpName.GetChars());
-		else
-			I_Error("%d errors parsing JSON", mErrors);
+		I_Error("%d errors parsing JSON", mErrors);
 	}
 }
 
@@ -297,21 +290,6 @@ bool FSerializer::BeginObject(const char *name)
 //
 //==========================================================================
 
-bool FSerializer::HasKey(const char* name)
-{
-	if (isReading())
-	{
-		return r->FindKey(name) != nullptr;
-	}
-	return false;
-}
-
-//==========================================================================
-//
-//
-//
-//==========================================================================
-
 bool FSerializer::HasObject(const char* name)
 {
 	if (isReading())
@@ -320,28 +298,6 @@ bool FSerializer::HasObject(const char* name)
 		if (val != nullptr)
 		{
 			if (val->IsObject())
-			{
-				return true;
-			}
-		}
-	}
-	return false;
-}
-
-//==========================================================================
-//
-//
-//
-//==========================================================================
-
-bool FSerializer::IsKeyNull(const char* name)
-{
-	if (isReading())
-	{
-		auto val = r->FindKey(name);
-		if (val != nullptr)
-		{
-			if (val->IsNull())
 			{
 				return true;
 			}
@@ -645,8 +601,6 @@ void FSerializer::WriteObjects()
 		{
 			auto obj = w->mDObjects[i];
 
-			if(obj->ObjectFlags & OF_Transient) continue;
-
 			BeginObject(nullptr);
 			w->Key("classtype");
 			w->String(obj->GetClass()->TypeName.GetChars());
@@ -672,6 +626,8 @@ void FSerializer::ReadObjects(bool hubtravel)
 
 	if (isReading() && BeginArray("objects"))
 	{
+		fullErrorMessage = "Failed to restore all objects : \n";
+
 		// Do not link any thinker that's being created here. This will be done by deserializing the thinker list later.
 		try
 		{
@@ -693,6 +649,8 @@ void FSerializer::ReadObjects(bool hubtravel)
 					if (cls == nullptr)
 					{
 						Printf(TEXTCOLOR_RED "Unknown object class '%s' in savegame\n", clsname.GetChars());
+						fullErrorMessage.AppendFormat(TEXTCOLOR_RED "Unknown object class '%s' in savegame\n", clsname.GetChars());
+
 						founderrors = true;
 						r->mDObjects[i] = RUNTIME_CLASS(DObject)->CreateNew();	// make sure we got at least a valid pointer for the duration of the loading process.
 						r->mDObjects[i]->Destroy();								// but we do not want to keep this around, so destroy it right away.
@@ -729,7 +687,8 @@ void FSerializer::ReadObjects(bool hubtravel)
 							{
 								r->mObjects.Clamp(size);	// close all inner objects.
 								// In case something in here throws an error, let's continue and deal with it later.
-								Printf(PRINT_NONOTIFY | PRINT_BOLD, TEXTCOLOR_RED "'%s'\n while restoring %s\n", err.GetMessage(), obj ? obj->GetClass()->TypeName.GetChars() : "invalid object");
+								Printf(TEXTCOLOR_RED "'%s'\n while restoring %s\n", err.GetMessage(), obj ? obj->GetClass()->TypeName.GetChars() : "invalid object");
+								fullErrorMessage.AppendFormat(TEXTCOLOR_RED "'%s'\n while restoring %s\n", err.GetMessage(), obj ? obj->GetClass()->TypeName.GetChars() : "invalid object");
 								mErrors++;
 							}
 						}
@@ -739,6 +698,7 @@ void FSerializer::ReadObjects(bool hubtravel)
 			}
 			EndArray();
 
+			assert(!founderrors);
 			if (founderrors)
 			{
 				Printf(TEXTCOLOR_RED "Failed to restore all objects in savegame\n");
@@ -791,8 +751,8 @@ FCompressedBuffer FSerializer::GetCompressedOutput()
 	FCompressedBuffer buff;
 	WriteObjects();
 	EndObject();
-	buff.filename = nullptr;
 	buff.mSize = (unsigned)w->mOutString.GetSize();
+	buff.mZipFlags = 0;
 	buff.mCRC32 = crc32(0, (const Bytef*)w->mOutString.GetString(), buff.mSize);
 
 	uint8_t *compressbuf = new uint8_t[buff.mSize+1];
@@ -801,9 +761,9 @@ FCompressedBuffer FSerializer::GetCompressedOutput()
 	int err;
 
 	stream.next_in = (Bytef *)w->mOutString.GetString();
-	stream.avail_in = (unsigned)buff.mSize;
+	stream.avail_in = buff.mSize;
 	stream.next_out = (Bytef*)compressbuf;
-	stream.avail_out = (unsigned)buff.mSize;
+	stream.avail_out = buff.mSize;
 	stream.zalloc = (alloc_func)0;
 	stream.zfree = (free_func)0;
 	stream.opaque = (voidpf)0;
@@ -1179,13 +1139,13 @@ FSerializer &Serialize(FSerializer &arc, const char *key, FTextureID &value, FTe
 			const char *name;
 			auto lump = pic->GetSourceLump();
 
-			if (TexMan.GetLinkedTexture(lump) == pic)
+			if (fileSystem.GetLinkedTexture(lump) == pic)
 			{
 				name = fileSystem.GetFileFullName(lump);
 			}
 			else
 			{
-				name = pic->GetName().GetChars();
+				name = pic->GetName();
 			}
 			arc.WriteKey(key);
 			arc.w->StartArray();
@@ -1233,28 +1193,6 @@ FSerializer &Serialize(FSerializer &arc, const char *key, FTextureID &value, FTe
 			}
 		}
 	}
-	return arc;
-}
-
-//==========================================================================
-//
-//
-//
-//==========================================================================
-
-FSerializer& Serialize(FSerializer& arc, const char* key, FTranslationID& value, FTranslationID* defval)
-{
-	int v = value.index();
-	int* defv = (int*)defval;
-	Serialize(arc, key, v, defv);
-	
-	if (arc.isReading())
-	{
-		// allow games to alter the loaded value to handle dynamic lists.
-		if (sysCallbacks.RemapTranslation) value = sysCallbacks.RemapTranslation(FTranslationID::fromInt(v));
-		else value = FTranslationID::fromInt(v);
-	}
-		
 	return arc;
 }
 
@@ -1399,9 +1337,9 @@ FSerializer &Serialize(FSerializer &arc, const char *key, FSoundID &sid, FSoundI
 	if (!arc.soundNamesAreUnique)
 	{
 		//If sound name here is not reliable, we need to save by index instead.
-		int id = sid.index();
+		int id = sid;
 		Serialize(arc, key, id, nullptr);
-		if (arc.isReading()) sid = FSoundID::fromInt(id);
+		if (arc.isReading()) sid = FSoundID(id);
 	}
 	else if (arc.isWriting())
 	{
@@ -1421,16 +1359,16 @@ FSerializer &Serialize(FSerializer &arc, const char *key, FSoundID &sid, FSoundI
 			assert(val->IsString() || val->IsNull());
 			if (val->IsString())
 			{
-				sid = S_FindSound(UnicodeToString(val->GetString()));
+				sid = UnicodeToString(val->GetString());
 			}
 			else if (val->IsNull())
 			{
-				sid = NO_SOUND;
+				sid = 0;
 			}
 			else
 			{
 				Printf(TEXTCOLOR_RED "string type expected for '%s'\n", key);
-				sid = NO_SOUND;
+				sid = 0;
 				arc.mErrors++;
 			}
 		}
@@ -1569,8 +1507,8 @@ FString DictionaryToString(const Dictionary &dict)
 
 	while (i.NextPair(pair))
 	{
-		writer.Key(pair->Key.GetChars());
-		writer.String(pair->Value.GetChars());
+		writer.Key(pair->Key);
+		writer.String(pair->Value);
 	}
 
 	writer.EndObject();
@@ -1632,35 +1570,6 @@ template<> FSerializer &Serialize(FSerializer &arc, const char *key, Dictionary 
 	}
 }
 
-template<> FSerializer& Serialize(FSerializer& arc, const char* key, VMFunction*& func, VMFunction**)
-{
-	if (arc.isWriting())
-	{
-		arc.WriteKey(key);
-		if (func) arc.w->String(func->QualifiedName);
-		else arc.w->Null();
-	}
-	else
-	{
-		func = nullptr;
-
-		auto val = arc.r->FindKey(key);
-		if (val != nullptr && val->IsString())
-		{
-			auto qname = val->GetString();
-			size_t p = strcspn(qname, ".");
-			if (p != 0)
-			{
-				FName clsname(qname, p, true);
-				FName funcname(qname + p + 1, true);
-				func = PClass::FindFunction(clsname, funcname);
-			}
-		}
-
-	}
-	return arc;
-}
-
 //==========================================================================
 //
 // Handler to retrieve a numeric value of any kind.
@@ -1716,97 +1625,6 @@ FSerializer &Serialize(FSerializer &arc, const char *key, NumericValue &value, N
 		}
 	}
 	return arc;
-}
-
-//==========================================================================
-//
-// PFunctionPointer
-//
-//==========================================================================
-
-void SerializeFunctionPointer(FSerializer &arc, const char *key, FunctionPointerValue *&p)
-{
-	if (arc.isWriting())
-	{
-		if(p)
-		{
-			arc.BeginObject(key);
-			arc("Class",p->ClassName);
-			arc("Function",p->FunctionName);
-			arc.EndObject();
-		}
-		else
-		{
-			arc.WriteKey(key);
-			arc.w->Null();
-		}
-	}
-	else
-	{
-		assert(p);
-		auto v = arc.r->FindKey(key);
-		if(!v || v->IsNull())
-		{
-			p = nullptr;
-		}
-		else if(v->IsObject())
-		{
-			arc.r->mObjects.Push(FJSONObject(v)); // BeginObject
-
-			const char * cstr;
-			arc.StringPtr("Class", cstr);
-
-			if(!cstr)
-			{
-				arc.StringPtr("Function", cstr);
-				if(!cstr)
-				{
-					Printf(TEXTCOLOR_RED "Function Pointer missing Class and Function Fields in Object\n");
-				}
-				else
-				{
-					Printf(TEXTCOLOR_RED "Function Pointer missing Class Field in Object\n");
-				}
-				arc.mErrors++;
-				arc.EndObject();
-				p = nullptr;
-				return;
-			}
-
-			p->ClassName = FString(cstr);
-			arc.StringPtr("Function", cstr);
-
-			if(!cstr)
-			{
-				Printf(TEXTCOLOR_RED "Function Pointer missing Function Field in Object\n");
-				arc.mErrors++;
-				arc.EndObject();
-				p = nullptr;
-				return;
-			}
-			p->FunctionName = FString(cstr);
-			arc.EndObject();
-		}
-		else
-		{
-			Printf(TEXTCOLOR_RED "Function Pointer is not an Object\n");
-			arc.mErrors++;
-			p = nullptr;
-		}
-	}
-}
-
-bool FSerializer::ReadOptionalInt(const char * key, int &into)
-{
-	if(!isReading()) return false;
-
-	auto val = r->FindKey(key);
-	if(val && val->IsInt())
-	{
-		into = val->GetInt();
-		return true;
-	}
-	return false;
 }
 
 #include "renderstyle.h"

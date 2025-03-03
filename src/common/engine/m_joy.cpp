@@ -59,7 +59,7 @@ EXTERN_CVAR(Bool, joy_xinput)
 
 // PUBLIC DATA DEFINITIONS -------------------------------------------------
 
-CUSTOM_CVARD(Bool, use_joystick, false, CVAR_ARCHIVE|CVAR_GLOBALCONFIG|CVAR_NOINITCALL, "enables input from the joystick if it is present") 
+CUSTOM_CVARD(Bool, use_joystick, true, CVAR_ARCHIVE|CVAR_GLOBALCONFIG|CVAR_NOINITCALL, "enables input from the joystick if it is present") 
 {
 #ifdef _WIN32
 	joy_ps2raw->Callback();
@@ -67,6 +67,10 @@ CUSTOM_CVARD(Bool, use_joystick, false, CVAR_ARCHIVE|CVAR_GLOBALCONFIG|CVAR_NOIN
 	joy_xinput->Callback();
 #endif
 }
+
+CVAR(Bool, joy_feedback, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
+CVAR(Float, joy_feedback_scale, 1.0f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
+CVAR(Float, joy_menu_deadzone, 0.05f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
 
 // PRIVATE DATA DEFINITIONS ------------------------------------------------
 
@@ -163,6 +167,13 @@ bool M_LoadJoystickConfig(IJoystickConfig *joy)
 			joy->SetAxisScale(i, (float)atof(value));
 		}
 
+		mysnprintf(key + axislen, countof(key) - axislen, "acceleration");
+		value = GameConfig->GetValueForKey(key);
+		if (value != NULL)
+		{
+			joy->SetAxisAcceleration(i, (float)atof(value));
+		}
+
 		mysnprintf(key + axislen, countof(key) - axislen, "map");
 		value = GameConfig->GetValueForKey(key);
 		if (value)
@@ -225,6 +236,12 @@ void M_SaveJoystickConfig(IJoystickConfig *joy)
 			{
 				mysnprintf(key + axislen, countof(key) - axislen, "scale");
 				mysnprintf(value, countof(value), "%g", joy->GetAxisScale(i));
+				GameConfig->SetValueForKey(key, value);
+			}
+			if (!joy->IsAxisAccelerationDefault(i))
+			{
+				mysnprintf(key + axislen, countof(key) - axislen, "acceleration");
+				mysnprintf(value, countof(value), "%g", joy->GetAxisAcceleration(i));
 				GameConfig->SetValueForKey(key, value);
 			}
 			if (!joy->IsAxisMapDefault(i))
@@ -297,10 +314,17 @@ double Joy_RemoveDeadZone(double axisval, double deadzone, uint8_t *buttons)
 
 int Joy_XYAxesToButtons(double x, double y)
 {
+	// @Cockatrice - Some gamepads were wigging out in menus because they needed more deadzone
+	if (fabs(x) < joy_menu_deadzone) x = 0;
+	if (fabs(y) < joy_menu_deadzone) y = 0;
+
 	if (x == 0 && y == 0)
 	{
 		return 0;
 	}
+
+	
+
 	double rad = atan2(y, x);
 	if (rad < 0)
 	{

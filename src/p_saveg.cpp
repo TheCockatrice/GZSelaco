@@ -83,6 +83,7 @@ FSerializer &Serialize(FSerializer &arc, const char *key, line_t &line, line_t *
 			("alpha", line.alpha, def->alpha)
 			("portalindex", line.portalindex, def->portalindex)
 			("locknumber", line.locknumber, def->locknumber)
+			("blockbits", line.blockBits, def->blockBits)
 			("health", line.health, def->health);
 			// Unless the map loader is changed the sidedef references will not change between map loads so there's no need to save them.
 			//.Array("sides", line.sidedef, 2)
@@ -938,7 +939,7 @@ void FLevelLocals::Serialize(FSerializer &arc, bool hubload)
 			arc.GetSize("polyobjs") != Polyobjects.Size() ||
 			memcmp(chk, md5, 16))
 		{
-			I_Error("Savegame is from a different level");
+			I_Error("This Savegame is incompatible with your game version.");
 		}
 	}
 	arc("saveversion", SaveVersion);
@@ -952,7 +953,17 @@ void FLevelLocals::Serialize(FSerializer &arc, bool hubload)
 		interpolator.ClearInterpolations();
 		arc.ReadObjects(hubload);
 		// If there have been object deserialization errors we must absolutely not continue here because scripted objects can do unpredictable things.
-		if (arc.mObjectErrors) I_Error("Failed to load savegame");
+		if (arc.mObjectErrors) {
+			if (arc.fullErrorMessage.IsEmpty()) {
+				I_Error("Failed to load savegame");
+			}
+			else {
+				I_Error2(4, arc.fullErrorMessage.GetChars());
+			}
+		}
+	}
+	else {
+		arc("mapversion", mapVersion);
 	}
 
 	arc("multiplayer", multiplayer);

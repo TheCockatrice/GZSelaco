@@ -87,6 +87,11 @@ extern unsigned int		R_OldBlend;
 
 const double			r_Yaspect = 200.0;		// Why did I make this a variable? It's never set anywhere.
 
+// @Cockatrice - Setup in R_SetupFrame(), valid for the current render this is the script supplied camera offsets
+// Angle is a simple yaw,pitch,roll
+// pos offset is unused for now
+extern DVector3			FrameAngleOffsets;
+extern DVector3			FramePosOffset;
 
 //==========================================================================
 //
@@ -118,6 +123,7 @@ struct DVector3a
 	DVector3 pos;
 	DAngle angle;
 };
+
 
 void R_ResetViewInterpolation ();
 void R_RebuildViewInterpolation(player_t *player);

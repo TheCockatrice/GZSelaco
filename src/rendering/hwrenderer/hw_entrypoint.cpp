@@ -41,10 +41,8 @@
 #include "v_palette.h"
 #include "d_main.h"
 #include "g_cvars.h"
-#include "v_draw.h"
 
 #include "hw_lightbuffer.h"
-#include "hw_bonebuffer.h"
 #include "hw_cvars.h"
 #include "hwrenderer/data/hw_viewpointbuffer.h"
 #include "hwrenderer/scene/hw_fakeflat.h"
@@ -67,7 +65,7 @@ void CleanSWDrawer()
 #include "a_dynlight.h"
 
 
-void CollectLights(FLevelLocals* Level)
+void CollectLights(FLevelLocals* Level, double ticFrac = 1.0)
 {
 	IShadowMap* sm = &screen->mShadowMap;
 	int lightindex = 0;
@@ -81,7 +79,7 @@ void CollectLights(FLevelLocals* Level)
 			IShadowMap::LightsShadowmapped++;
 
 			light->mShadowmapIndex = lightindex;
-			sm->SetLight(lightindex, (float)light->X(), (float)light->Y(), (float)light->Z(), light->GetRadius());
+			sm->SetLight(lightindex, (float)light->iX(ticFrac), (float)light->iY(ticFrac), (float)light->iZ(ticFrac), light->GetRadius());
 			lightindex++;
 		}
 		else
@@ -104,17 +102,17 @@ void CollectLights(FLevelLocals* Level)
 //
 //-----------------------------------------------------------------------------
 
-sector_t* RenderViewpoint(FRenderViewpoint& mainvp, AActor* camera, IntRect* bounds, float fov, float ratio, float fovratio, bool mainview, bool toscreen)
+sector_t* RenderViewpoint(FRenderViewpoint& mainvp, AActor* camera, IntRect* bounds, float fov, float ratio, float fovratio, bool mainview, bool toscreen, bool isSavePic)
 {
 	auto& RenderState = *screen->RenderState();
 
 	R_SetupFrame(mainvp, r_viewwindow, camera);
 
-	if (mainview && toscreen && !(camera->Level->flags3 & LEVEL3_NOSHADOWMAP) && camera->Level->HasDynamicLights && gl_light_shadowmap && screen->allowSSBO() && (screen->hwcaps & RFL_SHADER_STORAGE_BUFFER))
+	if (mainview && (toscreen || isSavePic) && !(camera->Level->flags3 & LEVEL3_NOSHADOWMAP) && camera->Level->HasDynamicLights && gl_light_shadowmap && screen->allowSSBO() && (screen->hwcaps & RFL_SHADER_STORAGE_BUFFER))
 	{
 		screen->SetAABBTree(camera->Level->aabbTree);
 		screen->mShadowMap.SetCollectLights([=] {
-			CollectLights(camera->Level);
+			CollectLights(camera->Level, mainvp.TicFrac);
 		});
 		screen->UpdateShadowMap();
 	}
@@ -160,24 +158,20 @@ sector_t* RenderViewpoint(FRenderViewpoint& mainvp, AActor* camera, IntRect* bou
 		// Only used by the GLES2 renderer
 		RenderState.SetSpecialColormap(cm, flash);
 
-		di->Viewpoint.FieldOfView = DAngle::fromDeg(fov);	// Set the real FOV for the current scene (it's not necessarily the same as the global setting in r_viewpoint)
+		di->Viewpoint.FieldOfView = fov;	// Set the real FOV for the current scene (it's not necessarily the same as the global setting in r_viewpoint)
 
 		// Stereo mode specific perspective projection
-		float inv_iso_dist = 1.0f;
-		bool iso_ortho = (camera->ViewPos != NULL) && (camera->ViewPos->Flags & VPSF_ORTHOGRAPHIC);
-		if (iso_ortho && (camera->ViewPos->Offset.Length() > 0)) inv_iso_dist = 1.0/camera->ViewPos->Offset.Length();
-		di->VPUniforms.mProjectionMatrix = eye.GetProjection(fov, ratio, fovratio * inv_iso_dist, iso_ortho);
-
+		di->VPUniforms.mProjectionMatrix = eye.GetProjection(fov, ratio, fovratio);
 		// Stereo mode specific viewpoint adjustment
-		vp.Pos += eye.GetViewShift(vp.HWAngles.Yaw.Degrees());
+		vp.Pos += eye.GetViewShift(vp.HWAngles.Yaw.Degrees);
 		di->SetupView(RenderState, vp.Pos.X, vp.Pos.Y, vp.Pos.Z, false, false);
 
-		di->ProcessScene(toscreen);
+		di->ProcessScene(toscreen, toscreen || isSavePic);
 
 		if (mainview)
 		{
 			PostProcess.Clock();
-			if (toscreen) di->EndDrawScene(mainvp.sector, RenderState); // do not call this for camera textures.
+			if (toscreen || isSavePic) di->EndDrawScene(mainvp.sector, RenderState); // do not call this for camera textures.
 
 			if (RenderState.GetPassType() == GBUFFER_PASS) // Turn off ssao draw buffers
 			{
@@ -277,24 +271,24 @@ void WriteSavePic(player_t* player, FileWriter* file, int width, int height)
 		screen->SetSaveBuffers(true);
 		screen->ImageTransitionScene(true);
 
-		hw_postprocess.SetTonemapMode(level.info ? level.info->tonemap : ETonemapMode::None);
 		hw_ClearFakeFlat();
 		screen->mVertexData->Reset();
 		RenderState.SetVertexBuffer(screen->mVertexData);
 		screen->mLights->Clear();
-		screen->mBones->Clear();
 		screen->mViewpoints->Clear();
 
 		// This shouldn't overwrite the global viewpoint even for a short time.
 		FRenderViewpoint savevp;
-		sector_t* viewsector = RenderViewpoint(savevp, players[consoleplayer].camera, &bounds, r_viewpoint.FieldOfView.Degrees(), 1.6f, 1.6f, true, false);
+		sector_t* viewsector = RenderViewpoint(savevp, players[consoleplayer].camera, &bounds, r_viewpoint.FieldOfView.Degrees, 1.6f, 1.6f, true, false, true);
 		RenderState.EnableStencil(false);
 		RenderState.SetNoSoftLightLevel();
+		
+		int numpixels = width * height;
+		uint8_t* scr = (uint8_t*)M_Malloc(numpixels * 3);
+		screen->CopyScreenToBuffer(width, height, scr);
 
-		TArray<uint8_t> scr(width * height * 3, true);
-		screen->CopyScreenToBuffer(width, height, scr.Data());
-
-		DoWriteSavePic(file, SS_RGB, scr.Data(), width, height, viewsector, screen->FlipSavePic());
+		DoWriteSavePic(file, SS_RGB, scr, width, height, viewsector, screen->FlipSavePic());
+		M_Free(scr);
 
 		// Switch back the screen render buffers
 		screen->SetViewportRects(nullptr);
@@ -322,7 +316,6 @@ sector_t* RenderView(player_t* player)
 	auto RenderState = screen->RenderState();
 	RenderState->SetVertexBuffer(screen->mVertexData);
 	screen->mVertexData->Reset();
-	hw_postprocess.SetTonemapMode(level.info ? level.info->tonemap : ETonemapMode::None);
 
 	sector_t* retsec;
 	if (!V_IsHardwareRenderer())
@@ -348,7 +341,6 @@ sector_t* RenderView(player_t* player)
 		else r_viewpoint.TicFrac = I_GetTimeFrac();
 
 		screen->mLights->Clear();
-		screen->mBones->Clear();
 		screen->mViewpoints->Clear();
 
 		// NoInterpolateView should have no bearing on camera textures, but needs to be preserved for the main view below.
@@ -358,22 +350,6 @@ sector_t* RenderView(player_t* player)
 		// Shader start time does not need to be handled per level. Just use the one from the camera to render from.
 		if (player->camera)
 			CheckTimer(*RenderState, player->camera->Level->ShaderStartTime);
-
-		// Draw all canvases that changed
-		for (FCanvas* canvas : AllCanvases)
-		{
-			if (canvas->Tex && canvas->Tex->CheckNeedsUpdate())
-			{
-				screen->RenderTextureView(canvas->Tex, [=](IntRect& bounds)
-					{
-						screen->SetViewportRects(&bounds);
-						Draw2D(&canvas->Drawer, *screen->RenderState(), 0, 0, canvas->Tex->GetWidth(), canvas->Tex->GetHeight());
-						canvas->Drawer.Clear();
-					});
-				canvas->Tex->SetUpdated(true);
-			}
-		}
-
 		// prepare all camera textures that have been used in the last frame.
 		// This must be done for all levels, not just the primary one!
 		for (auto Level : AllLevels())
@@ -404,7 +380,7 @@ sector_t* RenderView(player_t* player)
 
 		screen->ImageTransitionScene(true); // Only relevant for Vulkan.
 
-		retsec = RenderViewpoint(r_viewpoint, player->camera, NULL, r_viewpoint.FieldOfView.Degrees(), ratio, fovratio, true, true);
+		retsec = RenderViewpoint(r_viewpoint, player->camera, NULL, r_viewpoint.FieldOfView.Degrees, ratio, fovratio, true, true);
 	}
 	All.Unclock();
 	return retsec;

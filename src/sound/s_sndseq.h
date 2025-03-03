@@ -31,6 +31,7 @@ class DSeqNode : public DObject
 	DECLARE_CLASS (DSeqNode, DObject)
 	HAS_OBJECT_POINTERS
 public:
+	void PreloadSounds();
 	void Serialize(FSerializer &arc) override;
 	void StopAndDestroy ();
 	void OnDestroy() override;

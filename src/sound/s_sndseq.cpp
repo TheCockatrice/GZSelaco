@@ -43,6 +43,10 @@
 #include "g_levellocals.h"
 #include "vm.h"
 
+#include "s_loader.h"
+
+EXTERN_CVAR(Int, audio_loader_threads);
+
 // MACROS ------------------------------------------------------------------
 
 #define GetCommand(a)		((a) & 255)
@@ -831,12 +835,50 @@ void DSeqNode::ActivateSequence (int sequence)
 	m_CurrentSoundID = NO_SOUND;
 	m_Volume = 1;			// Start at max volume...
 	m_Atten = ATTN_IDLE;	// ...and idle attenuation
+
+	PreloadSounds();
 }
 
 DSeqActorNode::DSeqActorNode(AActor* actor, int sequence, int modenum)
 	: DSeqNode(actor->Level, sequence, modenum)
 {
 	m_Actor = actor;
+}
+
+void DSeqNode::PreloadSounds() {
+	// Start loading all sounds if necessary
+	bool initialLoad = level.maptime < 2;
+
+	if (audio_loader_threads > 0 || initialLoad) {
+		FSoundSequence* seq = Sequences[m_Sequence];
+
+		for (int i = 0; GetCommand(seq->Script[i]) != SS_CMD_END; ++i) {
+			int cmd = GetCommand(seq->Script[i]);
+			if (cmd == SS_CMD_PLAY || cmd == SS_CMD_PLAYREPEAT || cmd == SS_CMD_PLAYLOOP)
+			{
+				auto sound_id = GetData(seq->Script[i]);
+				sfxinfo_t* sfx = const_cast<sfxinfo_t*>(soundEngine->GetSfx(sound_id));
+				if (sfx != nullptr && !sfx->data.isValid()) {
+					if (initialLoad) {
+						soundEngine->LoadSound(sfx);
+					}
+					else {
+						AudioLoaderQueue::Instance->queue(sfx, sound_id, nullptr);
+					}
+				}
+			}
+		}
+
+		sfxinfo_t* sfx = const_cast<sfxinfo_t*>(soundEngine->GetSfx(seq->StopSound));
+		if (sfx != nullptr && !sfx->data.isValid()) {
+			if (initialLoad) {
+				soundEngine->LoadSound(sfx);
+			}
+			else {
+				AudioLoaderQueue::Instance->queue(sfx, seq->StopSound, nullptr);
+			}
+		}
+	}
 }
 
 DSeqPolyNode::DSeqPolyNode (FPolyObj *poly, int sequence, int modenum)
@@ -1433,7 +1475,7 @@ DEFINE_ACTION_FUNCTION(DSeqNode, GetSequenceSlot)
 //==========================================================================
 
 void SN_MarkPrecacheSounds(int sequence, seqtype_t type)
-{
+{	
 	if (TwiddleSeqNum(sequence, type))
 	{
 		FSoundSequence *seq = Sequences[sequence];

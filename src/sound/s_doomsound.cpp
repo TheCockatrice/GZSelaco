@@ -66,9 +66,15 @@
 #include "g_game.h"
 #include "s_music.h"
 #include "v_draw.h"
-#include "m_argv.h"
+#include "s_loader.h"
+
 
 // PUBLIC DATA DEFINITIONS -------------------------------------------------
+
+
+FBoolCVar noisedebug("noise", false, 0);	// [RH] Print sound debugging info?
+CVAR (Bool, i_soundinbackground, false, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
+CVAR (Bool, i_pauseinbackground, true, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 
 
 static FString LastLocalSndInfo;
@@ -82,21 +88,21 @@ class DoomSoundEngine : public SoundEngine
 	void CalcPosVel(int type, const void* source, const float pt[3], int channum, int chanflags, FSoundID soundid, FVector3* pos, FVector3* vel, FSoundChan *) override;
 	bool ValidatePosVel(int sourcetype, const void* source, const FVector3& pos, const FVector3& vel);
 	TArray<uint8_t> ReadSound(int lumpnum);
-	FSoundID PickReplacement(FSoundID refid);
+	int PickReplacement(int refid);
 	FSoundID ResolveSound(const void *ent, int type, FSoundID soundid, float &attenuation) override;
 	void CacheSound(sfxinfo_t* sfx) override;
 	void StopChannel(FSoundChan* chan) override;
-	FSoundID AddSoundLump(const char* logicalname, int lump, int CurrentPitchMask, int resid = -1, int nearlimit = 2) override
+	int AddSoundLump(const char* logicalname, int lump, int CurrentPitchMask, int resid = -1, int nearlimit = 2) override
 	{
 		auto ndx = SoundEngine::AddSoundLump(logicalname, lump, CurrentPitchMask, resid, nearlimit);
-		S_sfx[ndx.index()].UserData.Resize(1);
-		S_sfx[ndx.index()].UserData[0] = 0;
+		S_sfx[ndx].UserData.Resize(1);
+		S_sfx[ndx].UserData[0] = 0;
 		return ndx;
 	}
-	bool CheckSoundLimit(sfxinfo_t* sfx, const FVector3& pos, int near_limit, float limit_range, int sourcetype, const void* actor, int channel, float attenuation) override
+	bool CheckSoundLimit(sfxinfo_t* sfx, const FVector3& pos, int near_limit, float limit_range, int sourcetype, const void* actor, int channel, float attenuation, sfxinfo_t* compareOrgID = nullptr) override
 	{
 		if (sourcetype != SOURCE_Actor) actor = nullptr; //ZDoom did this.
-		return SoundEngine::CheckSoundLimit(sfx, pos, near_limit, limit_range, sourcetype, actor, channel, attenuation);
+		return SoundEngine::CheckSoundLimit(sfx, pos, near_limit, limit_range, sourcetype, actor, channel, attenuation, compareOrgID);
 	}
 
 
@@ -154,11 +160,11 @@ static FString LookupMusic(const char* musicname, int& order)
 		// handle dehacked replacement.
 		// Any music name defined this way needs to be prefixed with 'D_' because
 		// Doom.exe does not contain the prefix so these strings don't either.
-		const char* mus_string = GStrings.CheckString(musicname + 1);
+		const char* mus_string = GStrings[musicname + 1];
 		if (mus_string != nullptr)
 		{
 			DEH_Music << "D_" << mus_string;
-			musicname = DEH_Music.GetChars();
+			musicname = DEH_Music;
 		}
 	}
 
@@ -177,17 +183,36 @@ static FString LookupMusic(const char* musicname, int& order)
 
 //==========================================================================
 //
-// FindMusic
+// OpenMusic
 //
-// loops up a music resource according to the engine's rules
+// opens a FileReader for the music - used as a callback to keep
+// implementation details out of the core player.
 //
 //==========================================================================
 
-static int FindMusic(const char* musicname)
+static FileReader OpenMusic(const char* musicname)
 {
-	int lumpnum = fileSystem.CheckNumForFullName(musicname);
-	if (lumpnum == -1) lumpnum = fileSystem.CheckNumForName(musicname, FileSys::ns_music);
-	return lumpnum;
+	FileReader reader;
+	if (!FileExists(musicname))
+	{
+		int lumpnum;
+		lumpnum = fileSystem.CheckNumForFullName(musicname);
+		if (lumpnum == -1) lumpnum = fileSystem.CheckNumForName(musicname, ns_music);
+		if (lumpnum == -1)
+		{
+			Printf("Music \"%s\" not found\n", musicname);
+		}
+		else if (fileSystem.FileLength(lumpnum) != 0)
+		{
+			reader = fileSystem.ReopenFileReader(lumpnum);
+		}
+	}
+	else
+	{
+		// Load an external file.
+		reader.OpenFile(musicname);
+	}
+	return reader;
 }
 
 //==========================================================================
@@ -201,7 +226,7 @@ static int FindMusic(const char* musicname)
 void S_Init()
 {
 	// Hook up the music player with the engine specific customizations.
-	static MusicCallbacks cb = { LookupMusic, FindMusic };
+	static MusicCallbacks cb = { LookupMusic, OpenMusic };
 	S_SetMusicCallbacks(&cb);
 
 	// Must be up before I_InitSound.
@@ -211,15 +236,14 @@ void S_Init()
 	}
 
 	I_InitSound();
-	I_InitMusic(Args->CheckParm("-nomusic") || Args->CheckParm("-nosound"));
+	I_InitMusic();
 
 	// Heretic and Hexen have sound curve lookup tables. Doom does not.
 	int curvelump = fileSystem.CheckNumForName("SNDCURVE");
 	TArray<uint8_t> curve;
 	if (curvelump >= 0)
 	{
-		curve.Resize(fileSystem.FileLength(curvelump));
-		fileSystem.ReadFile(curvelump, curve.Data());
+		curve = fileSystem.GetFileData(curvelump);
 	}
 	soundEngine->Init(curve);
 }
@@ -270,6 +294,12 @@ void S_Start()
 		// kill all playing sounds at start of level (trust me - a good idea)
 		soundEngine->StopAllChannels();
 
+		// @Cockatrice - Reset sound engine handle IDs, will be overwritten if the savegame has stored it too
+		soundEngine->LastSoundHandle = 0;
+
+		// reset the listener so any new audio playing before we are positioned is not heard
+		S_SetListener(nullptr);
+
 		// Check for local sound definitions. Only reload if they differ
 		// from the previous ones.
 		FString LocalSndInfo;
@@ -295,7 +325,7 @@ void S_Start()
 			if (LocalSndInfo.IsNotEmpty())
 			{
 				// Now parse the local SNDINFO
-				int j = fileSystem.CheckNumForFullName(LocalSndInfo.GetChars(), true);
+				int j = fileSystem.CheckNumForFullName(LocalSndInfo, true);
 				if (j >= 0) S_AddLocalSndInfo(j);
 			}
 
@@ -309,7 +339,7 @@ void S_Start()
 
 		if (parse_ss)
 		{
-			S_ParseSndSeq(LocalSndSeq.IsNotEmpty() ? fileSystem.CheckNumForFullName(LocalSndSeq.GetChars(), true) : -1);
+			S_ParseSndSeq(LocalSndSeq.IsNotEmpty() ? fileSystem.CheckNumForFullName(LocalSndSeq, true) : -1);
 		}
 
 		LastLocalSndInfo = LocalSndInfo;
@@ -377,14 +407,22 @@ void S_InitData()
 //
 //==========================================================================
 
-void S_SoundPitch(int channel, EChanFlags flags, FSoundID sound_id, float volume, float attenuation, float pitch, float startTime)
+FSoundHandle S_SoundPitch(int channel, EChanFlags flags, FSoundID sound_id, float volume, float attenuation, float pitch, float startTime)
 {
-	soundEngine->StartSound(SOURCE_None, nullptr, nullptr, channel, flags, sound_id, volume, attenuation, nullptr, pitch, startTime);
+	FSoundHandle handle;
+	soundEngine->StartSound(SOURCE_None, nullptr, nullptr, channel, flags, sound_id, volume, attenuation, 0, pitch, startTime, &handle);
+	return handle;
 }
 
-void S_Sound(int channel, EChanFlags flags, FSoundID sound_id, float volume, float attenuation)
+FSoundHandle S_Sound(int channel, EChanFlags flags, FSoundID sound_id, float volume, float attenuation)
 {
-	soundEngine->StartSound (SOURCE_None, nullptr, nullptr, channel, flags, sound_id, volume, attenuation, 0, 0.f);
+	FSoundHandle handle;
+	soundEngine->StartSound (SOURCE_None, nullptr, nullptr, channel, flags, sound_id, volume, attenuation, 0, 0.f, 0.f, &handle);
+	return handle;
+}
+
+void S_StopSoundID(int channel, FSoundID sound_id) {
+	soundEngine->StopSound(channel, sound_id);
 }
 
 DEFINE_ACTION_FUNCTION(DObject, S_Sound)
@@ -410,31 +448,69 @@ DEFINE_ACTION_FUNCTION(DObject, S_StartSound)
 	PARAM_FLOAT(attn);
 	PARAM_FLOAT(pitch);
 	PARAM_FLOAT(startTime);
-	S_SoundPitch(channel, EChanFlags::FromInt(flags), id, static_cast<float>(volume), static_cast<float>(attn), static_cast<float>(pitch), static_cast<float>(startTime));
-	return 0;
+	ACTION_RETURN_INT(S_SoundPitch(channel, EChanFlags::FromInt(flags), id, static_cast<float>(volume), static_cast<float>(attn), static_cast<float>(pitch), static_cast<float>(startTime)));
+	return 1;
 }
 
-static void S_StartSoundAt(double x, double y, double z, int sound_id, int channel, int flags, double volume, double attenuation, double pitch, double startTime)
-{
-	FVector3 pos = { (float)x, (float)z, (float)y };
-	soundEngine->StartSound(SOURCE_Unattached, nullptr, &pos, channel, EChanFlags::FromInt(flags), FSoundID::fromInt(sound_id), (float)volume, (float)attenuation, nullptr, (float)pitch, (float)startTime);
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(DObject, S_StartSoundAt, S_StartSoundAt)
+DEFINE_ACTION_FUNCTION(DObject, S_StopSound)
 {
 	PARAM_PROLOGUE;
-	PARAM_FLOAT(x);
-	PARAM_FLOAT(y);
-	PARAM_FLOAT(z);
-	PARAM_INT(id);
 	PARAM_INT(channel);
-	PARAM_INT(flags);
-	PARAM_FLOAT(volume);
-	PARAM_FLOAT(attn);
-	PARAM_FLOAT(pitch);
-	PARAM_FLOAT(startTime);
-	S_StartSoundAt(x, y, z, id, channel, flags, volume, attn, pitch, startTime);
+	PARAM_SOUND(id);
+
+	S_StopSoundID(channel, id);
 	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(DObject, S_SoundPitch)
+{
+	PARAM_PROLOGUE;
+	PARAM_INT(channel);
+	PARAM_FLOAT(pitch);
+
+	S_ChangeSoundPitch(channel, pitch);
+	return 0;
+}
+
+
+// @Cockatice - Funcs for SoundHandle
+// None
+DEFINE_ACTION_FUNCTION(FSoundHandleStruct, SetPitch)
+{
+	PARAM_PROLOGUE;
+	PARAM_POINTER(handle, FSoundHandle);
+	PARAM_FLOAT(pitch);
+
+	FSoundHandle hhandle(handle != NULL ? (int)*handle : 0);
+	ACTION_RETURN_BOOL(S_ChangeSoundPitch(hhandle, pitch));
+}
+
+DEFINE_ACTION_FUNCTION(FSoundHandleStruct, StopSound)
+{
+	PARAM_PROLOGUE;
+	PARAM_POINTER(handle, FSoundHandle);
+	FSoundHandle hhandle(handle != NULL ? (int)*handle : 0);
+	ACTION_RETURN_BOOL(S_StopSound(hhandle));
+}
+
+DEFINE_ACTION_FUNCTION(FSoundHandleStruct, SetVolume)
+{
+	PARAM_PROLOGUE;
+	PARAM_POINTER(handle, FSoundHandle);
+	PARAM_FLOAT(vol);
+
+	FSoundHandle hhandle(handle != NULL ? (int)*handle : 0);
+	ACTION_RETURN_BOOL(S_ChangeSoundVolume(hhandle, vol));
+}
+
+
+DEFINE_ACTION_FUNCTION(FSoundHandleStruct, IsPlaying)
+{
+	PARAM_PROLOGUE;
+	PARAM_POINTER(handle, FSoundHandle);
+
+	FSoundHandle hhandle(handle != NULL ? (int)*handle : 0);
+	ACTION_RETURN_BOOL(soundEngine->IsPlaying(hhandle));
 }
 
 
@@ -457,7 +533,7 @@ void DoomSoundEngine::CacheSound(sfxinfo_t* sfx)
 
 FSoundID DoomSoundEngine::ResolveSound(const void * ent, int type, FSoundID soundid, float &attenuation)
 {
-	auto sfx = &S_sfx[soundid.index()];
+	auto sfx = &S_sfx[soundid];
 	if (sfx->UserData[0] & SND_PlayerReserve)
 	{
 		AActor *src;
@@ -517,15 +593,19 @@ void DoomSoundEngine::StopChannel(FSoundChan* chan)
 //
 //==========================================================================
 
-void S_SoundPitchActor(AActor *ent, int channel, EChanFlags flags, FSoundID sound_id, float volume, float attenuation, float pitch, float startTime)
+FSoundHandle S_SoundPitchActor(AActor *ent, int channel, EChanFlags flags, FSoundID sound_id, float volume, float attenuation, float pitch, float startTime)
 {
-	if (VerifyActorSound(ent, sound_id, channel, flags))
-		soundEngine->StartSound (SOURCE_Actor, ent, nullptr, channel, flags, sound_id, volume, attenuation, 0, pitch, startTime);
+	if (VerifyActorSound(ent, sound_id, channel, flags)) {
+		FSoundHandle handle;
+		soundEngine->StartSound(SOURCE_Actor, ent, nullptr, channel, flags, sound_id, volume, attenuation, 0, pitch, startTime, &handle);
+		return handle;
+	}
+	return 0;
 }
 
-void S_Sound(AActor *ent, int channel, EChanFlags flags, FSoundID sound_id, float volume, float attenuation)
+FSoundHandle S_Sound(AActor *ent, int channel, EChanFlags flags, FSoundID sound_id, float volume, float attenuation)
 {
-	S_SoundPitchActor(ent, channel, flags, sound_id, volume, attenuation, 0.f);
+	return S_SoundPitchActor(ent, channel, flags, sound_id, volume, attenuation, 0.f);
 }
 
 //==========================================================================
@@ -536,7 +616,7 @@ void S_Sound(AActor *ent, int channel, EChanFlags flags, FSoundID sound_id, floa
 //
 //==========================================================================
 
-void S_SoundMinMaxDist(AActor *ent, int channel, EChanFlags flags, FSoundID sound_id, float volume, float mindist, float maxdist)
+FSoundHandle S_SoundMinMaxDist(AActor *ent, int channel, EChanFlags flags, FSoundID sound_id, float volume, float mindist, float maxdist)
 {
 	if (VerifyActorSound(ent, sound_id, channel, flags))
 	{
@@ -545,8 +625,11 @@ void S_SoundMinMaxDist(AActor *ent, int channel, EChanFlags flags, FSoundID soun
 		rolloff.RolloffType = ROLLOFF_Linear;
 		rolloff.MinDistance = mindist;
 		rolloff.MaxDistance = maxdist;
-		soundEngine->StartSound(SOURCE_Actor, ent, nullptr, channel, flags, sound_id, volume, 1, &rolloff);
+		FSoundHandle handle;
+		soundEngine->StartSound(SOURCE_Actor, ent, nullptr, channel, flags, sound_id, volume, 1, &rolloff, 0.0f, 0.0f, &handle);
+		return handle;
 	}
+	return 0;
 }
 
 //==========================================================================
@@ -555,10 +638,12 @@ void S_SoundMinMaxDist(AActor *ent, int channel, EChanFlags flags, FSoundID soun
 //
 //==========================================================================
 
-void S_Sound (const FPolyObj *poly, int channel, EChanFlags flags, FSoundID sound_id, float volume, float attenuation)
+FSoundHandle S_Sound (const FPolyObj *poly, int channel, EChanFlags flags, FSoundID sound_id, float volume, float attenuation)
 {
-	if (poly->Level != primaryLevel) return;
-	soundEngine->StartSound (SOURCE_Polyobj, poly, nullptr, channel, flags, sound_id, volume, attenuation);
+	if (poly->Level != primaryLevel) return 0;
+	FSoundHandle handle;
+	soundEngine->StartSound (SOURCE_Polyobj, poly, nullptr, channel, flags, sound_id, volume, attenuation, nullptr, 0.0f, 0.0f, &handle);
+	return handle;
 }
 
 //==========================================================================
@@ -567,12 +652,14 @@ void S_Sound (const FPolyObj *poly, int channel, EChanFlags flags, FSoundID soun
 //
 //==========================================================================
 
-void S_Sound(FLevelLocals *Level, const DVector3 &pos, int channel, EChanFlags flags, FSoundID sound_id, float volume, float attenuation)
+FSoundHandle S_Sound(FLevelLocals *Level, const DVector3 &pos, int channel, EChanFlags flags, FSoundID sound_id, float volume, float attenuation)
 {
-	if (Level != primaryLevel) return;
+	if (Level != primaryLevel) return 0;
 	// The sound system switches Y and Z around.
 	FVector3 p((float)pos.X, (float)pos.Z, (float)pos.Y);
-	soundEngine->StartSound (SOURCE_Unattached, nullptr, &p, channel, flags, sound_id, volume, attenuation);
+	FSoundHandle handle;
+	soundEngine->StartSound (SOURCE_Unattached, nullptr, &p, channel, flags, sound_id, volume, attenuation, nullptr, 0.0f, 0.0f, &handle);
+	return handle;
 }
 
 //==========================================================================
@@ -581,10 +668,12 @@ void S_Sound(FLevelLocals *Level, const DVector3 &pos, int channel, EChanFlags f
 //
 //==========================================================================
 
-void S_Sound (const sector_t *sec, int channel, EChanFlags flags, FSoundID sfxid, float volume, float attenuation)
+FSoundHandle S_Sound (const sector_t *sec, int channel, EChanFlags flags, FSoundID sfxid, float volume, float attenuation)
 {
-	if (sec->Level != primaryLevel) return;
-	soundEngine->StartSound (SOURCE_Sector, sec, nullptr, channel, flags, sfxid, volume, attenuation);
+	if (sec->Level != primaryLevel) return 0;
+	FSoundHandle handle;
+	soundEngine->StartSound (SOURCE_Sector, sec, nullptr, channel, flags, sfxid, volume, attenuation, nullptr, 0.0f, 0.0f, &handle);
+	return handle;
 }
 
 //==========================================================================
@@ -595,16 +684,16 @@ void S_Sound (const sector_t *sec, int channel, EChanFlags flags, FSoundID sfxid
 //
 //==========================================================================
 
-void S_PlaySoundPitch(AActor *a, int chan, EChanFlags flags, FSoundID sid, float vol, float atten, float pitch, float startTime = 0.f)
+FSoundHandle S_PlaySoundPitch(AActor *a, int chan, EChanFlags flags, FSoundID sid, float vol, float atten, float pitch, float startTime = 0.f)
 {
 	if (a == nullptr || a->Sector->Flags & SECF_SILENT || a->Level != primaryLevel)
-		return;
+		return 0;
 
 	if (!(flags & CHANF_LOCAL))
 	{
 		if (!(flags & CHANF_NOSTOP) || !S_IsActorPlayingSomething(a, chan, sid))
 		{
-			S_SoundPitchActor(a, chan, flags, sid, vol, atten, pitch, startTime);
+			return S_SoundPitchActor(a, chan, flags, sid, vol, atten, pitch, startTime);
 		}
 	}
 	else
@@ -613,10 +702,11 @@ void S_PlaySoundPitch(AActor *a, int chan, EChanFlags flags, FSoundID sid, float
 		{
 			if (!(flags & CHANF_NOSTOP) || !soundEngine->IsSourcePlayingSomething(SOURCE_None, nullptr, chan, sid))
 			{
-				S_SoundPitch(chan, flags, sid, vol, ATTN_NONE, pitch, startTime);
+				return S_SoundPitch(chan, flags, sid, vol, ATTN_NONE, pitch, startTime);
 			}
 		}
 	}
+	return 0;
 }
 
 void S_PlaySound(AActor *a, int chan, EChanFlags flags, FSoundID sid, float vol, float atten)
@@ -626,7 +716,12 @@ void S_PlaySound(AActor *a, int chan, EChanFlags flags, FSoundID sid, float vol,
 
 void A_StartSound(AActor *self, int soundid, int channel, int flags, double volume, double attenuation, double pitch, double startTime)
 {
-	S_PlaySoundPitch(self, channel, EChanFlags::FromInt(flags), FSoundID::fromInt(soundid), (float)volume, (float)attenuation, (float)pitch, (float)startTime);
+	S_PlaySoundPitch(self, channel, EChanFlags::FromInt(flags), soundid, (float)volume, (float)attenuation, (float)pitch, (float)startTime);
+}
+
+int StartSound(AActor* self, int soundid, int channel, int flags, double volume, double attenuation, double pitch, double startTime)
+{
+	return S_PlaySoundPitch(self, channel, EChanFlags::FromInt(flags), soundid, (float)volume, (float)attenuation, (float)pitch, (float)startTime);
 }
 
 void A_PlaySound(AActor* self, int soundid, int channel, double volume, int looping, double attenuation, int local, double pitch)
@@ -636,6 +731,10 @@ void A_PlaySound(AActor* self, int soundid, int channel, double volume, int loop
 	A_StartSound(self, soundid, channel & 7, channel & ~7, volume, attenuation, pitch, 0.0f);
 }
 
+
+bool S_StopSound(FSoundHandle& handle) {
+	return soundEngine->StopSound(handle);
+}
 
 //==========================================================================
 //
@@ -715,6 +814,10 @@ void S_ChangeActorSoundVolume(AActor *actor, int channel, double dvolume)
 	soundEngine->ChangeSoundVolume(SOURCE_Actor, actor, (compatflags & COMPATF_MAGICSILENCE)? -1 : channel, dvolume);
 }
 
+bool S_ChangeSoundVolume(FSoundHandle handle, double vol) {
+	return soundEngine->SetVolume(handle, (float)vol);
+}
+
 //==========================================================================
 //
 // S_ChangeSoundPitch
@@ -726,6 +829,14 @@ void S_ChangeActorSoundPitch(AActor *actor, int channel, double pitch)
 	soundEngine->ChangeSoundPitch(SOURCE_Actor, actor, channel, pitch);
 }
 
+void S_ChangeSoundPitch(int channel, double pitch) {
+	soundEngine->ChangeSoundPitch(SOURCE_None, nullptr, channel, pitch);
+}
+
+bool S_ChangeSoundPitch(FSoundHandle &handle, double pitch) {
+	return soundEngine->SetPitch(handle, (float)pitch);
+}
+
 //==========================================================================
 //
 // S_GetSoundPlayingInfo
@@ -733,17 +844,17 @@ void S_ChangeActorSoundPitch(AActor *actor, int channel, double pitch)
 // Is a sound being played by a specific emitter?
 //==========================================================================
 
-bool S_GetSoundPlayingInfo (const AActor *actor, FSoundID sound_id)
+bool S_GetSoundPlayingInfo (const AActor *actor, int sound_id)
 {
 	return soundEngine->GetSoundPlayingInfo(SOURCE_Actor, actor, sound_id);
 }
 
-bool S_GetSoundPlayingInfo (const sector_t *sec, FSoundID sound_id)
+bool S_GetSoundPlayingInfo (const sector_t *sec, int sound_id)
 {
 	return soundEngine->GetSoundPlayingInfo(SOURCE_Sector, sec, sound_id);
 }
 
-bool S_GetSoundPlayingInfo (const FPolyObj *poly, FSoundID sound_id)
+bool S_GetSoundPlayingInfo (const FPolyObj *poly, int sound_id)
 {
 	return soundEngine->GetSoundPlayingInfo(SOURCE_Polyobj, poly, sound_id);
 }
@@ -754,7 +865,7 @@ bool S_GetSoundPlayingInfo (const FPolyObj *poly, FSoundID sound_id)
 //
 //==========================================================================
 
-bool S_IsActorPlayingSomething (AActor *actor, int channel, FSoundID sound_id)
+int S_IsActorPlayingSomething (AActor *actor, int channel, int sound_id)
 {
 	if (compatflags & COMPATF_MAGICSILENCE)
 	{
@@ -790,7 +901,7 @@ static void S_SetListener(AActor *listenactor)
 	else
 	{
 		listener.angle = 0;
-		listener.position.Zero();
+		listener.position = { 32000, 32000, 32000 };
 		listener.velocity.Zero();
 		listener.underwater = false;
 		listener.Environment = nullptr;
@@ -831,7 +942,12 @@ static FSerializer &Serialize(FSerializer &arc, const char *key, FSoundChan &cha
 {
 	if (arc.BeginObject(key))
 	{
+		if (arc.isReading()) {
+			chan.HandleID = 0;
+		}
+
 		arc("sourcetype", chan.SourceType)
+			("handleid", chan.HandleID)
 			("soundid", chan.SoundID)
 			("orgid", chan.OrgID)
 			("volume", chan.Volume)
@@ -847,7 +963,10 @@ static FSerializer &Serialize(FSerializer &arc, const char *key, FSoundChan &cha
 			("rolloffmax", chan.Rolloff.MaxDistance)
 			("limitrange", chan.LimitRange);
 
-		if (SaveVersion < 4560) chan.Pitch /= 128.f;
+		// If there is no handleid, we must create one
+		if (arc.isReading() && chan.HandleID == 0) {
+			chan.HandleID = ++soundEngine->LastSoundHandle;
+		}
 
 		switch (chan.SourceType)
 		{
@@ -874,6 +993,12 @@ void S_SerializeSounds(FSerializer &arc)
 	FSoundChan *chan;
 
 	GSnd->Sync(true);
+
+	if (arc.isReading()) {
+		soundEngine->LastSoundHandle = 0;
+	}
+
+	arc("soundhandlestart", soundEngine->LastSoundHandle);
 
 	if (arc.isWriting())
 	{
@@ -927,6 +1052,52 @@ void S_SerializeSounds(FSerializer &arc)
 
 //==========================================================================
 //
+// S_SetSoundPaused
+//
+// Called with state non-zero when the app is active, zero when it isn't.
+//
+//==========================================================================
+
+void S_SetSoundPaused(int state)
+{
+	if (!netgame && (i_pauseinbackground)
+#ifdef _DEBUG
+		&& !demoplayback
+#endif
+		)
+	{
+		pauseext = !state;
+	}
+
+	if ((state || i_soundinbackground) && !pauseext)
+	{
+		if (paused == 0)
+		{
+			S_ResumeSound(true);
+			if (GSnd != nullptr)
+			{
+				GSnd->SetInactive(SoundRenderer::INACTIVE_Active);
+			}
+		}
+	}
+	else
+	{
+		if (paused == 0)
+		{
+			S_PauseSound(false, true);
+			if (GSnd != nullptr)
+			{
+				GSnd->SetInactive(gamestate == GS_LEVEL || gamestate == GS_TITLELEVEL ?
+					SoundRenderer::INACTIVE_Complete :
+					SoundRenderer::INACTIVE_Mute);
+			}
+		}
+	}
+}
+
+
+//==========================================================================
+//
 // CalcSectorSoundOrg
 //
 // Returns the perceived sound origin for a sector. If the listener is
@@ -950,7 +1121,7 @@ static void CalcSectorSoundOrg(const DVector3& listenpos, const sector_t* sec, i
 			// Find the closest point on the sector's boundary lines and use
 			// that as the perceived origin of the sound.
 			DVector2 xy;
-			sec->ClosestPoint(listenpos.XY(), xy);
+			sec->ClosestPoint(listenpos, xy);
 			pos.X = (float)xy.X;
 			pos.Z = (float)xy.Y;
 		}
@@ -993,7 +1164,7 @@ static void CalcPolyobjSoundOrg(const DVector3& listenpos, const FPolyObj* poly,
 	sector_t* sec;
 
 	DVector2 ppos;
-	poly->ClosestPoint(listenpos.XY(), ppos, &side);
+	poly->ClosestPoint(listenpos, ppos, &side);
 	pos.X = (float)ppos.X;
 	pos.Z = (float)ppos.Y;
 	sec = side->sector;
@@ -1173,10 +1344,7 @@ bool DoomSoundEngine::ValidatePosVel(int sourcetype, const void* source, const F
 TArray<uint8_t> DoomSoundEngine::ReadSound(int lumpnum)
 {
 	auto wlump = fileSystem.OpenFileReader(lumpnum);
-	TArray<uint8_t> buffer(wlump.GetLength(), true);
-	auto len = wlump.Read(buffer.data(), buffer.size());
-	buffer.Resize(len);
-	return buffer;
+	return wlump.Read();
 }
 
 //==========================================================================
@@ -1186,13 +1354,13 @@ TArray<uint8_t> DoomSoundEngine::ReadSound(int lumpnum)
 // This is overridden to use a synchronized RNG.
 // 
 //==========================================================================
-static FCRandom pr_randsound("RandSound");
+static FRandom pr_randsound("RandSound");
 
-FSoundID DoomSoundEngine::PickReplacement(FSoundID refid)
+int DoomSoundEngine::PickReplacement(int refid)
 {
-	while (S_sfx[refid.index()].bRandomHeader)
+	while (S_sfx[refid].bRandomHeader)
 	{
-		const FRandomSoundList* list = &S_rnd[S_sfx[refid.index()].link.index()];
+		const FRandomSoundList* list = &S_rnd[S_sfx[refid].link];
 		refid = list->Choices[pr_randsound(list->Choices.Size())];
 	}
 	return refid;
@@ -1249,8 +1417,9 @@ void DoomSoundEngine::NoiseDebug()
 		color = (chan->ChanFlags & CHANF_LOOP) ? CR_BROWN : CR_GREY;
 
 		// Name
-		auto tname = fileSystem.GetFileShortName(S_sfx[chan->SoundID.index()].lumpnum);
-		DrawText(twod, NewConsoleFont, color, 0, y, tname, TAG_DONE);
+		fileSystem.GetFileShortName(temp, S_sfx[chan->SoundID].lumpnum);
+		temp[8] = 0;
+		DrawText(twod, NewConsoleFont, color, 0, y, temp, TAG_DONE);
 
 		if (!(chan->ChanFlags & CHANF_IS3D))
 		{
@@ -1328,10 +1497,9 @@ void DoomSoundEngine::NoiseDebug()
 	}
 }
 
-ADD_STAT(sounddebug)
+void S_NoiseDebug(void)
 {
 	static_cast<DoomSoundEngine*>(soundEngine)->NoiseDebug();
-	return "";
 }
 
 
@@ -1343,32 +1511,36 @@ ADD_STAT(sounddebug)
 
 void DoomSoundEngine::PrintSoundList()
 {
+	auto &S_sfx = soundEngine->GetSounds();
+	char lumpname[9];
 	unsigned int i;
 
-	for (i = 0; i < soundEngine->GetNumSounds(); i++)
+	lumpname[8] = 0;
+	for (i = 0; i < S_sfx.Size(); i++)
 	{
-		const sfxinfo_t* sfx = soundEngine->GetSfx(FSoundID::fromInt(i));
+		const sfxinfo_t* sfx = &S_sfx[i];
 		if (sfx->bRandomHeader)
 		{
-			Printf("%3d. %s -> #%d {", i, sfx->name.GetChars(), sfx->link.index());
-			const FRandomSoundList* list = &S_rnd[sfx->link.index()];
+			Printf("%3d. %s -> #%d {", i, sfx->name.GetChars(), sfx->link);
+			const FRandomSoundList* list = &S_rnd[sfx->link];
 			for (auto& me : list->Choices)
 			{
-				Printf(" %s ", S_sfx[me.index()].name.GetChars());
+				Printf(" %s ", S_sfx[me].name.GetChars());
 			}
 			Printf("}\n");
 		}
 		else if (sfx->UserData[0] & SND_PlayerReserve)
 		{
-			Printf("%3d. %s <<player sound %d>>\n", i, sfx->name.GetChars(), sfx->link.index());
+			Printf("%3d. %s <<player sound %d>>\n", i, sfx->name.GetChars(), sfx->link);
 		}
 		else if (S_sfx[i].lumpnum != -1)
 		{
-			Printf("%3d. %s (%s)\n", i, sfx->name.GetChars(), fileSystem.GetFileShortName(sfx->lumpnum));
+			fileSystem.GetFileShortName(lumpname, sfx->lumpnum);
+			Printf("%3d. %s (%s)\n", i, sfx->name.GetChars(), lumpname);
 		}
 		else if (S_sfx[i].link != sfxinfo_t::NO_LINK)
 		{
-			Printf("%3d. %s -> %s\n", i, sfx->name.GetChars(), S_sfx[sfx->link.index()].name.GetChars());
+			Printf("%3d. %s -> %s\n", i, sfx->name.GetChars(), S_sfx[sfx->link].name.GetChars());
 		}
 		else
 		{
@@ -1393,8 +1565,8 @@ CCMD (playsound)
 {
 	if (argv.argc() > 1)
 	{
-		FSoundID id = S_FindSound(argv[1]);
-		if (!id.isvalid())
+		FSoundID id = argv[1];
+		if (id == 0)
 		{
 			Printf("'%s' is not a sound\n", argv[1]);
 		}
@@ -1415,8 +1587,8 @@ CCMD (loopsound)
 {
 	if (players[consoleplayer].mo != nullptr && !netgame && argv.argc() > 1)
 	{
-		FSoundID id = S_FindSound(argv[1]);
-		if (!id.isvalid())
+		FSoundID id = argv[1];
+		if (id == 0)
 		{
 			Printf("'%s' is not a sound\n", argv[1]);
 		}
@@ -1431,8 +1603,111 @@ CCMD (loopsound)
 	}
 }
 
-CCMD(snd_reset)
+//==========================================================================
+//
+// CCMD cachesound <sound name>
+//
+//==========================================================================
+
+CCMD (cachesound)
+{
+	if (argv.argc() < 2)
+	{
+		Printf ("Usage: cachesound <sound> ...\n");
+		return;
+	}
+	for (int i = 1; i < argv.argc(); ++i)
+	{
+		FSoundID sfxnum = argv[i];
+		if (sfxnum != FSoundID(0))
+		{
+			soundEngine->CacheSound(sfxnum);
+		}
+	}
+}
+
+
+CCMD(listsoundchannels)
+{	
+	Printf("%s", soundEngine->ListSoundChannels().GetChars());
+}
+
+// intentionally moved here to keep the s_music include out of the rest of the file.
+
+//==========================================================================
+//
+// S_PauseSound
+//
+// Stop music and sound effects, during game PAUSE.
+//==========================================================================
+#include "s_music.h"
+
+void S_PauseSound (bool notmusic, bool notsfx)
+{
+	if (!notmusic)
+	{
+		S_PauseMusic();
+	}
+	if (!notsfx)
+	{
+		soundEngine->SetPaused(true);
+		GSnd->SetSfxPaused (true, 0);
+	}
+}
+
+DEFINE_ACTION_FUNCTION(DObject, S_PauseSound)
+{
+	PARAM_PROLOGUE;
+	PARAM_BOOL(notmusic);
+	PARAM_BOOL(notsfx);
+	S_PauseSound(notmusic, notsfx);
+	return 0;
+}
+
+//==========================================================================
+//
+// S_ResumeSound
+//
+// Resume music and sound effects, after game PAUSE.
+//==========================================================================
+
+void S_ResumeSound (bool notsfx)
+{
+	S_ResumeMusic();
+	if (!notsfx)
+	{
+		soundEngine->SetPaused(false);
+		GSnd->SetSfxPaused (false, 0);
+	}
+}
+
+DEFINE_ACTION_FUNCTION(DObject, S_ResumeSound)
+{
+	PARAM_PROLOGUE;
+	PARAM_BOOL(notsfx);
+	S_ResumeSound(notsfx);
+	return 0;
+}
+
+
+CCMD (snd_status)
+{
+	GSnd->PrintStatus ();
+}
+
+CCMD (snd_reset)
 {
 	S_SoundReset();
 }
+
+CCMD (snd_listdrivers)
+{
+	GSnd->PrintDriversList ();
+}
+
+ADD_STAT (sound)
+{
+	return GSnd->GatherStats ();
+}
+
 

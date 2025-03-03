@@ -161,7 +161,7 @@ void PPBloom::RenderBloom(PPRenderState *renderstate, int sceneWidth, int sceneH
 	renderstate->PopGroup();
 }
 
-void PPBloom::RenderBlur(PPRenderState *renderstate, int sceneWidth, int sceneHeight, float gameinfobluramount)
+void PPBloom::RenderBlur(PPRenderState *renderstate, int sceneWidth, int sceneHeight, float gameinfobluramount, bool force)
 {
 	// No scene, no blur!
 	if (sceneWidth <= 0 || sceneHeight <= 0)
@@ -173,7 +173,7 @@ void PPBloom::RenderBlur(PPRenderState *renderstate, int sceneWidth, int sceneHe
 	float blurAmount = gl_menu_blur;
 
 	// if CVar is negative, use the gameinfo entry
-	if (gl_menu_blur < 0)
+	if (force || gl_menu_blur < 0)
 		blurAmount = gameinfobluramount;
 
 	// if blurAmount == 0 or somehow still returns negative, exit to prevent a crash, clearly we don't want this

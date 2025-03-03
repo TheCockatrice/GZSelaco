@@ -39,11 +39,18 @@ public:
 	virtual void SetVSync(bool vsync) override;
 	void SwapBuffers();
 
+	void setNULLContext();
+	void setMainContext();
+	void setAuxContext(int index);
+	int numAuxContexts();
+
 protected:
 	SDL_GLContext GLContext;
+	SDL_GLContext GLAuxContexts[4] = { NULL, NULL, NULL, NULL };
 
 	SystemGLFrameBuffer() {}
 };
+
 
 #endif // __POSIX_SDL_GL_SYSFB_H__
 

@@ -54,7 +54,9 @@
 #include "bitmap.h"
 #include "imagehelpers.h"
 #include "image.h"
-#include "m_swap.h"
+#include "engineerrors.h"
+#include "texturemanager.h"
+#include "printf.h"
 
 // Since we want this to compile under Linux too, we need to define this
 // stuff ourselves instead of including a DirectX header.
@@ -67,6 +69,7 @@ enum
 	ID_DXT3 = MAKE_ID('D', 'X', 'T', '3'),
 	ID_DXT4 = MAKE_ID('D', 'X', 'T', '4'),
 	ID_DXT5 = MAKE_ID('D', 'X', 'T', '5'),
+	ID_DX10 = MAKE_ID('D', 'X', '1', '0'),
 
 	// Bits in dwFlags
 	DDSD_CAPS = 0x00000001,
@@ -105,6 +108,148 @@ enum
 //
 //==========================================================================
 
+enum D3D10_RESOURCE_DIMENSION_E {
+	D3D10_RESOURCE_DIMENSION_UNKNOWN = 0,
+	D3D10_RESOURCE_DIMENSION_BUFFER = 1,
+	D3D10_RESOURCE_DIMENSION_TEXTURE1D = 2,
+	D3D10_RESOURCE_DIMENSION_TEXTURE2D = 3,
+	D3D10_RESOURCE_DIMENSION_TEXTURE3D = 4
+};
+
+enum DXGI_FORMAT_E {
+	DXGI_FORMAT_UNKNOWN = 0,
+	DXGI_FORMAT_R32G32B32A32_TYPELESS = 1,
+	DXGI_FORMAT_R32G32B32A32_FLOAT = 2,
+	DXGI_FORMAT_R32G32B32A32_UINT = 3,
+	DXGI_FORMAT_R32G32B32A32_SINT = 4,
+	DXGI_FORMAT_R32G32B32_TYPELESS = 5,
+	DXGI_FORMAT_R32G32B32_FLOAT = 6,
+	DXGI_FORMAT_R32G32B32_UINT = 7,
+	DXGI_FORMAT_R32G32B32_SINT = 8,
+	DXGI_FORMAT_R16G16B16A16_TYPELESS = 9,
+	DXGI_FORMAT_R16G16B16A16_FLOAT = 10,
+	DXGI_FORMAT_R16G16B16A16_UNORM = 11,
+	DXGI_FORMAT_R16G16B16A16_UINT = 12,
+	DXGI_FORMAT_R16G16B16A16_SNORM = 13,
+	DXGI_FORMAT_R16G16B16A16_SINT = 14,
+	DXGI_FORMAT_R32G32_TYPELESS = 15,
+	DXGI_FORMAT_R32G32_FLOAT = 16,
+	DXGI_FORMAT_R32G32_UINT = 17,
+	DXGI_FORMAT_R32G32_SINT = 18,
+	DXGI_FORMAT_R32G8X24_TYPELESS = 19,
+	DXGI_FORMAT_D32_FLOAT_S8X24_UINT = 20,
+	DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS = 21,
+	DXGI_FORMAT_X32_TYPELESS_G8X24_UINT = 22,
+	DXGI_FORMAT_R10G10B10A2_TYPELESS = 23,
+	DXGI_FORMAT_R10G10B10A2_UNORM = 24,
+	DXGI_FORMAT_R10G10B10A2_UINT = 25,
+	DXGI_FORMAT_R11G11B10_FLOAT = 26,
+	DXGI_FORMAT_R8G8B8A8_TYPELESS = 27,
+	DXGI_FORMAT_R8G8B8A8_UNORM = 28,
+	DXGI_FORMAT_R8G8B8A8_UNORM_SRGB = 29,
+	DXGI_FORMAT_R8G8B8A8_UINT = 30,
+	DXGI_FORMAT_R8G8B8A8_SNORM = 31,
+	DXGI_FORMAT_R8G8B8A8_SINT = 32,
+	DXGI_FORMAT_R16G16_TYPELESS = 33,
+	DXGI_FORMAT_R16G16_FLOAT = 34,
+	DXGI_FORMAT_R16G16_UNORM = 35,
+	DXGI_FORMAT_R16G16_UINT = 36,
+	DXGI_FORMAT_R16G16_SNORM = 37,
+	DXGI_FORMAT_R16G16_SINT = 38,
+	DXGI_FORMAT_R32_TYPELESS = 39,
+	DXGI_FORMAT_D32_FLOAT = 40,
+	DXGI_FORMAT_R32_FLOAT = 41,
+	DXGI_FORMAT_R32_UINT = 42,
+	DXGI_FORMAT_R32_SINT = 43,
+	DXGI_FORMAT_R24G8_TYPELESS = 44,
+	DXGI_FORMAT_D24_UNORM_S8_UINT = 45,
+	DXGI_FORMAT_R24_UNORM_X8_TYPELESS = 46,
+	DXGI_FORMAT_X24_TYPELESS_G8_UINT = 47,
+	DXGI_FORMAT_R8G8_TYPELESS = 48,
+	DXGI_FORMAT_R8G8_UNORM = 49,
+	DXGI_FORMAT_R8G8_UINT = 50,
+	DXGI_FORMAT_R8G8_SNORM = 51,
+	DXGI_FORMAT_R8G8_SINT = 52,
+	DXGI_FORMAT_R16_TYPELESS = 53,
+	DXGI_FORMAT_R16_FLOAT = 54,
+	DXGI_FORMAT_D16_UNORM = 55,
+	DXGI_FORMAT_R16_UNORM = 56,
+	DXGI_FORMAT_R16_UINT = 57,
+	DXGI_FORMAT_R16_SNORM = 58,
+	DXGI_FORMAT_R16_SINT = 59,
+	DXGI_FORMAT_R8_TYPELESS = 60,
+	DXGI_FORMAT_R8_UNORM = 61,
+	DXGI_FORMAT_R8_UINT = 62,
+	DXGI_FORMAT_R8_SNORM = 63,
+	DXGI_FORMAT_R8_SINT = 64,
+	DXGI_FORMAT_A8_UNORM = 65,
+	DXGI_FORMAT_R1_UNORM = 66,
+	DXGI_FORMAT_R9G9B9E5_SHAREDEXP = 67,
+	DXGI_FORMAT_R8G8_B8G8_UNORM = 68,
+	DXGI_FORMAT_G8R8_G8B8_UNORM = 69,
+	DXGI_FORMAT_BC1_TYPELESS = 70,
+	DXGI_FORMAT_BC1_UNORM = 71,
+	DXGI_FORMAT_BC1_UNORM_SRGB = 72,
+	DXGI_FORMAT_BC2_TYPELESS = 73,
+	DXGI_FORMAT_BC2_UNORM = 74,
+	DXGI_FORMAT_BC2_UNORM_SRGB = 75,
+	DXGI_FORMAT_BC3_TYPELESS = 76,
+	DXGI_FORMAT_BC3_UNORM = 77,
+	DXGI_FORMAT_BC3_UNORM_SRGB = 78,
+	DXGI_FORMAT_BC4_TYPELESS = 79,
+	DXGI_FORMAT_BC4_UNORM = 80,
+	DXGI_FORMAT_BC4_SNORM = 81,
+	DXGI_FORMAT_BC5_TYPELESS = 82,
+	DXGI_FORMAT_BC5_UNORM = 83,
+	DXGI_FORMAT_BC5_SNORM = 84,
+	DXGI_FORMAT_B5G6R5_UNORM = 85,
+	DXGI_FORMAT_B5G5R5A1_UNORM = 86,
+	DXGI_FORMAT_B8G8R8A8_UNORM = 87,
+	DXGI_FORMAT_B8G8R8X8_UNORM = 88,
+	DXGI_FORMAT_R10G10B10_XR_BIAS_A2_UNORM = 89,
+	DXGI_FORMAT_B8G8R8A8_TYPELESS = 90,
+	DXGI_FORMAT_B8G8R8A8_UNORM_SRGB = 91,
+	DXGI_FORMAT_B8G8R8X8_TYPELESS = 92,
+	DXGI_FORMAT_B8G8R8X8_UNORM_SRGB = 93,
+	DXGI_FORMAT_BC6H_TYPELESS = 94,
+	DXGI_FORMAT_BC6H_UF16 = 95,
+	DXGI_FORMAT_BC6H_SF16 = 96,
+	DXGI_FORMAT_BC7_TYPELESS = 97,
+	DXGI_FORMAT_BC7_UNORM = 98,
+	DXGI_FORMAT_BC7_UNORM_SRGB = 99,
+	DXGI_FORMAT_AYUV = 100,
+	DXGI_FORMAT_Y410 = 101,
+	DXGI_FORMAT_Y416 = 102,
+	DXGI_FORMAT_NV12 = 103,
+	DXGI_FORMAT_P010 = 104,
+	DXGI_FORMAT_P016 = 105,
+	DXGI_FORMAT_420_OPAQUE = 106,
+	DXGI_FORMAT_YUY2 = 107,
+	DXGI_FORMAT_Y210 = 108,
+	DXGI_FORMAT_Y216 = 109,
+	DXGI_FORMAT_NV11 = 110,
+	DXGI_FORMAT_AI44 = 111,
+	DXGI_FORMAT_IA44 = 112,
+	DXGI_FORMAT_P8 = 113,
+	DXGI_FORMAT_A8P8 = 114,
+	DXGI_FORMAT_B4G4R4A4_UNORM = 115,
+	DXGI_FORMAT_P208 = 130,
+	DXGI_FORMAT_V208 = 131,
+	DXGI_FORMAT_V408 = 132,
+	DXGI_FORMAT_SAMPLER_FEEDBACK_MIN_MIP_OPAQUE,
+	DXGI_FORMAT_SAMPLER_FEEDBACK_MIP_REGION_USED_OPAQUE,
+	DXGI_FORMAT_FORCE_UINT = 0xffffffff
+};
+
+typedef struct {
+	DXGI_FORMAT_E				dxgiFormat;
+	D3D10_RESOURCE_DIMENSION_E	resourceDimension;
+	uint32_t                 miscFlag;
+	uint32_t                 arraySize;
+	uint32_t                 miscFlags2;
+} DDHEADERDX10;
+
+
 struct DDPIXELFORMAT
 {
 	uint32_t			Size;		// Must be 32
@@ -130,11 +275,15 @@ struct DDSURFACEDESC2
 	union
 	{
 		int32_t		Pitch;
-		uint32_t		LinearSize;
+		uint32_t	LinearSize;
 	};
 	uint32_t			Depth;
 	uint32_t			MipMapCount;
-	uint32_t			Reserved1[11];
+	union
+	{
+		int32_t				Offsets[11];
+		uint32_t			Reserved1[11];
+	};
 	DDPIXELFORMAT		PixelFormat;
 	DDCAPS2				Caps;
 	uint32_t			Reserved2;
@@ -149,7 +298,10 @@ struct DDSFileHeader
 
 //==========================================================================
 //
-// A DDS image, with DXTx compression
+// A DDS image
+// @Cockatrice - repurposed now specifically for BCx Compressed GPU data
+// This really served no purpose before since it wasn't keeping the texs
+// compressed in VRAM
 //
 //==========================================================================
 
@@ -162,9 +314,75 @@ class FDDSTexture : public FImageSource
 		PIX_ARGB = 2
 	};
 public:
-	FDDSTexture (FileReader &lump, int lumpnum, void *surfdesc);
+	FDDSTexture (FileReader &lump, int lumpnum, void *surfdesc, void *dx10header);
+	FDDSTexture (int lumpnum);
 
-	PalettedPixels CreatePalettedPixels(int conversion, int frame = 0) override;
+	TArray<uint8_t> CreatePalettedPixels(int conversion) override;
+	int ReadCompressedPixels(FileReader* reader, unsigned char** data, size_t& size, size_t& unitSize, int& mipLevels) override;
+
+	bool IsGPUOnly() override { return true; }
+
+	//int32_t vkFormat, glFormat;
+
+	bool SerializeForTextureDef(FILE* fp, FString& name, int useType, FGameTexture* gameTex)  override {
+		const char* fullName = fileSystem.GetFileFullName(SourceLump);
+		fprintf(fp, "%d:%s:%s:%d:%dx%d:%dx%d:%d:%d:%d:%d:", 2, name.GetChars(), fullName != NULL ? fullName : "-", useType, Width, Height, LeftOffset, TopOffset, LinearSize, storedMips,  (int)bMasked, (int)bTranslucent);
+
+		// Signal that the next line is not SPI
+		fprintf(fp, "0\n");
+
+		return true;
+	}
+
+
+	int DeSerializeFromTextureDef(FileReader& fr) override {
+		int fileType = 0, useType = 0;
+		int masked = 0, translucent = 0, numMips = 0;
+		int numSPI = 0;
+
+		char id[9], path[1024];
+		id[0] = '\0';
+		path[0] = '\0';
+
+		char str[1800];
+
+		if (fr.Gets(str, 1800)) {
+
+			int count = sscanf(str,
+				"%d:%8[^:]:%1023[^:]:%d:%dx%d:%dx%d:%d:%d:%d:%d",
+				&fileType, id, path, &useType, &Width, &Height, &LeftOffset, &TopOffset, &LinearSize, &numMips, &masked, &translucent
+			);
+
+			bMasked = masked;
+			bTranslucent = translucent;
+			storedMips = (uint8_t)numMips;
+
+			if (count != 12) {
+				Printf("Failed to parse DDS Texture: %s\n", id);
+				return 0;
+			}
+
+			return 2;
+		}
+
+		return 0;
+	}
+
+
+	bool DeSerializeExtraDataFromTextureDef(FileReader& fr, FGameTexture* gameTex) override {
+		// Assign SPI if possible
+		if (gameTex != nullptr) {
+			SpritePositioningInfo spi[2];
+			gameTex->GenerateEmptySpriteData(spi, Width, Height);
+			SpritePositioningInfo* spir = gameTex->HasSpritePositioning() ? (SpritePositioningInfo*)&gameTex->GetSpritePositioning(0) : (SpritePositioningInfo*)ImageArena.Alloc(2 * sizeof(SpritePositioningInfo));
+
+			// Copy spi into correct location
+			memcpy(spir, spi, sizeof(SpritePositioningInfo) * 2);
+			gameTex->SetSpriteRect(spir, true);
+		}
+
+		return true;
+	}
 
 protected:
 	uint32_t Format;
@@ -175,6 +393,7 @@ protected:
 
 	int32_t Pitch;
 	uint32_t LinearSize;
+	uint8_t storedMips;
 
 	static void CalcBitShift (uint32_t mask, uint8_t *lshift, uint8_t *rshift);
 
@@ -183,10 +402,23 @@ protected:
 	void DecompressDXT3 (FileReader &lump, bool premultiplied, uint8_t *buffer, int pixelmode);
 	void DecompressDXT5 (FileReader &lump, bool premultiplied, uint8_t *buffer, int pixelmode);
 
-	int CopyPixels(FBitmap *bmp, int conversion, int frame = 0) override;
+	int CopyPixels(FBitmap *bmp, int conversion) override;
 
 	friend class FTexture;
 };
+
+
+
+FImageSource* DDSImage_TryMake(FileReader& fr, int lumpnum, bool* hasExtraInfo = nullptr) {
+	auto img = new FDDSTexture(lumpnum);
+	int res = img->DeSerializeFromTextureDef(fr);
+	if (res == 0) {
+		delete img;
+		return nullptr;
+	}
+	if (res > 1 && hasExtraInfo != nullptr) *hasExtraInfo = true;
+	return img;
+}
 
 
 //==========================================================================
@@ -207,7 +439,7 @@ static bool CheckDDS (FileReader &file)
 	return Header.Magic == ID_DDS &&
 		(LittleLong(Header.Desc.Size) == sizeof(DDSURFACEDESC2) || Header.Desc.Size == ID_DDS) &&
 		LittleLong(Header.Desc.PixelFormat.Size) == sizeof(DDPIXELFORMAT) &&
-		(LittleLong(Header.Desc.Flags) & (DDSD_CAPS | DDSD_PIXELFORMAT | DDSD_WIDTH | DDSD_HEIGHT)) == (DDSD_CAPS | DDSD_PIXELFORMAT | DDSD_WIDTH | DDSD_HEIGHT) &&
+		(LittleLong(Header.Desc.Flags) & (DDSD_CAPS | DDSD_PIXELFORMAT | DDSD_WIDTH | DDSD_HEIGHT | 0x4)) == (DDSD_CAPS | DDSD_PIXELFORMAT | DDSD_WIDTH | DDSD_HEIGHT | 0x4) &&
 		Header.Desc.Width != 0 &&
 		Header.Desc.Height != 0;
 }
@@ -223,8 +455,14 @@ FImageSource *DDSImage_TryCreate (FileReader &data, int lumpnum)
 	union
 	{
 		DDSURFACEDESC2	surfdesc;
-		uint32_t			byteswapping[sizeof(DDSURFACEDESC2) / 4];
+		uint32_t		byteswapping[sizeof(DDSURFACEDESC2) / 4];
 	};
+
+	union {
+		DDHEADERDX10 dx10header;
+		uint32_t	 dx10Byteswapping[sizeof(DDHEADERDX10) / 4];
+	};
+	
 
 	if (!CheckDDS(data)) return NULL;
 
@@ -241,7 +479,42 @@ FImageSource *DDSImage_TryCreate (FileReader &data, int lumpnum)
 	surfdesc.PixelFormat.FourCC = LittleLong(surfdesc.PixelFormat.FourCC);
 #endif
 
-	if (surfdesc.PixelFormat.Flags & DDPF_FOURCC)
+	bool hasDX10 = surfdesc.Flags & 0x4 && surfdesc.PixelFormat.FourCC == ID_DX10;
+
+	if (!hasDX10) {
+		FString lumpname = fileSystem.GetFileFullName(lumpnum);
+		I_FatalError("DDS File Error (%s) Invalid Format: No DX10 header specified!", lumpname.GetChars());
+	}
+
+	data.Read(&dx10header, sizeof(dx10header));
+
+#ifdef __BIG_ENDIAN__
+	// Every single element of the dx10header is also a uint32_t
+	for (unsigned int i = 0; i < sizeof(DDHEADERDX10) / 4; ++i)
+	{
+		dx10Byteswapping[i] = LittleLong(byteswapping[i]);
+	}
+#endif
+
+	/*if (surfdesc.MipMapCount > 0) {
+		FString lumpname = fileSystem.GetFileFullName(lumpnum);
+		I_FatalError("DDS File Error (%s) Invalid Format: Embedded mipmaps are currently unsupported!", lumpname.GetChars());
+	} else*/ if (surfdesc.LinearSize > 20971520) {
+		FString lumpname = fileSystem.GetFileFullName(lumpnum);
+		I_FatalError("DDS File Error (%s) Invalid Format: File is too large! This error should probably go away.", lumpname.GetChars());
+	} else if(dx10header.arraySize > 1) {
+		FString lumpname = fileSystem.GetFileFullName(lumpnum);
+		I_FatalError("DDS File Error (%s) Invalid Format: Multiple layers or images is currently unsupported!", lumpname.GetChars());
+	} else if (dx10header.dxgiFormat != DXGI_FORMAT_BC7_UNORM) {
+		FString lumpname = fileSystem.GetFileFullName(lumpnum);
+		I_FatalError("DDS File Error (%s) Invalid Format: Currently only DXGI_FORMAT_BC7_UNORM format is supported! BCx Formats should eventually be included when I'm not lazy.", lumpname.GetChars());
+	} else if (dx10header.resourceDimension != D3D10_RESOURCE_DIMENSION_TEXTURE2D) {
+		FString lumpname = fileSystem.GetFileFullName(lumpnum);
+		I_FatalError("DDS File Error (%s) Invalid Format: Only 2D textures are supported!", lumpname.GetChars());
+	}
+
+
+	/*if (surfdesc.PixelFormat.Flags & DDPF_FOURCC)
 	{
 		// Check for supported FourCC
 		if (surfdesc.PixelFormat.FourCC != ID_DXT1 &&
@@ -257,7 +530,12 @@ FImageSource *DDSImage_TryCreate (FileReader &data, int lumpnum)
 			return NULL;
 		}
 	}
-	else if (surfdesc.PixelFormat.Flags & DDPF_RGB)
+	else {
+		FString lumpname = fileSystem.GetFileFullName(lumpnum);
+		I_FatalError("DDS File Error (%s) Invalid Format: NO-FOURCC FLAG SET", lumpname.GetChars());
+	}*/
+		
+		/*if (surfdesc.PixelFormat.Flags & DDPF_RGB)
 	{
 		if ((surfdesc.PixelFormat.RGBBitCount >> 3) < 1 ||
 			(surfdesc.PixelFormat.RGBBitCount >> 3) > 4)
@@ -272,8 +550,8 @@ FImageSource *DDSImage_TryCreate (FileReader &data, int lumpnum)
 	else
 	{
 		return NULL;
-	}
-	return new FDDSTexture (data, lumpnum, &surfdesc);
+	}*/
+	return new FDDSTexture (data, lumpnum, &surfdesc, &dx10header);
 }
 
 //==========================================================================
@@ -282,46 +560,87 @@ FImageSource *DDSImage_TryCreate (FileReader &data, int lumpnum)
 //
 //==========================================================================
 
-FDDSTexture::FDDSTexture (FileReader &lump, int lumpnum, void *vsurfdesc)
+FDDSTexture::FDDSTexture (FileReader &lump, int lumpnum, void *vsurfdesc, void* dx10header)
 : FImageSource(lumpnum)
 {
 	DDSURFACEDESC2 *surf = (DDSURFACEDESC2 *)vsurfdesc;
+	DDHEADERDX10* dx10 = (DDHEADERDX10*)dx10header;
 
 	bMasked = false;
 	Width = uint16_t(surf->Width);
 	Height = uint16_t(surf->Height);
 
-	if (surf->PixelFormat.Flags & DDPF_FOURCC)
-	{
-		Format = surf->PixelFormat.FourCC;
-		Pitch = 0;
-		LinearSize = surf->LinearSize;
+	//vkFormat = 146;		// VK_FORMAT_BC7_SRGB_BLOCK;
+	//glFormat = 0x8E8C;	// GL_COMPRESSED_RGBA_BPTC_UNORM
+
+	LinearSize = surf->LinearSize;
+	Format = ID_DX10;
+	Pitch = 0;
+
+	// This is a bit backwards, but this value should be set by Offsetter. 
+	// We want translucency by default, and most exporters will set this value to zero
+	// So 0 = translucent  1 = not translucent
+	bTranslucent = surf->Offsets[2] == 0;	
+	storedMips = surf->MipMapCount;
+	SetOffsets(surf->Offsets[0], surf->Offsets[1]);
+}
+
+
+FDDSTexture::FDDSTexture(int lumpnum) : FImageSource(lumpnum)
+{
+	
+	bMasked = false;
+	Width = uint16_t(0);
+	Height = uint16_t(0);
+
+	Format = ID_DX10;
+	Pitch = 0;
+
+	// This is a bit backwards, but this value should be set by Offsetter. 
+	// We want translucency by default, and most exporters will set this value to zero
+	// So 0 = translucent  1 = not translucent
+	bTranslucent = 0;
+	storedMips = 0;
+	SetOffsets(0,0);
+}
+
+
+// Data must be interpreted, this may include mipmap data which may be used or discarded at will
+int FDDSTexture::ReadCompressedPixels(FileReader* reader, unsigned char** data, size_t& size, size_t& unitSize, int& mipLevels) {
+	const size_t headerSize = sizeof(DDSURFACEDESC2) + sizeof(DDHEADERDX10) + 4;
+	
+	// TODO: Read remapped/translated version here when necessary!
+	auto rl = fileSystem.GetFileAt(SourceLump);		// These values do not change at runtime until after teardown
+	if (!rl || rl->LumpSize <= 0) {
+		return 0;
 	}
-	else	// DDPF_RGB
-	{
-		Format = surf->PixelFormat.RGBBitCount >> 3;
-		CalcBitShift (RMask = surf->PixelFormat.RBitMask, &RShiftL, &RShiftR);
-		CalcBitShift (GMask = surf->PixelFormat.GBitMask, &GShiftL, &GShiftR);
-		CalcBitShift (BMask = surf->PixelFormat.BBitMask, &BShiftL, &BShiftR);
-		if (surf->PixelFormat.Flags & DDPF_ALPHAPIXELS)
-		{
-			CalcBitShift (AMask = surf->PixelFormat.RGBAlphaBitMask, &AShiftL, &AShiftR);
-		}
-		else
-		{
-			AMask = 0;
-			AShiftL = AShiftR = 0;
-		}
-		if (surf->Flags & DDSD_PITCH)
-		{
-			Pitch = surf->Pitch;
-		}
-		else
-		{
-			Pitch = (Width * Format + 3) & ~3;
-		}
-		LinearSize = Pitch * Height;
+
+	size_t pixelDataSize = rl->LumpSize - headerSize;
+
+	unsigned char* cacheData = new unsigned char[rl->LumpSize];
+	rl->ReadData(*reader, (char*)cacheData);
+	
+	*data = (unsigned char *)malloc(pixelDataSize);
+	unitSize = LinearSize;
+	size = pixelDataSize;
+	mipLevels = storedMips;
+
+	if (pixelDataSize >= LinearSize) {
+		// Copy data from file
+		memcpy(*data, cacheData + headerSize, pixelDataSize);
+		delete[]cacheData;
 	}
+	else {
+		delete[]cacheData;
+		//memset(*data, 9, pixelDataSize);
+		free(*data);
+		*data = nullptr;
+		size = 0;
+
+		return 0;
+	}
+
+	return (int)bTranslucent;
 }
 
 //==========================================================================
@@ -372,11 +691,11 @@ void FDDSTexture::CalcBitShift (uint32_t mask, uint8_t *lshiftp, uint8_t *rshift
 //
 //==========================================================================
 
-PalettedPixels FDDSTexture::CreatePalettedPixels(int conversion, int frame)
+TArray<uint8_t> FDDSTexture::CreatePalettedPixels(int conversion)
 {
 	auto lump = fileSystem.OpenFileReader (SourceLump);
 
-	PalettedPixels Pixels(Width*Height);
+	TArray<uint8_t> Pixels(Width*Height, true);
 
 	lump.Seek (sizeof(DDSURFACEDESC2) + 4, FileReader::SeekSet);
 
@@ -665,7 +984,7 @@ void FDDSTexture::DecompressDXT3 (FileReader &lump, bool premultiplied, uint8_t 
 
 void FDDSTexture::DecompressDXT5 (FileReader &lump, bool premultiplied, uint8_t *buffer, int pixelmode)
 {
-	const size_t blocklinelen = ((Width + 3) >> 2) << 4;
+	const long blocklinelen = ((Width + 3) >> 2) << 4;
 	uint8_t *blockbuff = new uint8_t[blocklinelen];
 	uint8_t *block;
 	PalEntry color[4];
@@ -781,7 +1100,7 @@ void FDDSTexture::DecompressDXT5 (FileReader &lump, bool premultiplied, uint8_t 
 //
 //===========================================================================
 
-int FDDSTexture::CopyPixels(FBitmap *bmp, int conversion, int frame)
+int FDDSTexture::CopyPixels(FBitmap *bmp, int conversion)
 {
 	auto lump = fileSystem.OpenFileReader (SourceLump);
 

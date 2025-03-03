@@ -377,7 +377,7 @@ class PPBloom
 {
 public:
 	void RenderBloom(PPRenderState *renderstate, int sceneWidth, int sceneHeight, int fixedcm);
-	void RenderBlur(PPRenderState *renderstate, int sceneWidth, int sceneHeight, float gameinfobluramount);
+	void RenderBlur(PPRenderState *renderstate, int sceneWidth, int sceneHeight, float gameinfobluramount, bool force = false);
 
 private:
 	void BlurStep(PPRenderState *renderstate, const BlurUniforms &blurUniforms, PPTexture &input, PPTexture &output, PPViewport viewport, bool vertical);

@@ -70,8 +70,8 @@ struct FInputEvent
 	FString KeyString;
 	int KeyChar;
 	// for mouse
-	int MouseX;
-	int MouseY;
+	float MouseX;
+	float MouseY;
 
 	FInputEvent(const event_t *ev);
 };

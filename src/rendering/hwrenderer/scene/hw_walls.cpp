@@ -472,7 +472,7 @@ void HWWall::SetupLights(HWDrawInfo*di, FDynLightData &lightdata)
 				}
 				if (outcnt[0]!=4 && outcnt[1]!=4 && outcnt[2]!=4 && outcnt[3]!=4) 
 				{
-					draw_dlight += GetLight(lightdata, seg->frontsector->PortalGroup, p, node->lightsource, true);
+					draw_dlight += GetLight(lightdata, seg->frontsector->PortalGroup, p, node->lightsource, true, di->Viewpoint.TicFrac);
 				}
 			}
 		}

@@ -124,6 +124,7 @@ public:
 
 	FTextureID CheckForTexture (const char *name, ETextureType usetype, BITFIELD flags=TEXMAN_TryAny);
 	FTextureID GetTextureID (const char *name, ETextureType usetype, BITFIELD flags=0);
+	int FindTextures(const char* search, TArray<FTextureID>* list, ETextureType usetype, BITFIELD flags = TEXMAN_ShortNameOnly);
 	int ListTextures (const char *name, TArray<FTextureID> &list, bool listall = false);
 
 	void AddGroup(int wadnum, int ns, ETextureType usetype);
@@ -131,10 +132,14 @@ public:
 	void AddHiresTextures (int wadnum);
 	void LoadTextureDefs(int wadnum, const char *lumpname, FMultipatchTextureBuilder &build);
 	void ParseColorization(FScanner& sc);
+	int ParseBatchTextureDef(int lump, int wadnum);
 	void ParseTextureDef(int remapLump, FMultipatchTextureBuilder &build);
 	void SortTexturesByType(int start, int end);
 	bool AreTexturesCompatible (FTextureID picnum1, FTextureID picnum2);
 	void AddLocalizedVariants();
+	int LoadTextureDefsForWad(int wadnum);
+	void WriteCache();
+	void WriteCacheForWad(int wadnum);
 
 	FTextureID CreateTexture (int lumpnum, ETextureType usetype=ETextureType::Any);	// Also calls AddTexture
 	FTextureID AddGameTexture(FGameTexture* texture, bool addtohash = true);

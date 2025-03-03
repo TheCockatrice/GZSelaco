@@ -342,14 +342,54 @@ void FGameTexture::SetupSpriteData()
 		spi.spriteWidth = GetTexelWidth();
 		spi.spriteHeight = GetTexelHeight();
 
-		if (i == 1 && ShouldExpandSprite())
+		if (i == 1 && ShouldExpandSprite() && !(Base->GetImage() && Base->GetImage()->IsGPUOnly()))
 		{
 			spi.mTrimResult = Base->TrimBorders(spi.trim) && !GetNoTrimming();	// get the trim size before adding the empty frame
 			spi.spriteWidth += 2;
 			spi.spriteHeight += 2;
 		}
+		else {
+			spi.mTrimResult = 0;
+		}
 	}
+
 	SetSpriteRect();
+}
+
+// @Cockatrice - This version may be used in a thread which also has it's own copy of the bitmap data
+// The SPI data will be moved into the associated texture later in the main thread
+void FGameTexture::GenerateInitialSpriteData(SpritePositioningInfo *info, FBitmap *bmp, bool expandSprite, bool noTrimming) {
+	for (int i = 0; i < 2; i++)
+	{
+		auto& spi = info[i];
+		spi.mSpriteU[0] = spi.mSpriteV[0] = 0.f;
+		spi.mSpriteU[1] = spi.mSpriteV[1] = 1.f;
+		spi.spriteWidth = bmp->GetWidth();
+		spi.spriteHeight = bmp->GetHeight();
+
+		if (i == 1 && expandSprite)
+		{
+			spi.mTrimResult = FTexture::TrimBorders(spi.trim, bmp->GetPixels(), spi.spriteWidth, spi.spriteHeight) && !noTrimming;
+			spi.spriteWidth += 2;
+			spi.spriteHeight += 2;
+		}
+		else {
+			spi.mTrimResult = 0;
+		}
+	}
+}
+
+
+void FGameTexture::GenerateEmptySpriteData(SpritePositioningInfo* info, int width, int height) {
+	for (int i = 0; i < 2; i++)
+	{
+		auto& spi = info[i];
+		spi.mSpriteU[0] = spi.mSpriteV[0] = 0.f;
+		spi.mSpriteU[1] = spi.mSpriteV[1] = 1.f;
+		spi.spriteWidth = width;
+		spi.spriteHeight = height;
+		spi.mTrimResult = 0;
+	}
 }
 
 //===========================================================================
@@ -410,6 +450,22 @@ void FGameTexture::SetSpriteRect()
 			}
 		}
 	}
+}
+
+
+void FGameTexture::SetSpriteRect(SpritePositioningInfo *spi, bool raw)
+{
+	if (spi == nullptr) return;
+
+	// @Cockatrice - Unfortunately, if we already allocated space for this data, the memory is wasted. 
+	// As far as I know there is no way to free a single block of memory allocated from the arena
+	// I expect this to occur very little, since there should be few occurences of a texture that is loaded both in
+	// the main thread AND in the background thread in Selaco
+	if(this->spi != nullptr && this->spi != spi)
+		Printf(TEXTCOLOR_YELLOW"Cockatrice wasted some memory on SPI info! Image: %s\n", GetName().GetChars());
+
+	this->spi = spi;
+	if(!raw) SetSpriteRect();
 }
 
 //===========================================================================

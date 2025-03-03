@@ -13,6 +13,8 @@ mouse2 +strafe
 mouse3 +forward
 mouse4 +speed
 
+mapbind f am_togglefollow
+
 // Generic joystick buttons
 joy1 +attack
 joy2 +strafe

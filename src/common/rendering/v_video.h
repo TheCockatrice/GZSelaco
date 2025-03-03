@@ -224,6 +224,18 @@ public:
 	virtual void SetTextureFilterMode() {}
 	virtual IHardwareTexture *CreateHardwareTexture(int numchannels) { return nullptr; }
 	virtual void PrecacheMaterial(FMaterial *mat, int translation) {}
+	virtual void PrequeueMaterial(FMaterial *mat, int translation) {}
+
+	virtual bool BackgroundCacheMaterial(FMaterial *mat, int translation, bool makeSPI = false, bool secondary = false) { PrecacheMaterial(mat, translation); return true; }	// @Cockatrice - Default implementation for now. DOES NOT BG CACHE 
+	virtual bool BackgroundCacheTextureMaterial(FGameTexture *tex, int translation, int scaleFlags, bool makeSPI = false) { return false; }
+	virtual bool CachingActive() { return false; }																	// Is background cache currently running?
+	virtual float CacheProgress() { return 0; }																		// Current progress of background cache op
+	virtual bool SupportsBackgroundCache() { return false; }
+	virtual void UpdateBackgroundCache(bool flush = false) { }
+	virtual void StopBackgroundCache() { }
+	// Wait for all background loads to finish, then update background cache
+	virtual void FlushBackground() { }	
+	
 	virtual FMaterial* CreateMaterial(FGameTexture* tex, int scaleflags);
 	virtual void BeginFrame() {}
 	virtual void SetWindowSize(int w, int h) {}
@@ -232,7 +244,7 @@ public:
 
 	virtual int GetClientWidth() = 0;
 	virtual int GetClientHeight() = 0;
-	virtual void BlurScene(float amount) {}
+	virtual void BlurScene(float amount, bool force = false) {}
 
 	virtual void InitLightmap(int LMTextureSize, int LMTextureCount, TArray<uint16_t>& LMTextureData) {}
 

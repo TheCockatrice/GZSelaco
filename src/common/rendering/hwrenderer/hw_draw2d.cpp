@@ -50,29 +50,18 @@
 //===========================================================================
 
 CVAR(Bool, gl_aalines, false, CVAR_ARCHIVE) 
-CVAR(Bool, hw_2dmip, true, CVAR_ARCHIVE)
 
-void Draw2D(F2DDrawer* drawer, FRenderState& state)
-{
-	const auto& mScreenViewport = screen->mScreenViewport;
-	Draw2D(drawer, state, mScreenViewport.left, mScreenViewport.top, mScreenViewport.width, mScreenViewport.height);
-}
-
-void Draw2D(F2DDrawer* drawer, FRenderState& state, int x, int y, int width, int height)
+void Draw2D(F2DDrawer *drawer, FRenderState &state)
 {
 	twoD.Clock();
 
-	state.SetViewport(x, y, width, height);
-	screen->mViewpoints->Set2D(state, drawer->GetWidth(), drawer->GetHeight());
+	const auto &mScreenViewport = screen->mScreenViewport;
+	state.SetViewport(mScreenViewport.left, mScreenViewport.top, mScreenViewport.width, mScreenViewport.height);
+	screen->mViewpoints->Set2D(state, twod->GetWidth(), twod->GetHeight());
 
-	state.EnableStencil(false);
-	state.SetStencil(0, SOP_Keep, SF_AllOn);
-	state.Clear(CT_Stencil);
 	state.EnableDepthTest(false);
 	state.EnableMultisampling(false);
 	state.EnableLineSmooth(gl_aalines);
-
-	bool cache_hw_2dmip = hw_2dmip; // cache cvar lookup so it's not done in a loop
 
 	auto &vertices = drawer->mVertices;
 	auto &indices = drawer->mIndices;
@@ -99,22 +88,6 @@ void Draw2D(F2DDrawer* drawer, FRenderState& state, int x, int y, int width, int
 
 	for(auto &cmd : commands)
 	{
-		if (cmd.isSpecial != SpecialDrawCommand::NotSpecial)
-		{
-			if (cmd.isSpecial == SpecialDrawCommand::EnableStencil)
-			{
-				state.EnableStencil(cmd.stencilOn);
-			}
-			else if (cmd.isSpecial == SpecialDrawCommand::SetStencil)
-			{
-				state.SetStencil(cmd.stencilOffs, cmd.stencilOp, cmd.stencilFlags);
-			}
-			else if (cmd.isSpecial == SpecialDrawCommand::ClearStencil)
-			{
-				state.Clear(CT_Stencil);
-			}
-			continue;
-		}
 
 		state.SetRenderStyle(cmd.mRenderStyle);
 		state.EnableBrightmap(!(cmd.mRenderStyle.Flags & STYLEF_ColorIsFixed));
@@ -153,7 +126,7 @@ void Draw2D(F2DDrawer* drawer, FRenderState& state, int x, int y, int width, int
 		if (cmd.mFlags & F2DDrawer::DTF_Indexed) state.SetSoftLightLevel(cmd.mLightLevel);
 		state.SetLightParms(0, 0);
 
-		state.AlphaFunc(Alpha_Greater, 0.f);
+		state.AlphaFunc(Alpha_GEqual, 0.f);
 
 		if (cmd.useTransform)
 		{
@@ -183,7 +156,9 @@ void Draw2D(F2DDrawer* drawer, FRenderState& state, int x, int y, int width, int
 			auto flags = cmd.mTexture->GetUseType() >= ETextureType::Special? UF_None : cmd.mTexture->GetUseType() == ETextureType::FontChar? UF_Font : UF_Texture;
 
 			auto scaleflags = cmd.mFlags & F2DDrawer::DTF_Indexed ? CTF_Indexed : 0;
-			state.SetMaterial(cmd.mTexture, flags, scaleflags, cmd.mFlags & F2DDrawer::DTF_Wrap ? CLAMP_NONE : (cache_hw_2dmip ? CLAMP_XY : CLAMP_XY_NOMIP), cmd.mTranslationId, -1);
+			state.SetMaterial(	cmd.mTexture, flags, scaleflags, 
+								cmd.mFlags & F2DDrawer::DTF_Wrap ? (cmd.mFlags & F2DDrawer::DTF_ForceFilter ? CLAMP_NONE_FORCE_FILTER : CLAMP_NONE) : (cmd.mFlags & F2DDrawer::DTF_ForceFilter ? CLAMP_XY_NOMIP_FORCE_FILTER : CLAMP_XY_NOMIP),
+								cmd.mTranslationId, -1);
 			state.EnableTexture(true);
 
 			// Canvas textures are stored upside down
@@ -252,8 +227,6 @@ void Draw2D(F2DDrawer* drawer, FRenderState& state, int x, int y, int width, int
 
 	state.SetRenderStyle(STYLE_Translucent);
 	state.SetVertexBuffer(screen->mVertexData);
-	state.EnableStencil(false);
-	state.SetStencil(0, SOP_Keep, SF_AllOn);
 	state.EnableTexture(true);
 	state.EnableBrightmap(true);
 	state.SetTextureMode(TM_NORMAL);

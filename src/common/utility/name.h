@@ -49,6 +49,9 @@ enum ENamedName
 #undef xy
 };
 
+// Hack! Blame @Cockatrice
+#define NAME_Weapon NAME_WeaponBase
+
 class FString;
 
 class FName

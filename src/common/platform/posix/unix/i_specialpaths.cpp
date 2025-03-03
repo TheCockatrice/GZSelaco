@@ -196,6 +196,20 @@ FString M_GetSavegamesPath()
 
 //===========================================================================
 //
+// M_GetSavegamesPaths												Windows
+//
+// Returns all paths where savegames might be located
+//
+//===========================================================================
+
+int M_GetSavegamesPaths(TArray<FString>& outputAr) {
+	// Only one path on nix so far
+	outputAr.Push(M_GetSavegamesPath());
+	return 1;
+}
+
+//===========================================================================
+//
 // M_GetDocumentsPath												Unix
 //
 // Returns the path to the default documents directory.

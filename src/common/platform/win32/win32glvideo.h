@@ -17,6 +17,11 @@ public:
 	bool InitHardware(HWND Window, int multisample);
 	void Shutdown();
 
+	void setNULLContext();
+	void setMainContext();
+	void setAuxContext(int index);
+	int numAuxContexts();
+
 protected:
 	HGLRC m_hRC;
 

@@ -37,7 +37,7 @@ enum
 	VARF_VirtualScope	= (1<<22),  // [ZZ] virtualscope: object should use the scope of the particular class it's being used with (methods only)
 	VARF_ClearScope		= (1<<23),  // [ZZ] clearscope: this method ignores the member access chain that leads to it and is always plain data.
 	VARF_Abstract		= (1<<24),  // [Player701] Function does not have a body and must be overridden in subclasses
-	VARF_SafeConst		= (1<<25),  // [Jay] properly-working const function/unsafe clearscope field
+	VARF_Unit			= (1<<25),	// @Cockatrice Function is limited to the container in which it is defined
 };
 
 // Basic information shared by all types ------------------------------------
@@ -67,13 +67,9 @@ enum
 class PContainerType;
 class PPointer;
 class PClassPointer;
-class PFunctionPointer;
 class PArray;
-class PDynArray;
-class PMap;
 class PStruct;
 class PClassType;
-class PObjectPointer;
 
 struct ZCC_ExprConstant;
 class PType : public PTypeBase
@@ -91,7 +87,6 @@ protected:
 		TYPE_ObjectPointer = 64,
 		TYPE_ClassPointer = 128,
 		TYPE_Array = 256,
-		TYPE_FunctionPointer = 512,
 
 		TYPE_IntCompatible = TYPE_Int | TYPE_IntNotInt,	// must be the combination of all flags that are subtypes of int and can be cast to an int.
 	};
@@ -109,15 +104,6 @@ public:
 	uint8_t loadOp, storeOp, moveOp, RegType, RegCount;
 	EScopeFlags ScopeFlags = (EScopeFlags)0;
 	bool            SizeKnown = true;
-
-	bool			TypeInternal = false;
-	bool			TypeDeprecated = false; // mVersion is deprecation version, not minimum version
-	FString			mDeprecationMessage;
-
-	PType * LocalType = nullptr;
-
-	PType * SetLocalType(PType * LocalType) { this->LocalType = LocalType; return this; }
-	PType * GetLocalType() { return LocalType ? LocalType : this; }
 
 	PType(unsigned int size = 1, unsigned int align = 1);
 	virtual ~PType();
@@ -142,9 +128,8 @@ public:
 	// initialization when the object is created and destruction when the
 	// object is destroyed.
 	virtual void SetDefaultValue(void *base, unsigned offset, TArray<FTypeAndOffset> *special=NULL);
-	virtual void SetPointer(void *base, unsigned offset, TArray<std::pair<size_t, PObjectPointer *>> *ptrofs = NULL);
-	virtual void SetPointerArray(void *base, unsigned offset, TArray<std::pair<size_t, PDynArray *>> *ptrofs = NULL);
-	virtual void SetPointerMap(void *base, unsigned offset, TArray<std::pair<size_t, PMap *>> *ptrofs = NULL);
+	virtual void SetPointer(void *base, unsigned offset, TArray<size_t> *ptrofs = NULL);
+	virtual void SetPointerArray(void *base, unsigned offset, TArray<size_t> *ptrofs = NULL);
 
 	// Initialize the value, if needed (e.g. strings)
 	virtual void InitializeValue(void *addr, const void *def) const;
@@ -209,16 +194,13 @@ public:
 	bool isIntCompatible() const { return !!(Flags & TYPE_IntCompatible); }
 	bool isFloat() const { return !!(Flags & TYPE_Float); }
 	bool isPointer() const { return !!(Flags & TYPE_Pointer); }
-	bool isRealPointer() const { return (Flags & (TYPE_Pointer | TYPE_ClassPointer | TYPE_FunctionPointer)) == TYPE_Pointer; }	// This excludes class and function pointers which use their PointedType differently
+	bool isRealPointer() const { return (Flags & (TYPE_Pointer|TYPE_ClassPointer)) == TYPE_Pointer; }	// This excludes class pointers which use their PointedType differently
 	bool isObjectPointer() const { return !!(Flags & TYPE_ObjectPointer); }
 	bool isClassPointer() const { return !!(Flags & TYPE_ClassPointer); }
-	bool isFunctionPointer() const { return !!(Flags & TYPE_FunctionPointer); }
 	bool isEnum() const { return TypeTableType == NAME_Enum; }
 	bool isArray() const { return !!(Flags & TYPE_Array); }
 	bool isStaticArray() const { return TypeTableType == NAME_StaticArray; }
 	bool isDynArray() const { return TypeTableType == NAME_DynArray; }
-	bool isMap() const { return TypeTableType == NAME_Map; }
-	bool isMapIterator() const { return TypeTableType == NAME_MapIterator; }
 	bool isStruct() const { return TypeTableType == NAME_Struct; }
 	bool isClass() const { return TypeTableType == NAME_Object; }
 	bool isPrototype() const { return TypeTableType == NAME_Prototype; }
@@ -226,7 +208,6 @@ public:
 	PContainerType *toContainer() { return isContainer() ? (PContainerType*)this : nullptr; }
 	PPointer *toPointer() { return isPointer() ? (PPointer*)this : nullptr; }
 	static PClassPointer *toClassPointer(PType *t) { return t && t->isClassPointer() ? (PClassPointer*)t : nullptr; }
-	static PFunctionPointer *toFunctionPointer(PType *t) { return t && t->isFunctionPointer() ? (PFunctionPointer*)t : nullptr; }
 	static PClassType *toClass(PType *t) { return t && t->isClass() ? (PClassType*)t : nullptr; }
 };
 
@@ -263,14 +244,13 @@ class PContainerType : public PCompoundType
 public:
 	PTypeBase		*Outer = nullptr;			// object this type is contained within
 	FName			TypeName = NAME_None;		// this type's name
-	int mDefFileNo = 0;
 
 	PContainerType()
 	{
 		mDescriptiveName = "ContainerType";
 		Flags |= TYPE_Container;
 	}
-	PContainerType(FName name, PTypeBase *outer, int fileno) : Outer(outer), TypeName(name), mDefFileNo(fileno)
+	PContainerType(FName name, PTypeBase *outer) : Outer(outer), TypeName(name) 
 	{
 		mDescriptiveName = name.GetChars();
 		Flags |= TYPE_Container;
@@ -397,13 +377,10 @@ public:
 	bool ReadValue(FSerializer &ar, const char *key, void *addr) const override;
 };
 
-class PTranslationID : public PInt
+class PSoundHandle : public PInt
 {
 public:
-	PTranslationID();
-
-	void WriteValue(FSerializer& ar, const char* key, const void* addr) const override;
-	bool ReadValue(FSerializer& ar, const char* key, void* addr) const override;
+	PSoundHandle();
 };
 
 class PColor : public PInt
@@ -469,7 +446,7 @@ public:
 
 	void WriteValue(FSerializer &ar, const char *key, const void *addr) const override;
 	bool ReadValue(FSerializer &ar, const char *key, void *addr) const override;
-	void SetPointer(void *base, unsigned offset, TArray<std::pair<size_t, PObjectPointer *>> *special = NULL) override;
+	void SetPointer(void *base, unsigned offset, TArray<size_t> *special = NULL) override;
 	PClass *PointedClass() const;
 };
 
@@ -485,7 +462,7 @@ public:
 	void WriteValue(FSerializer &ar, const char *key, const void *addr) const override;
 	bool ReadValue(FSerializer &ar, const char *key, void *addr) const override;
 
-	void SetPointer(void *base, unsigned offset, TArray<std::pair<size_t, PObjectPointer *>> *special = NULL) override;
+	void SetPointer(void *base, unsigned offset, TArray<size_t> *special = NULL) override;
 	 bool IsMatch(intptr_t id1, intptr_t id2) const override;
 	 void GetTypeIDs(intptr_t &id1, intptr_t &id2) const override;
 };
@@ -517,9 +494,8 @@ public:
 	bool ReadValue(FSerializer &ar, const char *key,void *addr) const override;
 
 	void SetDefaultValue(void *base, unsigned offset, TArray<FTypeAndOffset> *special) override;
-	void SetPointer(void *base, unsigned offset, TArray<std::pair<size_t, PObjectPointer *>> *special) override;
-	void SetPointerArray(void *base, unsigned offset, TArray<std::pair<size_t, PDynArray *>> *ptrofs = NULL) override;
-	void SetPointerMap(void *base, unsigned offset, TArray<std::pair<size_t, PMap *>> *ptrofs = NULL) override;
+	void SetPointer(void *base, unsigned offset, TArray<size_t> *special) override;
+	void SetPointerArray(void *base, unsigned offset, TArray<size_t> *ptrofs = NULL) override;
 };
 
 class PStaticArray : public PArray
@@ -539,8 +515,6 @@ public:
 	PType *ElementType;
 	PStruct *BackingType;
 
-	TMap<FName,PFunction*> FnOverrides;
-
 	bool IsMatch(intptr_t id1, intptr_t id2) const override;
 	void GetTypeIDs(intptr_t &id1, intptr_t &id2) const override;
 
@@ -549,113 +523,29 @@ public:
 	void SetDefaultValue(void *base, unsigned offset, TArray<FTypeAndOffset> *specials) override;
 	void InitializeValue(void *addr, const void *def) const override;
 	void DestroyValue(void *addr) const override;
-	void SetPointerArray(void *base, unsigned offset, TArray<std::pair<size_t, PDynArray *>> *ptrofs = NULL) override;
+	void SetPointerArray(void *base, unsigned offset, TArray<size_t> *ptrofs = NULL) override;
 };
 
 class PMap : public PCompoundType
 {
-	void Construct(void * addr) const;
 public:
-	PMap(PType *keytype, PType *valtype, PStruct *backing, int backing_class);
+	PMap(PType *keytype, PType *valtype);
 
 	PType *KeyType;
 	PType *ValueType;
 
-	TMap<FName,PFunction*> FnOverrides;
-
-	PStruct *BackingType;
-
-	enum EBackingClass {
-		MAP_I32_I8,
-		MAP_I32_I16,
-		MAP_I32_I32,
-		MAP_I32_F32,
-		MAP_I32_F64,
-		MAP_I32_OBJ,
-		MAP_I32_PTR,
-		MAP_I32_STR,
-
-		MAP_STR_I8,
-		MAP_STR_I16,
-		MAP_STR_I32,
-		MAP_STR_F32,
-		MAP_STR_F64,
-		MAP_STR_OBJ,
-		MAP_STR_PTR,
-		MAP_STR_STR,
-	} BackingClass;
-
 	virtual bool IsMatch(intptr_t id1, intptr_t id2) const;
 	virtual void GetTypeIDs(intptr_t &id1, intptr_t &id2) const;
-
-	void WriteValue(FSerializer &ar, const char *key, const void *addr) const override;
-	bool ReadValue(FSerializer &ar, const char *key, void *addr) const override;
-	void SetDefaultValue(void *base, unsigned offset, TArray<FTypeAndOffset> *specials) override;
-	void InitializeValue(void *addr, const void *def) const override;
-	void DestroyValue(void *addr) const override;
-	void SetPointerMap(void *base, unsigned offset, TArray<std::pair<size_t, PMap *>> *ptrofs) override;
-};
-
-
-class PMapIterator : public PCompoundType
-{
-	void Construct(void * addr) const;
-public:
-	PMapIterator(PType *keytype, PType *valtype, PStruct *backing, int backing_class);
-
-	PType *KeyType;
-	PType *ValueType;
-
-	TMap<FName,PFunction*> FnOverrides;
-
-	PStruct *BackingType;
-
-	PMap::EBackingClass BackingClass;
-
-	virtual bool IsMatch(intptr_t id1, intptr_t id2) const;
-	virtual void GetTypeIDs(intptr_t &id1, intptr_t &id2) const;
-
-	void WriteValue(FSerializer &ar, const char *key, const void *addr) const override;
-	bool ReadValue(FSerializer &ar, const char *key, void *addr) const override;
-	void SetDefaultValue(void *base, unsigned offset, TArray<FTypeAndOffset> *specials) override;
-	void InitializeValue(void *addr, const void *def) const override;
-	void DestroyValue(void *addr) const override;
-};
-
-class PFunctionPointer : public PPointer
-{
-public:
-	//PointedType = PPrototype or TypeVoid
-	PFunctionPointer(PPrototype * proto, TArray<uint32_t> &&argflags, int scope);
-
-	static FString GenerateNameForError(const PFunction * from);
-
-	TArray<uint32_t> ArgFlags;
-	int Scope;
-
-	PFunction *FakeFunction; // used for type checking in FxFunctionCall
-
-	void WriteValue(FSerializer &ar, const char *key, const void *addr) const override;
-	bool ReadValue(FSerializer &ar, const char *key, void *addr) const override;
-
-
-	struct FlagsAndScope
-	{ // used for IsMatch's id2
-		TArray<uint32_t> * ArgFlags;
-		int Scope;
-	};
-
-	bool IsMatch(intptr_t id1, intptr_t id2) const override;
-	void GetTypeIDs(intptr_t &id1, intptr_t &id2) const override; //NOT SUPPORTED
 };
 
 class PStruct : public PContainerType
 {
 public:
-	PStruct(FName name, PTypeBase *outer, bool isnative = false, int fileno = 0);
+	PStruct(FName name, PTypeBase *outer, bool isnative = false);
 
 	bool isNative;
-	bool isOrdered = false;
+	int sourceLump = -1;
+
 	// Some internal structs require explicit construction and destruction of fields the VM cannot handle directly so use these two functions for it.
 	VMFunction *mConstructor = nullptr;
 	VMFunction *mDestructor = nullptr;
@@ -666,9 +556,8 @@ public:
 	void WriteValue(FSerializer &ar, const char *key,const void *addr) const override;
 	bool ReadValue(FSerializer &ar, const char *key,void *addr) const override;
 	void SetDefaultValue(void *base, unsigned offset, TArray<FTypeAndOffset> *specials) override;
-	void SetPointer(void *base, unsigned offset, TArray<std::pair<size_t, PObjectPointer *>> *specials) override;
-	void SetPointerArray(void *base, unsigned offset, TArray<std::pair<size_t, PDynArray *>> *special) override;
-	void SetPointerMap(void *base, unsigned offset, TArray<std::pair<size_t, PMap *>> *ptrofs) override;
+	void SetPointer(void *base, unsigned offset, TArray<size_t> *specials) override;
+	void SetPointerArray(void *base, unsigned offset, TArray<size_t> *special) override;
 };
 
 class PPrototype : public PCompoundType
@@ -692,7 +581,7 @@ public:
 	PClass *Descriptor;
 	PClassType *ParentType;
 
-	PClassType(PClass *cls = nullptr, int fileno = 0);
+	PClassType(PClass *cls = nullptr);
 	PField *AddField(FName name, PType *type, uint32_t flags = 0) override;
 	PField *AddNativeField(FName name, PType *type, size_t address, uint32_t flags = 0, int bitvalue = 0) override;
 };
@@ -705,18 +594,16 @@ inline PClass *PObjectPointer::PointedClass() const
 
 // Returns a type from the TypeTable. Will create one if it isn't present.
 PMap *NewMap(PType *keytype, PType *valuetype);
-PMapIterator *NewMapIterator(PType *keytype, PType *valuetype);
 PArray *NewArray(PType *type, unsigned int count);
 PStaticArray *NewStaticArray(PType *type);
 PDynArray *NewDynArray(PType *type);
-PFunctionPointer *NewFunctionPointer(PPrototype * proto, TArray<uint32_t> && argflags, int scope);
 PPointer *NewPointer(PType *type, bool isconst = false);
 PPointer *NewPointer(PClass *type, bool isconst = false);
 PClassPointer *NewClassPointer(PClass *restrict);
 PEnum *NewEnum(FName name, PTypeBase *outer);
-PStruct *NewStruct(FName name, PTypeBase *outer, bool native = false, int fileno = 0);
+PStruct *NewStruct(FName name, PTypeBase *outer, bool native = false);
 PPrototype *NewPrototype(const TArray<PType *> &rettypes, const TArray<PType *> &argtypes);
-PClassType *NewClassType(PClass *cls, int fileno);
+PClassType *NewClassType(PClass *cls);
 
 // Built-in types -----------------------------------------------------------
 
@@ -731,29 +618,22 @@ extern PFloat *TypeFloat32, *TypeFloat64;
 extern PString *TypeString;
 extern PName *TypeName;
 extern PSound *TypeSound;
+extern PSoundHandle *TypeSoundHandle;
 extern PColor *TypeColor;
 extern PTextureID *TypeTextureID;
-extern PTranslationID* TypeTranslationID;
 extern PSpriteID *TypeSpriteID;
 extern PStruct* TypeVector2;
 extern PStruct* TypeVector3;
-extern PStruct* TypeVector4;
 extern PStruct* TypeFVector2;
 extern PStruct* TypeFVector3;
-extern PStruct* TypeFVector4;
-extern PStruct* TypeQuaternion;
-extern PStruct* TypeFQuaternion;
 extern PStruct *TypeColorStruct;
 extern PStruct *TypeStringStruct;
-extern PStruct* TypeQuaternionStruct;
+extern PStruct *TypeSoundHandleStruct;
 extern PStatePointer *TypeState;
 extern PPointer *TypeFont;
 extern PStateLabel *TypeStateLabel;
 extern PPointer *TypeNullPtr;
 extern PPointer *TypeVoidPtr;
-extern PPointer* TypeRawFunction;
-extern PPointer* TypeVMFunction;
-
 
 inline FString &DObject::StringVar(FName field)
 {

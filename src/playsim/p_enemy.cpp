@@ -50,7 +50,7 @@
 #include "vm.h"
 #include "actorinlines.h"
 #include "a_ceiling.h"
-#include "shadowinlines.h"
+#include "i_time.h"
 
 #include "gi.h"
 
@@ -62,8 +62,8 @@ static FRandom pr_lookformonsters ("LookForMonsters");
 static FRandom pr_lookforplayers ("LookForPlayers");
 static FRandom pr_scaredycat ("Anubis");
 	   FRandom pr_chase ("Chase");
-	   FRandom pr_facetarget ("FaceTarget");
-	   FRandom pr_railface ("RailFace");
+static FRandom pr_facetarget ("FaceTarget");
+static FRandom pr_railface ("RailFace");
 static FRandom pr_look2 ("LookyLooky");
 static FRandom pr_look3 ("IGotHooky");
 static FRandom pr_slook ("SlooK");
@@ -111,6 +111,17 @@ double yspeed[8] = {0,SQRTHALF,1,SQRTHALF,0,-SQRTHALF,-1,-SQRTHALF};
 // but some can be made preaware
 //
 
+cycle_t AlertCycles;
+
+ADD_STAT(ALERT)
+{
+	double tm = AlertCycles.TimeMS();
+	if (primaryLevel->totaltime % 35 == 0) {
+		AlertCycles.Reset();
+	}
+
+	return FStringf("ALERT time in last second: %f ms  %f", tm, I_GetTimeFrac());
+}
 
 //----------------------------------------------------------------------------
 //
@@ -249,6 +260,8 @@ void P_NoiseAlert (AActor *emitter, AActor *target, bool splash, double maxdist)
 	if (target != NULL && target->player && (target->player->cheats & CF_NOTARGET))
 		return;
 
+	AlertCycles.Clock();
+
 	validcount++;
 	NoiseList.Clear();
 	NoiseMarkSector(emitter->Sector, target, splash, emitter, 0, maxdist);
@@ -256,6 +269,8 @@ void P_NoiseAlert (AActor *emitter, AActor *target, bool splash, double maxdist)
 	{
 		P_RecursiveSound(NoiseList[i].sec, target, splash, emitter, NoiseList[i].soundblocks, maxdist);
 	}
+
+	AlertCycles.Unclock();
 }
 
 //----------------------------------------------------------------------------
@@ -269,10 +284,10 @@ int P_CheckMeleeRange (AActor* actor, double range)
 	AActor *pl = actor->target;
 
 	double dist;
-	
-	if (!pl)
+		
+	if (!pl || (actor->Sector->Flags & SECF_NOATTACK))
 		return false;
-
+				
 	dist = actor->Distance2D (pl);
 	if (range < 0) range = actor->meleerange;
 
@@ -282,9 +297,6 @@ int P_CheckMeleeRange (AActor* actor, double range)
 	// [RH] If moving toward goal, then we've reached it.
 	if (pl == actor->goal)
 		return true;
-
-	if (actor->Sector->Flags & SECF_NOATTACK)
-		return false;
 
 	// [RH] Don't melee things too far above or below actor.
 	if (!(actor->flags5 & MF5_NOVERTICALMELEERANGE))
@@ -373,7 +385,8 @@ static int P_CheckMissileRange (AActor *actor)
 	if (actor->MeleeState != nullptr && dist < actor->meleethreshold)
 		return false;	// From the Revenant: close enough for fist attack
 
-	dist *= actor->missilechancemult;
+	if (actor->flags4 & MF4_MISSILEMORE) dist *= 0.5;
+	if (actor->flags4 & MF4_MISSILEEVENMORE) dist *= 0.125;
 
 	int mmc = int(actor->MinMissileChance * G_SkillProperty(SKILLP_Aggressiveness));
 	return pr_checkmissilerange() >= min(int(dist), mmc);
@@ -404,7 +417,7 @@ int P_HitFriend(AActor * self)
 	{
 		DAngle angle = self->AngleTo(self->target);
 		double dist = self->Distance2D(self->target);
-		P_AimLineAttack (self, angle, dist, &t, nullAngle, true);
+		P_AimLineAttack (self, angle, dist, &t, 0., true);
 		if (t.linetarget != NULL && t.linetarget != self->target)
 		{
 			return self->IsFriend (t.linetarget);
@@ -464,12 +477,6 @@ static int P_IsUnderDamage(AActor* actor)
 				dir |= cl->getDirection();
 		}
 		// Q: consider crushing 3D floors too?
-		// [inkoalawetrust] Check for sectors that can harm the actor.
-		if (!(actor->flags9 & MF9_NOSECTORDAMAGE) && seclist->m_sector->damageamount > 0)
-		{
-			if (seclist->m_sector->MoreFlags & SECMF_HARMINAIR || actor->isAtZ(seclist->m_sector->LowestFloorAt(actor)) || actor->waterlevel)
-				return (actor->player || (actor->player == nullptr && seclist->m_sector->MoreFlags & SECMF_HURTMONSTERS))  ? -1 : 0;
-		}
 	}
 	return dir;
 }
@@ -604,12 +611,12 @@ static int P_Move (AActor *actor)
 		{
 			DAngle anglediff = deltaangle(oldangle, actor->Angles.Yaw);
 
-			if (anglediff != nullAngle)
+			if (anglediff != 0)
 			{
 				move = move.Rotated(anglediff);
 				oldangle = actor->Angles.Yaw;
 			}
-			start = actor->Pos().XY() - move * i / steps;
+			start = actor->Pos() - move * i / steps;
 		}
 	}
 
@@ -633,14 +640,9 @@ static int P_Move (AActor *actor)
 	// actually walking down a step.
 	if (try_ok &&
 		!((actor->flags & MF_NOGRAVITY) || CanJump(actor))
-			&& !(actor->flags2 & MF2_ONMOBJ))
-
+			&& actor->Z() > actor->floorz && !(actor->flags2 & MF2_ONMOBJ))
 	{
-		// account for imprecisions with slopes. A walking actor should never be below its own floorz.
-		if (actor->Z() < actor->floorz)
-			actor->SetZ(actor->floorz);
-
-		else if (actor->Z() <= actor->floorz + actor->MaxStepHeight)
+		if (actor->Z() <= actor->floorz + actor->MaxStepHeight)
 		{
 			double savedz = actor->Z();
 			actor->SetZ(actor->floorz);
@@ -765,10 +767,6 @@ int P_SmartMove(AActor* actor)
 		)
 		actor->movedir = DI_NODIR;    // avoid the area (most of the time anyway)
 
-	if (actor->flags2 & MF2_FLOORCLIP)
-	{
-		actor->AdjustFloorClip();
-	}
 	return true;
 }
 
@@ -1012,7 +1010,7 @@ void P_NewChaseDir(AActor * actor)
 				}
 				else if (front == actor->Z() && back < actor->Z() - actor->MaxDropOffHeight)
 				{
-					angle = line->Delta().Angle() + DAngle::fromDeg(180.); // back side dropoff
+					angle = line->Delta().Angle() + 180.; // back side dropoff
 				}
 				else continue;
 		
@@ -1267,7 +1265,7 @@ int P_IsVisible(AActor *lookee, AActor *other, INTBOOL allaround, FLookExParams 
 	double mindist;
 	DAngle fov;
 
-	if (other == nullptr || (other->flags8 & MF8_MVISBLOCKED))
+	if (other == nullptr)
 	{
 		return false;
 	}
@@ -1276,12 +1274,12 @@ int P_IsVisible(AActor *lookee, AActor *other, INTBOOL allaround, FLookExParams 
 	{
 		maxdist = params->maxDist;
 		mindist = params->minDist;
-		fov = allaround ? DAngle::fromDeg(0.) : params->Fov; // [RK] Account for LOOKALLAROUND flag.
+		fov = params->Fov;
 	}
 	else
 	{
 		mindist = maxdist = 0;
-		fov = DAngle::fromDeg(allaround ? 0. : 180.);
+		fov = allaround ? 0. : 180.;
 	}
 
 	double dist = lookee->Distance2D (other);
@@ -1292,7 +1290,7 @@ int P_IsVisible(AActor *lookee, AActor *other, INTBOOL allaround, FLookExParams 
 	if (mindist && dist < mindist)
 		return false;			// [KS] too close
 
-	if (fov != nullAngle)
+	if (fov != 0)
 	{
 		DAngle an = absangle(lookee->AngleTo(other), lookee->Angles.Yaw);
 
@@ -1307,161 +1305,6 @@ int P_IsVisible(AActor *lookee, AActor *other, INTBOOL allaround, FLookExParams 
 
 	// P_CheckSight is by far the most expensive operation in here so let's do it last.
 	return P_CheckSight(lookee, other, SF_SEEPASTSHOOTABLELINES);
-}
-
-bool isTargetablePlayer(AActor *actor, player_t *player, INTBOOL allaround, void* lookparams)
-{
-	FLookExParams* params = (FLookExParams*)lookparams;
-
-	if (!(player->mo->flags & MF_SHOOTABLE))
-		return false;			// not shootable (observer or dead)
-
-	if (actor->IsFriend(player->mo))
-		return false;			// same +MF_FRIENDLY, ignore
-
-	if (player->cheats & CF_NOTARGET)
-		return false;			// no target
-
-	if (player->health <= 0)
-		return false;			// dead
-
-	if (!P_IsVisible(actor, player->mo, allaround, params))
-		return false;			// out of sight
-
-	// [RC] Well, let's let special monsters with this flag active be able to see
-	// the player then, eh?
-	if (!(actor->flags6 & MF6_SEEINVISIBLE))
-	{
-		if ((player->mo->flags & MF_SHADOW && !(actor->Level->i_compatflags & COMPATF_INVISIBILITY)) ||
-			player->mo->flags3 & MF3_GHOST)
-		{
-			if (player->mo->Distance2D(actor) > 128 && player->mo->Vel.XY().LengthSquared() < 5 * 5)
-			{ // Player is sneaking - can't detect
-				return false;
-			}
-			if (pr_lookforplayers() < 225)
-			{ // Player isn't sneaking, but still didn't detect
-				return false;
-			}
-		}
-	}
-
-	return true;
-}
-
-bool ValidEnemyInBlock(AActor* lookee, AActor* other, void* lookparams)
-{
-	FLookExParams* params = (FLookExParams*)lookparams;
-
-	if (!(other->flags & MF_SHOOTABLE))
-		return false;			// not shootable (observer or dead)
-
-	if (other == lookee)
-		return false;			// is self
-
-	if (other->health <= 0)
-		return false;			// dead
-
-	if (other->flags2 & MF2_DORMANT)
-		return false;			// don't target dormant things
-
-	if (!(other->flags3 & MF3_ISMONSTER))
-		return false;			// don't target it if it isn't a monster (could be a barrel)
-
-	if (other->flags7 & MF7_NEVERTARGET)
-		return false;
-
-	bool keepChecking = false;
-	if (lookee->flags & MF_FRIENDLY)
-	{
-		if (other->flags & MF_FRIENDLY)
-		{
-			if (!lookee->IsFriend(other))
-			{
-				// This is somebody else's friend, so go after it
-				keepChecking = true;
-			}
-			else if (other->target != NULL && !(other->target->flags & MF_FRIENDLY))
-			{
-				other = other->target;
-				if (!(other->flags & MF_SHOOTABLE) ||
-					other->health <= 0 ||
-					(other->flags2 & MF2_DORMANT))
-				{
-					return false;
-				}
-			}
-		}
-		else
-		{
-			keepChecking = true;
-		}
-	}
-	else if (lookee->flags8 & MF8_SEEFRIENDLYMONSTERS && other->flags & MF_FRIENDLY)
-	{
-		keepChecking = true;
-	}
-
-	// [MBF] If the monster is already engaged in a one-on-one attack
-	// with a healthy friend, don't attack around 60% the time.
-
-	// [GrafZahl] This prevents friendlies from attacking all the same 
-	// target.
-
-	if (keepChecking)
-	{
-		AActor* targ = other->target;
-		if (targ && targ->target == other && pr_skiptarget() > 100 && lookee->IsFriend(targ) &&
-			targ->health * 2 >= targ->SpawnHealth())
-		{
-			return false;
-		}
-	}
-
-	// [KS] Hey, shouldn't there be a check for MF3_NOSIGHTCHECK here?
-
-	if (!keepChecking || !P_IsVisible(lookee, other, true, params))
-		return false;			// out of sight
-
-	return true;
-}
-
-//============================================================================
-//
-// LookForEnemiesEx
-//
-// [inkoalawetrust] Return a script array of all valid enemies of the caller
-// in range. For ZScript.
-//
-//============================================================================
-
-DEFINE_ACTION_FUNCTION(AActor, LookForEnemiesEx)
-{
-	PARAM_SELF_PROLOGUE(AActor);
-	PARAM_OUTPOINTER(targets,TArray<AActor*>);
-	PARAM_FLOAT(range);
-	PARAM_BOOL(noPlayers);
-	PARAM_BOOL(allaround);
-	PARAM_POINTER(params, FLookExParams);
-
-	if (targets == nullptr)
-		ThrowAbortException(X_WRITE_NIL,"No targets array passed");
-
-	if (range == -1)
-		range = self->friendlyseeblocks * FBlockmap::MAPBLOCKUNITS;
-
-	FPortalGroupArray check(FPortalGroupArray::PGA_Full3d);
-	FMultiBlockThingsIterator it(check, self, range, false);
-	FMultiBlockThingsIterator::CheckResult cres;
-
-	while (it.Next(&cres))
-	{
-		if (cres.thing->player == nullptr && ValidEnemyInBlock(cres.thing, self, params) ||
-			!noPlayers && cres.thing->player && isTargetablePlayer(self, cres.thing->player, allaround, params))
-			targets->Push(cres.thing);
-	}
-
-	ACTION_RETURN_INT(targets->Size());
 }
 
 //---------------------------------------------------------------------------
@@ -1707,10 +1550,80 @@ AActor *LookForEnemiesInBlock (AActor *lookee, int index, void *extparam)
 	
 	for (block = lookee->Level->blockmap.blocklinks[index]; block != NULL; block = block->NextActor)
 	{
-		if (!ValidEnemyInBlock(lookee, block->Me, params))
+		link = block->Me;
+
+        if (!(link->flags & MF_SHOOTABLE))
+			continue;			// not shootable (observer or dead)
+
+		if (link == lookee)
 			continue;
 
-		return block->Me;
+		if (link->health <= 0)
+			continue;			// dead
+
+		if (link->flags2 & MF2_DORMANT)
+			continue;			// don't target dormant things
+
+		if (!(link->flags3 & MF3_ISMONSTER))
+			continue;			// don't target it if it isn't a monster (could be a barrel)
+
+		if (link->flags7 & MF7_NEVERTARGET)
+			continue;
+
+		other = NULL;
+		if (lookee->flags & MF_FRIENDLY)
+		{
+			if (link->flags & MF_FRIENDLY)
+			{
+				if (!lookee->IsFriend(link))
+				{
+					// This is somebody else's friend, so go after it
+					other = link;
+				}
+				else if (link->target != NULL && !(link->target->flags & MF_FRIENDLY))
+				{
+					other = link->target;
+					if (!(other->flags & MF_SHOOTABLE) ||
+						other->health <= 0 ||
+						(other->flags2 & MF2_DORMANT))
+					{
+						other = NULL;;
+					}
+				}
+			}
+			else
+			{
+				other = link;
+			}
+		}
+		else if (lookee->flags8 & MF8_SEEFRIENDLYMONSTERS && link->flags & MF_FRIENDLY)
+		{
+			other = link;
+		}
+
+		// [MBF] If the monster is already engaged in a one-on-one attack
+		// with a healthy friend, don't attack around 60% the time.
+		
+		// [GrafZahl] This prevents friendlies from attacking all the same 
+		// target.
+		
+		if (other)
+		{
+			AActor *targ = other->target;
+			if (targ && targ->target == other && pr_skiptarget() > 100 && lookee->IsFriend (targ) &&
+				targ->health*2 >= targ->SpawnHealth())
+			{
+				continue;
+			}
+		}
+
+		// [KS] Hey, shouldn't there be a check for MF3_NOSIGHTCHECK here?
+
+		if (other == NULL || !P_IsVisible (lookee, other, true, params))
+			continue;			// out of sight
+
+
+		return other;
 	}
 	return NULL;
 }
@@ -1910,8 +1823,46 @@ int P_LookForPlayers (AActor *actor, INTBOOL allaround, FLookExParams *params)
 
 		player = actor->Level->Players[pnum];
 
-		if (!isTargetablePlayer(actor, player, allaround, params))
-			continue;
+		if (!(player->mo->flags & MF_SHOOTABLE))
+			continue;			// not shootable (observer or dead)
+
+		if (actor->IsFriend(player->mo))
+			continue;			// same +MF_FRIENDLY, ignore
+
+		if (player->cheats & CF_NOTARGET)
+			continue;			// no target
+
+		if (player->health <= 0)
+			continue;			// dead
+
+		if (!P_IsVisible (actor, player->mo, allaround, params))
+			continue;			// out of sight
+
+		// [SP] Deathmatch fixes - if we have MF_FRIENDLY we're definitely in deathmatch
+		// We're going to ignore our master, but go after his enemies.
+		if ( actor->flags & MF_FRIENDLY )
+		{
+			if ( actor->IsFriend(player->mo) )
+				continue;
+		}
+
+		// [RC] Well, let's let special monsters with this flag active be able to see
+		// the player then, eh?
+		if(!(actor->flags6 & MF6_SEEINVISIBLE)) 
+		{
+			if ((player->mo->flags & MF_SHADOW && !(actor->Level->i_compatflags & COMPATF_INVISIBILITY)) ||
+				player->mo->flags3 & MF3_GHOST)
+			{
+				if (player->mo->Distance2D (actor) > 128 && player->mo->Vel.XY().LengthSquared() < 5*5)
+				{ // Player is sneaking - can't detect
+					continue;
+				}
+				if (pr_lookforplayers() < 225)
+				{ // Player isn't sneaking, but still didn't detect
+					continue;
+				}
+			}
+		}
 		
 		// [RH] Need to be sure the reactiontime is 0 if the monster is
 		//		leaving its goal to go after a player.
@@ -2025,7 +1976,7 @@ DEFINE_ACTION_FUNCTION(AActor, A_Look)
 		if (self->reactiontime > self->Level->maptime)
 			self->target = nullptr;
 	}
-	else if (self->SeeSound.isvalid())
+	else if (self->SeeSound)
 	{
 		if ((self->flags2 & MF2_BOSS) || (self->flags8 & MF8_FULLVOLSEE))
 		{ // full volume
@@ -2064,7 +2015,7 @@ DEFINE_ACTION_FUNCTION(AActor, A_LookEx)
 
 	AActor *targ = NULL; // Shuts up gcc
 	double dist;
-	if (fov == nullAngle) fov = DAngle::fromDeg(180.);
+	if (fov == 0) fov = 180.;
 	FLookExParams params = { fov, minseedist, maxseedist, maxheardist, flags, seestate };
 
 	if (self->flags5 & MF5_INCONVERSATION)
@@ -2138,7 +2089,7 @@ DEFINE_ACTION_FUNCTION(AActor, A_LookEx)
 				{
 					// If we find a valid target here, the wandering logic should *not*
 					// be activated! If would cause the seestate to be set twice.
-					if (P_LookForPlayers(self, (self->flags4 & MF4_LOOKALLAROUND), &params)) // [RK] Passing true for allround should only occur if the flag is actually set.
+					if (P_LookForPlayers(self, true, &params))
 						goto seeyou;
 				}
 
@@ -2191,7 +2142,7 @@ DEFINE_ACTION_FUNCTION(AActor, A_LookEx)
 
 	if (!(flags & LOF_NOSIGHTCHECK))
 	{
-		if (!P_LookForPlayers(self, (self->flags4 & MF4_LOOKALLAROUND), &params)) // [RK] Account for the flag being set.
+		if (!P_LookForPlayers(self, true, &params))
 			return 0;
 	}
 	else
@@ -2207,7 +2158,7 @@ DEFINE_ACTION_FUNCTION(AActor, A_LookEx)
 		if (self->reactiontime > self->Level->maptime)
 			self->target = nullptr;
 	}
-	else if (self->SeeSound.isvalid() && !(flags & LOF_NOSEESOUND))
+	else if (self->SeeSound && !(flags & LOF_NOSEESOUND))
 	{
 		if (flags & LOF_FULLVOLSEESOUND)
 		{ // full volume
@@ -2268,7 +2219,6 @@ enum ChaseFlags
 	CHF_NOPOSTATTACKTURN = 128,
 	CHF_STOPIFBLOCKED = 256,
 	CHF_DONTIDLE = 512,
-	CHF_DONTLOOKALLAROUND = 1024,
 };
 
 void A_Wander(AActor *self, int flags)
@@ -2292,15 +2242,15 @@ void A_Wander(AActor *self, int flags)
 	// turn towards movement direction if not there yet
 	if (!(flags & CHF_NODIRECTIONTURN) && (self->movedir < DI_NODIR))
 	{
-		self->Angles.Yaw = DAngle::fromDeg(floor(self->Angles.Yaw.Degrees() / 45) * 45.);
-		DAngle delta = deltaangle(self->Angles.Yaw, DAngle::fromDeg(self->movedir * 45));
-		if (delta < nullAngle)
+		self->Angles.Yaw = floor(self->Angles.Yaw.Degrees / 45) * 45.;
+		DAngle delta = deltaangle(self->Angles.Yaw, (self->movedir * 45));
+		if (delta < 0)
 		{
-			self->Angles.Yaw -= DAngle::fromDeg(45);
+			self->Angles.Yaw -= 45;
 		}
-		else if (delta > nullAngle)
+		else if (delta > 0)
 		{
-			self->Angles.Yaw += DAngle::fromDeg(45);
+			self->Angles.Yaw += 45;
 		}
 	}
 
@@ -2407,7 +2357,7 @@ void A_DoChase (AActor *actor, bool fastchase, FState *meleestate, FState *missi
 
 	// [RH] Don't chase invisible targets
 	if (actor->target != NULL &&
-		((actor->target->renderflags & RF_INVISIBLE) || (actor->target->flags8 & MF8_MINVISIBLE)) &&
+		actor->target->renderflags & RF_INVISIBLE &&
 		actor->target != actor->goal)
 	{
 		actor->target = nullptr;
@@ -2445,15 +2395,15 @@ void A_DoChase (AActor *actor, bool fastchase, FState *meleestate, FState *missi
 	}
 	else if (!(flags & CHF_NODIRECTIONTURN) && actor->movedir < 8)
 	{
-		actor->Angles.Yaw = DAngle::fromDeg(floor(actor->Angles.Yaw.Degrees() / 45) * 45.);
-		DAngle delta = deltaangle(actor->Angles.Yaw, DAngle::fromDeg(actor->movedir * 45));
-		if (delta < nullAngle)
+		actor->Angles.Yaw = floor(actor->Angles.Yaw.Degrees / 45) * 45.;
+		DAngle delta = deltaangle(actor->Angles.Yaw, (actor->movedir * 45));
+		if (delta < 0)
 		{
-			actor->Angles.Yaw -= DAngle::fromDeg(45);
+			actor->Angles.Yaw -= 45;
 		}
-		else if (delta > nullAngle)
+		else if (delta > 0)
 		{
-			actor->Angles.Yaw += DAngle::fromDeg(45);
+			actor->Angles.Yaw += 45;
 		}
 	}
 
@@ -2495,7 +2445,7 @@ void A_DoChase (AActor *actor, bool fastchase, FState *meleestate, FState *missi
 	}
 	if (!actor->target || !(actor->target->flags & MF_SHOOTABLE))
 	{ // look for a new target
-		if (actor->target != nullptr && (actor->target->flags2 & MF2_NONSHOOTABLE))
+		if (actor->target != NULL && (actor->target->flags2 & MF2_NONSHOOTABLE))
 		{
 			// Target is only temporarily unshootable, so remember it.
 			actor->lastenemy = actor->target;
@@ -2503,17 +2453,17 @@ void A_DoChase (AActor *actor, bool fastchase, FState *meleestate, FState *missi
 			// hurt our old one temporarily.
 			actor->threshold = 0;
 		}
-		if (P_LookForPlayers (actor, !(flags & CHF_DONTLOOKALLAROUND), nullptr) && actor->target != actor->goal)
+		if (P_LookForPlayers (actor, true, NULL) && actor->target != actor->goal)
 		{ // got a new target
 			actor->flags7 &= ~MF7_INCHASE;
 			return;
 		}
-		if (actor->target == nullptr)
+		if (actor->target == NULL)
 		{
 			if (flags & CHF_DONTIDLE || actor->flags & MF_FRIENDLY)
 			{
 				//A_Look(actor);
-				if (actor->target == nullptr)
+				if (actor->target == NULL)
 				{
 					if (!dontmove) A_Wander(actor);
 					actor->flags7 &= ~MF7_INCHASE;
@@ -2618,17 +2568,18 @@ void A_DoChase (AActor *actor, bool fastchase, FState *meleestate, FState *missi
 				if (pr_chase() < 100)
 				{
 					DAngle ang = actor->AngleTo(actor->target);
-					if (pr_chase() < 128) ang += DAngle::fromDeg(90.);
-					else ang -= DAngle::fromDeg(90.);
+					if (pr_chase() < 128) ang += 90.;
+					else ang -= 90.;
 					actor->VelFromAngle(13., ang);
 					actor->FastChaseStrafeCount = 3;		// strafe time
 				}
 			}
 		}
+
 	}
 
 	// [RH] Scared monsters attack less frequently
-	if (((actor->target->player == nullptr ||
+	if (((actor->target->player == NULL ||
 		!((actor->target->player->cheats & CF_FRIGHTENING) || (actor->target->flags8 & MF8_FRIGHTENING))) &&
 		!(actor->flags4 & MF4_FRIGHTENED)) ||
 		pr_scaredycat() < 43)
@@ -2636,7 +2587,7 @@ void A_DoChase (AActor *actor, bool fastchase, FState *meleestate, FState *missi
 		// check for melee attack
 		if (meleestate && P_CheckMeleeRange(actor))
 		{
-			if (actor->AttackSound.isvalid())
+			if (actor->AttackSound)
 				S_Sound (actor, CHAN_WEAPON, 0, actor->AttackSound, 1, ATTN_NORM);
 
 			actor->SetState (meleestate);
@@ -2677,7 +2628,7 @@ void A_DoChase (AActor *actor, bool fastchase, FState *meleestate, FState *missi
 			lookForBetter = true;
 		}
 		AActor * oldtarget = actor->target;
-		gotNew = P_LookForPlayers (actor, !(flags & CHF_DONTLOOKALLAROUND), nullptr);
+		gotNew = P_LookForPlayers (actor, true, NULL);
 		if (lookForBetter)
 		{
 			actor->flags3 |= MF3_NOSIGHTCHECK;
@@ -2700,7 +2651,7 @@ void A_DoChase (AActor *actor, bool fastchase, FState *meleestate, FState *missi
 	if ((!fastchase || !actor->FastChaseStrafeCount) && !dontmove)
 	{
 		// CANTLEAVEFLOORPIC handling was completely missing in the non-serpent functions.
-		DVector2 old = actor->Pos().XY();
+		DVector2 old = actor->Pos();
 		int oldgroup = actor->PrevPortalGroup;
 		FTextureID oldFloor = actor->floorpic;
 
@@ -2797,7 +2748,7 @@ bool P_CanResurrect(AActor *raiser, AActor *thing)
 //
 //==========================================================================
 
-bool P_CheckForResurrection(AActor* self, bool usevilestates, FState* state = nullptr, FSoundID sound = NO_SOUND)
+bool P_CheckForResurrection(AActor* self, bool usevilestates, FState* state = nullptr, FSoundID sound = 0)
 {
 	const AActor *info;
 	AActor *temp;
@@ -2862,7 +2813,7 @@ bool P_CheckForResurrection(AActor* self, bool usevilestates, FState* state = nu
 
 				corpsehit->flags |= MF_SOLID;
 				corpsehit->Height = corpsehit->GetDefault()->Height;
-				bool check = P_CheckPosition(corpsehit, corpsehit->Pos().XY());
+				bool check = P_CheckPosition(corpsehit, corpsehit->Pos());
 				corpsehit->flags = oldflags;
 				corpsehit->radius = oldradius;
 				corpsehit->Height = oldheight;
@@ -2898,7 +2849,7 @@ bool P_CheckForResurrection(AActor* self, bool usevilestates, FState* state = nu
 						self->SetState(archvile->FindState(NAME_Heal));
 					}
 				}
-				if (sound == NO_SOUND) sound = S_FindSound("vile/raise");
+				if (sound == 0) sound = "vile/raise";
 				S_Sound(corpsehit, CHAN_BODY, 0, sound, 1, ATTN_IDLE);
 				info = corpsehit->GetDefault();
 
@@ -2951,8 +2902,13 @@ void A_Chase(AActor *self)
 	A_DoChase(self, false, self->MeleeState, self->MissileState, true, gameinfo.nightmarefast, false, 0);
 }
 
-void A_ChaseNative(AActor * self, int meleelabel, int missilelabel, int flags)
+DEFINE_ACTION_FUNCTION(AActor, A_Chase)
 {
+	PARAM_SELF_PROLOGUE(AActor);
+	PARAM_STATELABEL(meleelabel);
+	PARAM_STATELABEL(missilelabel);
+	PARAM_INT(flags);
+
 	FName meleename = ENamedName(meleelabel - 0x10000000);
 	FName missilename = ENamedName(missilelabel - 0x10000000);
 	if (meleename != NAME__a_chase_default || missilename != NAME__a_chase_default)
@@ -2960,7 +2916,7 @@ void A_ChaseNative(AActor * self, int meleelabel, int missilelabel, int flags)
 		FState *melee = StateLabels.GetState(meleelabel, self->GetClass());
 		FState *missile = StateLabels.GetState(missilelabel, self->GetClass());
 		if ((flags & CHF_RESURRECT) && P_CheckForResurrection(self, false))
-			return;
+			return 0;
 
 		A_DoChase(self, !!(flags&CHF_FASTCHASE), melee, missile, !(flags&CHF_NOPLAYACTIVE),
 			!!(flags&CHF_NIGHTMAREFAST), !!(flags&CHF_DONTMOVE), flags & 0x3fffffff);
@@ -2969,36 +2925,6 @@ void A_ChaseNative(AActor * self, int meleelabel, int missilelabel, int flags)
 	{
 		A_DoChase(self, false, self->MeleeState, self->MissileState, true, gameinfo.nightmarefast, false, 0);
 	}
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_Chase, A_ChaseNative)
-{
-	PARAM_SELF_PROLOGUE(AActor);
-	PARAM_STATELABEL(meleelabel);
-	PARAM_STATELABEL(missilelabel);
-	PARAM_INT(flags);
-
-	A_ChaseNative(self, meleelabel, missilelabel, flags);
-
-	return 0;
-}
-
-void A_DoChaseNative(AActor * self, FState *melee, FState *missile, int flags)
-{
-	if ((flags & CHF_RESURRECT) && P_CheckForResurrection(self, false))
-		return;
-	A_DoChase(self, !!(flags&CHF_FASTCHASE), melee, missile, !(flags&CHF_NOPLAYACTIVE), !!(flags&CHF_NIGHTMAREFAST), !!(flags&CHF_DONTMOVE), flags & 0x3fffffff);
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_DoChase, A_DoChaseNative)
-{
-	PARAM_SELF_PROLOGUE(AActor);
-	PARAM_POINTER(melee, FState);
-	PARAM_POINTER(missile, FState);
-	PARAM_INT(flags);
-
-	A_DoChaseNative(self, melee, missile, flags);
-
 	return 0;
 }
 
@@ -3034,9 +2960,9 @@ void A_Face(AActor *self, AActor *other, DAngle max_turn, DAngle max_pitch, DAng
 
 	// 0 means no limit. Also, if we turn in a single step anyways, no need to go through the algorithms.
 	// It also means that there is no need to check for going past the other.
-	if (max_turn != nullAngle && (max_turn < fabs(delta)))
+	if (max_turn != 0 && (max_turn < fabs(delta)))
 	{
-		if (delta > nullAngle)
+		if (delta > 0)
 		{
 			self->Angles.Yaw -= max_turn + ang_offset;
 		}
@@ -3052,7 +2978,7 @@ void A_Face(AActor *self, AActor *other, DAngle max_turn, DAngle max_pitch, DAng
 
 	// [DH] Now set pitch. In order to maintain compatibility, this can be
 	// disabled and is so by default.
-	if (max_pitch <= DAngle::fromDeg(180.))
+	if (max_pitch <= 180.)
 	{
 		DVector2 dist = self->Vec2To(other);
 		
@@ -3085,9 +3011,9 @@ void A_Face(AActor *self, AActor *other, DAngle max_turn, DAngle max_pitch, DAng
 		double dist_z = target_z - source_z;
 		double ddist = g_sqrt(dist.X*dist.X + dist.Y*dist.Y + dist_z*dist_z);
 
-		DAngle other_pitch = -DAngle::fromRad(g_asin(dist_z / ddist)).Normalized180();
+		DAngle other_pitch = -DAngle::ToDegrees(g_asin(dist_z / ddist)).Normalized180();
 		
-		if (max_pitch != nullAngle)
+		if (max_pitch != 0)
 		{
 			if (self->Angles.Pitch > other_pitch)
 			{
@@ -3105,11 +3031,15 @@ void A_Face(AActor *self, AActor *other, DAngle max_turn, DAngle max_pitch, DAng
 			self->Angles.Pitch = other_pitch;
 		}
 		self->Angles.Pitch += pitch_offset;
-		A_Face_ShadowHandling(self, other, max_pitch, other_pitch, true);
 	}
 	
 
-	A_Face_ShadowHandling(self,other,max_turn,other_angle,false);
+
+	// This will never work well if the turn angle is limited.
+	if (max_turn == 0 && (self->Angles.Yaw == other_angle) && other->flags & MF_SHADOW && !(self->flags6 & MF6_SEEINVISIBLE) )
+    {
+		self->Angles.Yaw += pr_facetarget.Random2() * (45 / 256.);
+    }
 }
 
 void A_FaceTarget(AActor *self)
@@ -3144,7 +3074,7 @@ DEFINE_ACTION_FUNCTION(AActor, A_MonsterRail)
 		
 	self->Angles.Yaw = self->AngleTo(self->target);
 
-	self->Angles.Pitch = P_AimLineAttack (self, self->Angles.Yaw, MISSILERANGE, &t, DAngle::fromDeg(60.), 0, self->target);
+	self->Angles.Pitch = P_AimLineAttack (self, self->Angles.Yaw, MISSILERANGE, &t, 60., 0, self->target);
 	if (t.linetarget == NULL)
 	{
 		// We probably won't hit the target, but aim at it anyway so we don't look stupid.
@@ -3156,7 +3086,10 @@ DEFINE_ACTION_FUNCTION(AActor, A_MonsterRail)
 	// Let the aim trail behind the player
 	self->Angles.Yaw = self->AngleTo(self->target, -self->target->Vel.X * 3, -self->target->Vel.Y * 3);
 
-	A_MonsterRail_ShadowHandling(self);
+	if (self->target->flags & MF_SHADOW && !(self->flags6 & MF6_SEEINVISIBLE))
+	{
+		self->Angles.Yaw += pr_railface.Random2() * 45./256;
+	}
 
 	FRailParams p;
 
@@ -3191,10 +3124,10 @@ DEFINE_ACTION_FUNCTION(AActor, A_Pain)
 	PARAM_SELF_PROLOGUE(AActor);
 
 	// [RH] Vary player pain sounds depending on health (ala Quake2)
-	if (self->player && self->alternative == nullptr)
+	if (self->player && self->player->morphTics == 0)
 	{
 		const char *pain_amount;
-		FSoundID sfx_id = NO_SOUND;
+		FSoundID sfx_id = 0;
 
 		if (self->health < 25)
 			pain_amount = "*pain25";
@@ -3211,23 +3144,23 @@ DEFINE_ACTION_FUNCTION(AActor, A_Pain)
 			FString pain_sound = pain_amount;
 			pain_sound += '-';
 			pain_sound += self->player->LastDamageType.GetChars();
-			sfx_id = S_FindSound(pain_sound);
-			if (sfx_id == NO_SOUND)
+			sfx_id = pain_sound;
+			if (sfx_id == 0)
 			{
 				// Try again without a specific pain amount.
 				pain_sound = "*pain-";
 				pain_sound += self->player->LastDamageType.GetChars();
-				sfx_id = S_FindSound(pain_sound);
+				sfx_id = pain_sound;
 			}
 		}
-		if (sfx_id == NO_SOUND)
+		if (sfx_id == 0)
 		{
-			sfx_id = S_FindSound(pain_amount);
+			sfx_id = pain_amount;
 		}
 
 		S_Sound (self, CHAN_VOICE, 0, sfx_id, 1, ATTN_NORM);
 	}
-	else if (self->PainSound.isvalid())
+	else if (self->PainSound)
 	{
 		S_Sound (self, CHAN_VOICE, 0, self->PainSound, 1, ATTN_NORM);
 	}

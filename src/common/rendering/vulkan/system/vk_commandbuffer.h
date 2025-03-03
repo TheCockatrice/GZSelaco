@@ -1,21 +1,21 @@
 #pragma once
 
-#include <zvulkan/vulkandevice.h>
-#include <zvulkan/vulkanobjects.h>
-#include "zstring.h"
+#include "vk_device.h"
+#include "vk_objects.h"
 
-class VulkanRenderDevice;
+class VulkanFrameBuffer;
 
 class VkCommandBufferManager
 {
 public:
-	VkCommandBufferManager(VulkanRenderDevice* fb);
+	VkCommandBufferManager(VulkanFrameBuffer* fb, VkQueue* queue, int queueFamily, bool uploadOnly = false);
 	~VkCommandBufferManager();
 
 	void BeginFrame();
 
 	VulkanCommandBuffer* GetTransferCommands();
 	VulkanCommandBuffer* GetDrawCommands();
+	std::unique_ptr<VulkanCommandBuffer> CreateUnmanagedCommands();
 
 	void FlushCommands(bool finish, bool lastsubmit = false, bool uploadOnly = false);
 
@@ -25,6 +25,8 @@ public:
 	void PushGroup(const FString& name);
 	void PopGroup();
 	void UpdateGpuStats();
+
+	VulkanFrameBuffer *GetFrameBuffer() { return fb; }
 
 	class DeleteList
 	{
@@ -58,13 +60,17 @@ public:
 
 	void DeleteFrameObjects(bool uploadOnly = false);
 
-private:
-	void FlushCommands(VulkanCommandBuffer** commands, size_t count, bool finish, bool lastsubmit);
+	std::unique_ptr<VulkanSwapChain> swapChain;
+	uint32_t presentImageIndex = 0xffffffff;
 
-	VulkanRenderDevice* fb = nullptr;
+private:
+	void FlushCommands(VulkanCommandBuffer** commands, size_t count, VkQueue *queue, bool finish, bool lastsubmit);
+
+	VulkanFrameBuffer* fb = nullptr;
+	VkQueue* fbQueue = nullptr;
+	bool mIsUploadOnly;
 
 	std::unique_ptr<VulkanCommandPool> mCommandPool;
-
 	std::unique_ptr<VulkanCommandBuffer> mTransferCommands;
 	std::unique_ptr<VulkanCommandBuffer> mDrawCommands;
 
@@ -73,6 +79,9 @@ private:
 	std::unique_ptr<VulkanFence> mSubmitFence[maxConcurrentSubmitCount];
 	VkFence mSubmitWaitFences[maxConcurrentSubmitCount];
 	int mNextSubmit = 0;
+
+	std::unique_ptr<VulkanSemaphore> mSwapChainImageAvailableSemaphore;
+	std::unique_ptr<VulkanSemaphore> mRenderFinishedSemaphore;
 
 	struct TimestampQuery
 	{

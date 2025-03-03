@@ -203,8 +203,8 @@ FInputEvent::FInputEvent(const event_t *ev)
 		KeyString = FString(char(ev->data1));
 		break;
 	case EV_Mouse:
-		MouseX = int(ev->x);
-		MouseY = int(ev->y);
+		MouseX = ev->x;
+		MouseY = ev->y;
 		break;
 	default:
 		break; // EV_DeviceChange = wat?

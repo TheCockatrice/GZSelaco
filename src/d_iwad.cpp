@@ -46,22 +46,11 @@
 #include "version.h"
 #include "engineerrors.h"
 #include "v_text.h"
-#include "fs_findfile.h"
 #include "findfile.h"
 #include "i_interface.h"
-#include "gstrings.h"
 
-EXTERN_CVAR(Bool, queryiwad);
-EXTERN_CVAR(String, defaultiwad);
-EXTERN_CVAR(Bool, disableautoload)
-EXTERN_CVAR(Bool, autoloadlights)
-EXTERN_CVAR(Bool, autoloadbrightmaps)
-EXTERN_CVAR(Bool, autoloadwidescreen)
-EXTERN_CVAR(String, language)
-
-CVAR(Int, i_loadsupportwad, 1, CVAR_ARCHIVE|CVAR_GLOBALCONFIG) // 0=never, 1=singleplayer only, 2=always
-
-bool foundprio = false; // global to prevent iwad box from appearing
+CVAR (Bool, queryiwad, false, CVAR_ARCHIVE|CVAR_GLOBALCONFIG);
+CVAR (String, defaultiwad, "", CVAR_ARCHIVE|CVAR_GLOBALCONFIG);
 
 //==========================================================================
 //
@@ -115,12 +104,6 @@ void FIWadManager::ParseIWadInfo(const char *fn, const char *data, int datasize,
 						iwad->prio = sc.Number;
 					}
 				}
-				else if (sc.Compare("SupportWAD"))
-				{
-					sc.MustGetStringName("=");
-					sc.MustGetString();
-					iwad->SupportWAD = sc.String;
-				}
 				else if (sc.Compare("Config"))
 				{
 					sc.MustGetStringName("=");
@@ -148,10 +131,6 @@ void FIWadManager::ParseIWadInfo(const char *fn, const char *data, int datasize,
 				{
 					iwad->nokeyboardcheats = true;
 				}
-				else if (sc.Compare("SkipBexStringsIfLanguage"))
-				{
-					iwad->SkipBexStringsIfLanguage = true;
-				}
 				else if (sc.Compare("Compatibility"))
 				{
 					sc.MustGetStringName("=");
@@ -165,7 +144,6 @@ void FIWadManager::ParseIWadInfo(const char *fn, const char *data, int datasize,
 						else if(sc.Compare("Extended")) iwad->flags |= GI_MENUHACK_EXTENDED;
 						else if(sc.Compare("Shorttex")) iwad->flags |= GI_COMPATSHORTTEX;
 						else if(sc.Compare("Stairs")) iwad->flags |= GI_COMPATSTAIRS;
-						else if (sc.Compare("nosectionmerge")) iwad->flags |=  GI_NOSECTIONMERGE;
 						else sc.ScriptError(NULL);
 					}
 					while (sc.CheckString(","));
@@ -316,28 +294,24 @@ void FIWadManager::ParseIWadInfo(const char *fn, const char *data, int datasize,
 // Look for IWAD definition lump
 //
 //==========================================================================
-void GetReserved(FileSys::LumpFilterInfo& lfi);
+void GetReserved(LumpFilterInfo& lfi);
 
 FIWadManager::FIWadManager(const char *firstfn, const char *optfn)
 {
 	FileSystem check;
-	std::vector<std::string> fns;
-	fns.push_back(firstfn);
-	if (optfn) fns.push_back(optfn);
-	FileSys::LumpFilterInfo lfi;
-	GetReserved(lfi);
+	TArray<FString> fns;
+	fns.Push(firstfn);
+	if (optfn) fns.Push(optfn);
 
-	if (check.InitMultipleFiles(fns, &lfi, nullptr))
+	check.InitMultipleFiles(fns, true);
+	if (check.GetNumEntries() > 0)
 	{
-		// this is for the IWAD picker. As we have a filesystem open here that contains the base files, it is the easiest place to load the strings early.
-		GStrings.LoadStrings(check, language);
 		int num = check.CheckNumForName("IWADINFO");
 		if (num >= 0)
 		{
-			auto data = check.ReadFile(num);
-			ParseIWadInfo("IWADINFO", data.string(), (int)data.size());
+			auto data = check.GetFileData(num);
+			ParseIWadInfo("IWADINFO", (const char*)data.Data(), data.Size());
 		}
-
 	}
 }
 
@@ -352,7 +326,7 @@ FIWadManager::FIWadManager(const char *firstfn, const char *optfn)
 int FIWadManager::ScanIWAD (const char *iwad)
 {
 	FileSystem check;
-	check.InitSingleFile(iwad, nullptr);
+	check.InitSingleFile(iwad, true);
 
 	mLumpsFound.Resize(mIWadInfos.Size());
 
@@ -381,7 +355,7 @@ int FIWadManager::ScanIWAD (const char *iwad)
 			if (full && strnicmp(full, "maps/", 5) == 0)
 			{
 				FString mapname(&full[5], strcspn(&full[5], "."));
-				CheckFileName(mapname.GetChars());
+				CheckFileName(mapname);
 			}
 		}
 	}
@@ -406,11 +380,13 @@ int FIWadManager::CheckIWADInfo(const char* fn)
 {
 	FileSystem check;
 
-	FileSys::LumpFilterInfo lfi;
+	LumpFilterInfo lfi;
 	GetReserved(lfi);
 
-	std::vector<std::string> filenames = { fn };
-	if (check.InitMultipleFiles(filenames, &lfi, nullptr))
+	TArray<FString> filenames;
+	filenames.Push(fn);
+	check.InitMultipleFiles(filenames, true, &lfi);
+	if (check.GetNumEntries() > 0)
 	{
 		int num = check.CheckNumForName("IWADINFO");
 		if (num >= 0)
@@ -419,8 +395,8 @@ int FIWadManager::CheckIWADInfo(const char* fn)
 			{
 
 				FIWADInfo result;
-				auto data = check.ReadFile(num);
-				ParseIWadInfo(fn, data.string(), (int)data.size(), &result);
+				auto data = check.GetFileData(num);
+				ParseIWadInfo(fn, (const char*)data.Data(), data.Size(), &result);
 
 				for (unsigned i = 0, count = mIWadInfos.Size(); i < count; ++i)
 				{
@@ -470,9 +446,10 @@ void FIWadManager::CollectSearchPaths()
 			}
 		}
 	}
-	mSearchPaths.Append(I_GetGogPaths());
-	mSearchPaths.Append(I_GetSteamPath());
-	mSearchPaths.Append(I_GetBethesdaPath());
+	// @Cockatrice - Removed search paths for other games, we only want to search in our own game directory
+	//mSearchPaths.Append(I_GetGogPaths());
+	//mSearchPaths.Append(I_GetSteamPath());
+	//mSearchPaths.Append(I_GetBethesdaPath());
 
 	// Unify and remove trailing slashes
 	for (auto &str : mSearchPaths)
@@ -492,32 +469,36 @@ void FIWadManager::CollectSearchPaths()
 
 void FIWadManager::AddIWADCandidates(const char *dir)
 {
-	FileSys::FileList list;
-
-	if (FileSys::ScanDirectory(list, dir, "*", true))
+	void *handle;
+	findstate_t findstate;
+	FStringf slasheddir("%s/", dir);
+	FString findmask = slasheddir + "*.*";
+	if ((handle = I_FindFirst(findmask, &findstate)) != (void *)-1)
 	{
-		for(auto& entry : list)
+		do
 		{
-			if (!entry.isDirectory)
+			if (!(I_FindAttr(&findstate) & FA_DIREC))
 			{
-				auto p = strrchr(entry.FileName.c_str(), '.');
+				auto FindName = I_FindName(&findstate);
+				auto p = strrchr(FindName, '.');
 				if (p != nullptr)
 				{
 					// special IWAD extension.
 					if (!stricmp(p, ".iwad") || !stricmp(p, ".ipk3") || !stricmp(p, ".ipk7"))
 					{
-						mFoundWads.Push(FFoundWadInfo{ entry.FilePath.c_str(), "", -1 });
+						mFoundWads.Push(FFoundWadInfo{ slasheddir + FindName, "", -1 });
 					}
 				}
 				for (auto &name : mIWadNames)
 				{
-					if (!name.CompareNoCase(entry.FileName.c_str()))
+					if (!stricmp(name, FindName))
 					{
-						mFoundWads.Push(FFoundWadInfo{ entry.FilePath.c_str(), "", -1 });
+						mFoundWads.Push(FFoundWadInfo{ slasheddir + FindName, "", -1 });
 					}
 				}
 			}
-		}
+		} while (I_FindNext(handle, &findstate) == 0);
+		I_FindClose(handle);
 	}
 }
 
@@ -536,14 +517,14 @@ void FIWadManager::ValidateIWADs()
 	for (auto &p : mFoundWads)
 	{
 		int index;
-		auto x = strrchr(p.mFullPath.GetChars(), '.');
+		auto x = strrchr(p.mFullPath, '.');
 		if (x != nullptr && (!stricmp(x, ".iwad") || !stricmp(x, ".ipk3") || !stricmp(x, ".ipk7")))
 		{
-			index = CheckIWADInfo(p.mFullPath.GetChars());
+			index = CheckIWADInfo(p.mFullPath);
 		}
 		else
 		{
-			index = ScanIWAD(p.mFullPath.GetChars());
+			index = ScanIWAD(p.mFullPath);
 		}
 		p.mInfoIndex = index;
 	}
@@ -572,19 +553,7 @@ void FIWadManager::ValidateIWADs()
 
 static bool havepicked = false;
 
-
-FString FIWadManager::IWADPathFileSearch(const FString &file)
-{
-	for(const FString &path : mSearchPaths)
-	{
-		FString f = path + "/" + file;
-		if(FileExists(f)) return f;
-	}
-
-	return "";
-}
-
-int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char *iwad, const char *zdoom_wad, const char *optional_wad)
+int FIWadManager::IdentifyVersion (TArray<FString> &wadfiles, const char *iwad, const char *zdoom_wad, const char *optional_wad)
 {
 	const char *iwadparm = Args->CheckValue ("-iwad");
 	FString custwad;
@@ -594,7 +563,7 @@ int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char
 	// Collect all IWADs in the search path
 	for (auto &dir : mSearchPaths)
 	{
-		AddIWADCandidates(dir.GetChars());
+		AddIWADCandidates(dir);
 	}
 	unsigned numFoundWads = mFoundWads.Size();
 
@@ -641,7 +610,7 @@ int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char
 	// Check for symbolic links leading to non-existent files and for files that are unreadable.
 	for (unsigned int i = 0; i < mFoundWads.Size(); i++)
 	{
-		if (!FileExists(mFoundWads[i].mFullPath) || !FileReadable(mFoundWads[i].mFullPath.GetChars())) mFoundWads.Delete(i--);
+		if (!FileExists(mFoundWads[i].mFullPath) || !FileReadable(mFoundWads[i].mFullPath)) mFoundWads.Delete(i);
 	}
 
 	// Now check if what got collected actually is an IWAD.
@@ -699,7 +668,6 @@ int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char
 				picks.Clear();
 				picks.Push(found);
 				pickedprio = mIWadInfos[found.mInfoIndex].prio;
-				foundprio = true;
 			}
 		}
 	}
@@ -735,7 +703,7 @@ int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char
 	// If we still haven't found a suitable IWAD let's error out.
 	if (picks.Size() == 0)
 	{
-		I_FatalError ("Cannot find a game IWAD (doom.wad, doom2.wad, heretic.wad, etc.).\n"
+		I_FatalError ("Cannot find a game IWAD (Selaco.ipk3).\n"
 					  "Did you install " GAMENAME " properly? You can do either of the following:\n"
 					  "\n"
 #if defined(_WIN32)
@@ -754,10 +722,8 @@ int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char
 	}
 	int pick = 0;
 
-	// Present the IWAD selection box.
-	bool alwaysshow = (queryiwad && !Args->CheckParm("-iwad") && !foundprio);
-
-	if (alwaysshow || picks.Size() > 1)
+	// We got more than one so present the IWAD selection box.
+	if (picks.Size() > 1)
 	{
 		// Locate the user's prefered IWAD, if it was found.
 		if (defaultiwad[0] != '\0')
@@ -765,14 +731,14 @@ int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char
 			for (unsigned i = 0; i < picks.Size(); ++i)
 			{
 				FString &basename = mIWadInfos[picks[i].mInfoIndex].Name;
-				if (basename.CompareNoCase(defaultiwad) == 0)
+				if (stricmp(basename, defaultiwad) == 0)
 				{
 					pick = i;
 					break;
 				}
 			}
 		}
-		if (alwaysshow || picks.Size() > 1)
+		if (picks.Size() > 1)
 		{
 			if (!havepicked)
 			{
@@ -781,35 +747,14 @@ int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char
 				{
 					WadStuff stuff;
 					stuff.Name = mIWadInfos[found.mInfoIndex].Name;
-					stuff.Path = ExtractFileBase(found.mFullPath.GetChars());
+					stuff.Path = ExtractFileBase(found.mFullPath);
 					wads.Push(stuff);
 				}
-				int flags = 0;;
-
-				if (disableautoload) flags |= 1;
-				if (autoloadlights) flags |= 2;
-				if (autoloadbrightmaps) flags |= 4;
-				if (autoloadwidescreen) flags |= 8;
-
-				FString extraArgs;
-
-				pick = I_PickIWad(&wads[0], (int)wads.Size(), queryiwad, pick, flags, extraArgs);
+				pick = I_PickIWad(&wads[0], (int)wads.Size(), queryiwad, pick);
 				if (pick >= 0)
 				{
-					extraArgs.StripLeftRight();
-
-					if(extraArgs.Len() > 0)
-					{
-						Args->AppendArgsString(extraArgs);
-					}
-
-					disableautoload = !!(flags & 1);
-					autoloadlights = !!(flags & 2);
-					autoloadbrightmaps = !!(flags & 4);
-					autoloadwidescreen = !!(flags & 8);
-
 					// The newly selected IWAD becomes the new default
-					defaultiwad = mIWadInfos[picks[pick].mInfoIndex].Name.GetChars();
+					defaultiwad = mIWadInfos[picks[pick].mInfoIndex].Name;
 				}
 				else
 				{
@@ -821,42 +766,26 @@ int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char
 	}
 
 	// zdoom.pk3 must always be the first file loaded and the IWAD second.
-	wadfiles.clear();
+	wadfiles.Clear();
 	D_AddFile (wadfiles, zdoom_wad, true, -1, GameConfig);
 
 	// [SP] Load non-free assets if available. This must be done before the IWAD.
-	int iwadnum = 1;
-	if (optional_wad && D_AddFile(wadfiles, optional_wad, true, -1, GameConfig))
-	{
-		iwadnum++;
-	}
+	int iwadnum;
+	if (D_AddFile(wadfiles, optional_wad, true, -1, GameConfig))
+		iwadnum = 2;
+	else
+		iwadnum = 1;
 
 	fileSystem.SetIwadNum(iwadnum);
 	if (picks[pick].mRequiredPath.IsNotEmpty())
 	{
-		D_AddFile (wadfiles, picks[pick].mRequiredPath.GetChars(), true, -1, GameConfig);
+		D_AddFile (wadfiles, picks[pick].mRequiredPath, true, -1, GameConfig);
 		iwadnum++;
 	}
-	D_AddFile (wadfiles, picks[pick].mFullPath.GetChars(), true, -1, GameConfig);
+	D_AddFile (wadfiles, picks[pick].mFullPath, true, -1, GameConfig);
 	fileSystem.SetMaxIwadNum(iwadnum);
 
 	auto info = mIWadInfos[picks[pick].mInfoIndex];
-
-	if(info.SupportWAD.IsNotEmpty())
-	{
-		bool wantsnetgame = (Args->CheckParm("-join") || Args->CheckParm("-host"));
-
-		if ((!wantsnetgame && i_loadsupportwad == 1) || (i_loadsupportwad == 2))
-		{
-			FString supportWAD = IWADPathFileSearch(info.SupportWAD);
-
-			if(supportWAD.IsNotEmpty())
-			{
-				D_AddFile(wadfiles, supportWAD.GetChars(), true, -1, GameConfig);
-			}
-		}
-	}
-
 	// Load additional resources from the same directory as the IWAD itself.
 	for (unsigned i=0; i < info.Load.Size(); i++)
 	{
@@ -874,7 +803,7 @@ int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char
 				path = FString(picks[pick].mFullPath.GetChars(), lastslash + 1);
 			}
 			path += info.Load[i];
-			D_AddFile(wadfiles, path.GetChars(), true, -1, GameConfig);
+			D_AddFile(wadfiles, path, true, -1, GameConfig);
 		}
 		else
 		{
@@ -893,7 +822,7 @@ int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char
 //
 //==========================================================================
 
-const FIWADInfo *FIWadManager::FindIWAD(std::vector<std::string>& wadfiles, const char *iwad, const char *basewad, const char *optionalwad)
+const FIWADInfo *FIWadManager::FindIWAD(TArray<FString> &wadfiles, const char *iwad, const char *basewad, const char *optionalwad)
 {
 	int iwadType = IdentifyVersion(wadfiles, iwad, basewad, optionalwad);
 	if (iwadType == -1) return nullptr;
@@ -915,6 +844,9 @@ const FIWADInfo *FIWadManager::FindIWAD(std::vector<std::string>& wadfiles, cons
 	if (GameStartupInfo.Song.IsEmpty()) GameStartupInfo.Song = iwad_info->Song;
 	if (GameStartupInfo.DiscordAppId.IsEmpty()) GameStartupInfo.DiscordAppId = iwad_info->DiscordAppId;
 	if (GameStartupInfo.SteamAppId.IsEmpty()) GameStartupInfo.SteamAppId = iwad_info->SteamAppId;
+
+	Printf("IWAD: %s\n", iwad_info->Name.GetChars());
+
 	I_SetIWADInfo();
 	return iwad_info;
 }

@@ -409,6 +409,15 @@ void ProcessKeyboardEventInMenu(NSEvent* theEvent)
 		case kVK_F10:           event.data1 = GK_F10;       break;
 		case kVK_F11:           event.data1 = GK_F11;       break;
 		case kVK_F12:           event.data1 = GK_F12;       break;
+		// @Cockatrice - Added modifier keys
+		case kVK_CapsLock:		event.data1 = GK_CAPSLOCK;	break;
+		case kVK_Shift:
+		case kVK_RightShift:	event.data1 = GK_SHIFT;		break;
+		case kVK_Option:
+		case kVK_RightOption:	event.data1 = GK_MENU;		break;
+		case kVK_Control:
+		case kVK_RightControl:	event.data1 = GK_CTRL;		break;
+		
 		default:
 			event.data1 = KEYCODE_TO_ASCII[keyCode];
 			break;

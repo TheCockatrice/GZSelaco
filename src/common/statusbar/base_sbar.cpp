@@ -60,7 +60,9 @@ IMPLEMENT_CLASS(DHUDFont, false, false);
 CVAR(Color, crosshaircolor, 0xff0000, CVAR_ARCHIVE);
 CVAR(Int, crosshairhealth, 2, CVAR_ARCHIVE);
 CVARD(Float, crosshairscale, 0.5, CVAR_ARCHIVE, "changes the size of the crosshair");
+CVARD(Float, crosshairalpha, 1.0, CVAR_ARCHIVE, "changes the opacity of the crosshair");
 CVAR(Bool, crosshairgrow, false, CVAR_ARCHIVE);
+CVAR(Bool, crosshairfilter, false, CVAR_ARCHIVE);
 
 CUSTOM_CVARD(Float, hud_scalefactor, 1.f, CVAR_ARCHIVE, "changes the hud scale")
 {
@@ -127,7 +129,7 @@ void ST_UnloadCrosshair()
 
 void ST_DrawCrosshair(int phealth, double xpos, double ypos, double scale, DAngle angle)
 {
-	uint32_t color;
+	uint32_t color = crosshaircolor;
 	double size;
 	int w, h;
 
@@ -139,7 +141,8 @@ void ST_DrawCrosshair(int phealth, double xpos, double ypos, double scale, DAngl
 
 	if (crosshairscale > 0.0f)
 	{
-		size = twod->GetHeight() * crosshairscale * 0.005;
+		// @Cockatrice - HACK ALERT, but we are going to base our crosshair scaling off a 1920x1080 screen
+		size = (twod->GetHeight() / 1080.0) * crosshairscale;
 	}
 	else
 	{
@@ -154,7 +157,7 @@ void ST_DrawCrosshair(int phealth, double xpos, double ypos, double scale, DAngl
 	w = int(CrosshairImage->GetDisplayWidth() * size);
 	h = int(CrosshairImage->GetDisplayHeight() * size);
 
-	if (crosshairhealth == 1)
+	/*if (crosshairhealth == 1)
 	{
 		// "Standard" crosshair health (green-red)
 		int health = phealth;
@@ -202,7 +205,7 @@ void ST_DrawCrosshair(int phealth, double xpos, double ypos, double scale, DAngl
 	else
 	{
 		color = crosshaircolor;
-	}
+	}*/
 
 	DrawTexture(twod, CrosshairImage,
 		xpos, ypos,
@@ -211,6 +214,8 @@ void ST_DrawCrosshair(int phealth, double xpos, double ypos, double scale, DAngl
 		DTA_Rotate, angle.Degrees(),
 		DTA_AlphaChannel, true,
 		DTA_FillColor, color & 0xFFFFFF,
+		DTA_Alpha, (double)crosshairalpha,
+		DTA_BilinearFilter, (bool)crosshairfilter,
 		TAG_DONE);
 }
 

@@ -46,6 +46,7 @@ public:
 
 	// FFont interface
 	FGameTexture *GetChar(int code, int translation, int *const width) const override;
+	CharData GetChar(int code, int translation) const override;
 	int GetCharWidth (int code) const override;
 
 protected:
@@ -102,6 +103,23 @@ FGameTexture *FSinglePicFont::GetChar (int code, int translation, int *const wid
 		return nullptr;
 	}
 }
+
+FFont::CharData FSinglePicFont::GetChar(int code, int translation) const
+{
+	//code = GetCharCode(code, true);
+
+	CharData data;
+	data.OriginalPic = nullptr;
+	data.XMove = SpaceWidth;
+
+	if (code == 'a' || code == 'A')
+	{
+		data.OriginalPic = TexMan.GetGameTexture(PicNum, true);
+	}
+	
+	return data;
+}
+
 
 //==========================================================================
 //

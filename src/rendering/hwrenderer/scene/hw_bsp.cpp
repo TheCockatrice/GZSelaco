@@ -57,7 +57,7 @@ EXTERN_CVAR(Bool, r_radarclipper)
 EXTERN_CVAR(Bool, r_dithertransparency)
 
 thread_local bool isWorkerThread;
-ctpl::thread_pool renderPool(1);
+ctpl::thread_pool renderPool(4);
 bool inited = false;
 
 const int MAXDITHERACTORS = 20; // Maximum number of enemies that can set dither-transparency flags

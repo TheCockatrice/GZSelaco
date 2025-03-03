@@ -787,6 +787,7 @@ endif()
 set (FASTMATH_SOURCES ${FASTMATH_SOURCES})
 
 set (PCH_SOURCES
+	common/thirdparty/statdb.cpp
 	common/thirdparty/richpresence.cpp
 	am_map.cpp
 	playsim/bots/b_bot.cpp
@@ -981,6 +982,7 @@ set (PCH_SOURCES
 	common/audio/sound/oalsound.cpp
 	common/audio/sound/s_environment.cpp
 	common/audio/sound/s_sound.cpp
+	common/audio/sound/s_loader.cpp
 	common/audio/sound/s_reverbedit.cpp
 	common/audio/music/music_midi_base.cpp
 	common/audio/music/music.cpp

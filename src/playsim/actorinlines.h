@@ -194,6 +194,8 @@ inline bool AActor::isFrozen() const
 	return false;
 }
 
+EXTERN_CVAR(Bool, gl_selflighting)
+
 inline int AActor::GetLightLevel(sector_t* rendersector)
 {
 	int lightlevel = rendersector->GetSpriteLight();
@@ -206,6 +208,9 @@ inline int AActor::GetLightLevel(sector_t* rendersector)
 	{
 		lightlevel = LightLevel;
 	}
+
+	if(gl_selflighting) lightlevel += selfLighting.Luminance() * 3;
+
 	return lightlevel;
 }
 
@@ -237,6 +242,9 @@ inline bool P_IsBlockedByLine(AActor* actor, line_t* line)
 
 	// Blocking floaters.
 	if ((actor->flags & MF_FLOAT) && (line->flags & ML_BLOCK_FLOATERS)) return true;
+
+	// @Cockatrice - Compare line bits with actor bits
+	if (actor->lineBlockBits & line->blockBits) return true;
 
 	return false;
 }

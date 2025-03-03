@@ -44,7 +44,7 @@
 glcycle_t RenderWall,SetupWall,ClipWall;
 glcycle_t RenderFlat,SetupFlat;
 glcycle_t RenderSprite,SetupSprite;
-glcycle_t All, Finish, PortalAll, Bsp;
+glcycle_t All, Finish, PortalAll, Bsp, GPUWait, FPSWait;
 glcycle_t ProcessAll, PostProcess;
 glcycle_t RenderAll;
 glcycle_t Dirty;
@@ -98,14 +98,17 @@ static void AppendRenderTimes(FString &str)
 		"S: Render=%2.3f, Setup=%2.3f\n"
 		"2D: %2.3f Finish3D: %2.3f\n"
 		"Main thread total=%2.3f, Main thread waiting=%2.3f Worker thread total=%2.3f, Worker thread waiting=%2.3f\n"
-		"All=%2.3f, Render=%2.3f, Setup=%2.3f, Portal=%2.3f, Drawcalls=%2.3f, Postprocess=%2.3f, Finish=%2.3f\n",
+		"All=%2.3f, Render=%2.3f, Setup=%2.3f, Portal=%2.3f, Drawcalls=%2.3f, Postprocess=%2.3f, Finish=%2.3f\n"
+		"GPU Wait=%2.3f, FPS Limiter: %2.3f",
 		bsp, clipwall,
-		RenderWall.TimeMS(), setupwall, 
+		RenderWall.TimeMS(), setupwall,
 		RenderFlat.TimeMS(), SetupFlat.TimeMS(),
-		RenderSprite.TimeMS(), SetupSprite.TimeMS(), 
+		RenderSprite.TimeMS(), SetupSprite.TimeMS(),
 		twoD.TimeMS(), Flush3D.TimeMS() - twoD.TimeMS(),
 		MTWait.TimeMS() + Bsp.TimeMS(), MTWait.TimeMS(), WTTotal.TimeMS(), WTTotal.TimeMS() - setupwall - SetupFlat.TimeMS() - SetupSprite.TimeMS(),
-		All.TimeMS() + Finish.TimeMS(), RenderAll.TimeMS(),	ProcessAll.TimeMS(), PortalAll.TimeMS(), drawcalls.TimeMS(), PostProcess.TimeMS(), Finish.TimeMS());
+		All.TimeMS() + Finish.TimeMS(), RenderAll.TimeMS(), ProcessAll.TimeMS(), PortalAll.TimeMS(), drawcalls.TimeMS(), PostProcess.TimeMS(), Finish.TimeMS(),
+		GPUWait.TimeMS(), FPSWait.TimeMS()
+	);
 }
 
 static void AppendRenderStats(FString &out)

@@ -58,7 +58,7 @@ struct SavegameManager native ui
 	native void DoSave(int Selected, String savegamestring);
 	native int ExtractSaveData(int index);
 	native void ClearSaveStuff();
-	native bool DrawSavePic(int x, int y, int w, int h);
+	native bool DrawSavePic(int x, int y, int w, int h, bool filter = true);
 	deprecated("4.0") void DrawSaveComment(Font font, int cr, int x, int y, int scalefactor) 
 	{
 		// Unfortunately, this was broken beyond repair so it now prints nothing.
