@@ -119,7 +119,7 @@ DEFINE_ACTION_FUNCTION(_StatDatabase, SetAchievement)
 
     // Check for external levels
     int wi = primaryLevel->lumpnum > 0 ? fileSystem.GetFileContainer(primaryLevel->lumpnum) : -1;
-    int wi2 = fileSystem.GetFileContainer(365);
+    int wi2 = fileSystem.GetFileContainer(370);
     if (!(wi == wi2 && wi > 0 && wi2 >= 0)) {
         if (developer > 0) {
             Printf(TEXTCOLOR_RED"StatDatabase::SetAchievement() not available for external maps.\n");

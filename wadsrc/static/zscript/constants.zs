@@ -1359,8 +1359,9 @@ enum ELevelFlags
 	LEVEL3_AVOIDMELEE			= 0x00020000,	// global flag needed for proper MBF support.
 	LEVEL3_NOJUMPDOWN			= 0x00040000,	// only for MBF21. Inverse of MBF's dog_jumping flag.
 	LEVEL3_LIGHTCREATED			= 0x00080000,	// a light had been created in the last frame
-	LEVEL3_RAINYMAP				= 0x00100000,	// @Cockatrice - Indicates map should draw rain effects under F_SKY
-	LEVEL3_SAFEROOM				= 0x00200000,	// @Cockatrice - Indicates a saferoom is in this map, available for fast travel
+	LEVEL3_NOFOGOFWAR			= 0x00100000,	// disables effect of r_radarclipper CVAR on this map
+	LEVEL3_RAINYMAP				= 0x00200000,	// @Cockatrice - Indicates map should draw rain effects under F_SKY
+	LEVEL3_SAFEROOM				= 0x00400000	// @Cockatrice - Indicates a saferoom is in this map, available for fast travel
 };
 
 // [RH] Compatibility flags.

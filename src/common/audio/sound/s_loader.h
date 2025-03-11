@@ -37,15 +37,13 @@ struct AudioQItem {
 
 struct AudioQInput {
 	FSoundID soundID;
+	int lump;
 	sfxinfo_t *sfx = nullptr;
-	//TArray<AudioQueuePlayInfo> playInfo;
-	FileReader *readerCopy = nullptr;		// Requires a reader prepared on the main thread
 };
 
 struct AudioQOutput {
 	FSoundID soundID;
 	sfxinfo_t *sfx = nullptr;
-	//TArray<AudioQueuePlayInfo> playInfo;
 	char *data = nullptr;					// We only need the data if we are going to cache it but there is no reason to do that for audio since it is buffered and stored with OpenAL, so maybe remove this eventually
 	SoundHandle loadedSnd;
 	bool createdNewData = false;
@@ -58,8 +56,8 @@ public:
 	std::atomic<int> currentSoundID;		// Used to externally determine if this sound is already being loaded
 
 	// Is this soundID already loading/loaded on this thread?
-	bool existsInQueue(int soundID) {
-		if (currentSoundID == soundID) return true;
+	bool existsInQueue(FSoundID soundID) {
+		if (currentSoundID == soundID.index()) return true;
 		
 		bool found = false;
 
@@ -125,11 +123,11 @@ public:
 	void relinkSound(int sourcetype, const void *from, const void *to, const FVector3 *optpos);
 	void stopSound(FSoundID soundID);
 	void stopSound(int channel, FSoundID soundID);
-	void stopSound(int sourcetype, const void* actor, int channel, int soundID);
+	void stopSound(int sourcetype, const void* actor, int channel, FSoundID soundID);
 	void stopSound(FSoundHandle& handle);
 	void stopActorSounds(int sourcetype, const void* actor, int chanmin, int chanmax);
 	void stopAllSounds();
-	int getSoundPlayingInfo(int sourcetype, const void *source, int sound_id, int chann);
+	int getSoundPlayingInfo(int sourcetype, const void *source, FSoundID sound_id, int chann);
 
 	double updateTimeLast() { return updateCycles.TimeMS(); }
 	int queueSize();

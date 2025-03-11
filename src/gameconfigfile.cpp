@@ -93,14 +93,14 @@ FGameConfigFile::FGameConfigFile ()
 	bModSetup = false;
 	bRequiresReset = false;
 	pathname = GetConfigPath (true);
-	ChangePathName (pathname);
+	ChangePathName (pathname.GetChars());
 	LoadConfigFile ();
 
 	// If zdoom.ini was read from the program directory, switch
 	// to the user directory now. If it was read from the user
 	// directory, this effectively does nothing.
 	pathname = GetConfigPath (false);
-	ChangePathName (pathname);
+	ChangePathName (pathname.GetChars());
 
 	// Set default IWAD search paths if none present
 	if (!SetSection ("IWADSearch.Directories"))
@@ -109,10 +109,10 @@ FGameConfigFile::FGameConfigFile ()
 		SetValueForKey ("Path", ".", true);
 		//SetValueForKey ("Path", "$SELACOWADDIR", true);
 #ifdef __APPLE__
-		SetValueForKey ("Path", user_docs, true);
-		SetValueForKey ("Path", user_app_support, true);
+		SetValueForKey ("Path", user_docs.GetChars(), true);
+		SetValueForKey ("Path", user_app_support.GetChars(), true);
 		SetValueForKey ("Path", "$PROGDIR", true);
-		SetValueForKey ("Path", local_app_support, true);
+		SetValueForKey ("Path", local_app_support.GetChars(), true);
 #elif !defined(__unix__)
 		SetValueForKey ("Path", "$HOME", true);
 		SetValueForKey ("Path", "$PROGDIR", true);
@@ -134,10 +134,10 @@ FGameConfigFile::FGameConfigFile ()
 	{
 		SetSection ("FileSearch.Directories", true);
 #ifdef __APPLE__
-		SetValueForKey ("Path", user_docs, true);
-		SetValueForKey ("Path", user_app_support, true);
+		SetValueForKey ("Path", user_docs.GetChars(), true);
+		SetValueForKey ("Path", user_app_support.GetChars(), true);
 		SetValueForKey ("Path", "$PROGDIR", true);
-		SetValueForKey ("Path", local_app_support, true);
+		SetValueForKey ("Path", local_app_support.GetChars(), true);
 #elif !defined(__unix__)
 		SetValueForKey ("Path", "$PROGDIR", true);
 #else
@@ -157,14 +157,14 @@ FGameConfigFile::FGameConfigFile ()
 	{
 		SetSection("SoundfontSearch.Directories", true);
 #ifdef __APPLE__
-		SetValueForKey("Path", user_docs + "/soundfonts", true);
-		SetValueForKey("Path", user_docs + "/fm_banks", true);
-		SetValueForKey("Path", user_app_support + "/soundfonts", true);
-		SetValueForKey("Path", user_app_support + "/fm_banks", true);
+		SetValueForKey("Path", (user_docs + "/soundfonts").GetChars(), true);
+		SetValueForKey("Path", (user_docs + "/fm_banks").GetChars(), true);
+		SetValueForKey("Path", (user_app_support + "/soundfonts").GetChars(), true);
+		SetValueForKey("Path", (user_app_support + "/fm_banks").GetChars(), true);
 		SetValueForKey("Path", "$PROGDIR/soundfonts", true);
 		SetValueForKey("Path", "$PROGDIR/fm_banks", true);
-		SetValueForKey("Path", local_app_support + "/soundfonts", true);
-		SetValueForKey("Path", local_app_support + "/fm_banks", true);
+		SetValueForKey("Path", (local_app_support + "/soundfonts").GetChars(), true);
+		SetValueForKey("Path", (local_app_support + "/fm_banks").GetChars(), true);
 #elif !defined(__unix__)
 		SetValueForKey("Path", "$PROGDIR/soundfonts", true);
 		SetValueForKey("Path", "$PROGDIR/fm_banks", true);
@@ -277,296 +277,25 @@ void FGameConfigFile::DoGlobalSetup ()
 		if (last < target) {
 			
 			bRequiresReset = true;
-			/*
-			if (last < 207)
-			{ // Now that snd_midiprecache works again, you probably don't want it on.
-				FBaseCVar *precache = FindCVar ("snd_midiprecache", NULL);
-				if (precache != NULL)
-				{
-					precache->ResetToDefault();
-				}
-			}
-			if (last < 208)
-			{ // Weapon sections are no longer used, so tidy up the config by deleting them.
-				const char *name;
-				size_t namelen;
-				bool more;
-
-				more = SetFirstSection();
-				while (more)
-				{
-					name = GetCurrentSection();
-					if (name != NULL && 
-						(namelen = strlen(name)) > 12 &&
-						strcmp(name + namelen - 12, ".WeaponSlots") == 0)
-					{
-						more = DeleteCurrentSection();
-					}
-					else
-					{
-						more = SetNextSection();
-					}
-				}
-			}
-			if (last < 209)
+			
+			if (last < 224)
 			{
-				// menu dimming is now a gameinfo option so switch user override off
-				FBaseCVar *dim = FindCVar ("dimamount", NULL);
-				if (dim != NULL)
-				{
-					dim->ResetToDefault ();
-				}
-			}
-			if (last < 210)
-			{
-				if (SetSection ("Hexen.Bindings"))
-				{
-					// These 2 were misnamed in earlier versions
-					SetValueForKey ("6", "use ArtiPork");
-					SetValueForKey ("5", "use ArtiInvulnerability2");
-				}
-			}
-			if (last < 213)
-			{
-				auto var = FindCVar("snd_channels", NULL);
-				if (var != NULL)
-				{
-					// old settings were default 32, minimum 8, new settings are default 128, minimum 64.
-					UCVarValue v = var->GetGenericRep(CVAR_Int);
-					if (v.Int < 64) var->ResetToDefault();
-				}
-			}
-			if (last < 214)
-			{
-				FBaseCVar *var = FindCVar("hud_scale", NULL);
-				if (var != NULL) var->ResetToDefault();
-				var = FindCVar("st_scale", NULL);
-				if (var != NULL) var->ResetToDefault();
-				var = FindCVar("hud_althudscale", NULL);
-				if (var != NULL) var->ResetToDefault();
-				var = FindCVar("con_scale", NULL);
-				if (var != NULL) var->ResetToDefault();
-				var = FindCVar("con_scaletext", NULL);
-				if (var != NULL) var->ResetToDefault();
-				var = FindCVar("uiscale", NULL);
-				if (var != NULL) var->ResetToDefault();
-			}
-			if (last < 215)
-			{
-				// Previously a true/false boolean. Now an on/off/auto tri-state with auto as the default.
-				FBaseCVar *var = FindCVar("snd_hrtf", NULL);
-				if (var != NULL) var->ResetToDefault();
-			}
-			if (last < 216)
-			{
-				FBaseCVar *var = FindCVar("gl_texture_hqresize", NULL);
-				if (var != NULL)
-				{
-					auto v = var->GetGenericRep(CVAR_Int);
-					switch (v.Int)
-					{
-					case 1:
-						gl_texture_hqresizemode = 1; gl_texture_hqresizemult = 2;
-						break;
-					case 2:
-						gl_texture_hqresizemode = 1; gl_texture_hqresizemult = 3;
-						break;
-					case 3:
-						gl_texture_hqresizemode = 1; gl_texture_hqresizemult = 4;
-						break;
-					case 4:
-						gl_texture_hqresizemode = 2; gl_texture_hqresizemult = 2;
-						break;
-					case 5:
-						gl_texture_hqresizemode = 2; gl_texture_hqresizemult = 3;
-						break;
-					case 6:
-						gl_texture_hqresizemode = 2; gl_texture_hqresizemult = 4;
-						break;
-					case 7:
-						gl_texture_hqresizemode = 3; gl_texture_hqresizemult = 2;
-						break;
-					case 8:
-						gl_texture_hqresizemode = 3; gl_texture_hqresizemult = 3;
-						break;
-					case 9:
-						gl_texture_hqresizemode = 3; gl_texture_hqresizemult = 4;
-						break;
-					case 10:
-						gl_texture_hqresizemode = 4; gl_texture_hqresizemult = 2;
-						break;
-					case 11:
-						gl_texture_hqresizemode = 4; gl_texture_hqresizemult = 3;
-						break;
-					case 12:
-						gl_texture_hqresizemode = 4; gl_texture_hqresizemult = 4;
-						break;
-					case 18:
-						gl_texture_hqresizemode = 4; gl_texture_hqresizemult = 5;
-						break;
-					case 19:
-						gl_texture_hqresizemode = 4; gl_texture_hqresizemult = 6;
-						break;
-					case 13:
-						gl_texture_hqresizemode = 5; gl_texture_hqresizemult = 2;
-						break;
-					case 14:
-						gl_texture_hqresizemode = 5; gl_texture_hqresizemult = 3;
-						break;
-					case 15:
-						gl_texture_hqresizemode = 5; gl_texture_hqresizemult = 4;
-						break;
-					case 16:
-						gl_texture_hqresizemode = 5; gl_texture_hqresizemult = 5;
-						break;
-					case 17:
-						gl_texture_hqresizemode = 5; gl_texture_hqresizemult = 6;
-						break;
-					case 20:
-						gl_texture_hqresizemode = 6; gl_texture_hqresizemult = 2;
-						break;
-					case 21:
-						gl_texture_hqresizemode = 6; gl_texture_hqresizemult = 3;
-						break;
-					case 22:
-						gl_texture_hqresizemode = 6; gl_texture_hqresizemult = 4;
-						break;
-					case 23:
-						gl_texture_hqresizemode = 6; gl_texture_hqresizemult = 5;
-						break;
-					case 24:
-						gl_texture_hqresizemode = 6; gl_texture_hqresizemult = 6;
-						break;
-					case 0:
-					default:
-						gl_texture_hqresizemode = 0; gl_texture_hqresizemult = 1;
-						break;
-					}
-				}
-			}
-			if (last < 217)
-			{
-				auto var = FindCVar("vid_scalemode", NULL);
-				UCVarValue newvalue;
-				if (var != NULL)
-				{
-					UCVarValue v = var->GetGenericRep(CVAR_Int);
-					if (v.Int == 3) // 640x400
-					{
-						newvalue.Int = 2;
-						var->SetGenericRep(newvalue, CVAR_Int);
-					}
-					if (v.Int == 2) // 320x200
-					{
-						newvalue.Int = 6;
-						var->SetGenericRep(newvalue, CVAR_Int);
-					}
-				}
-			}
-			if (last < 219)
-			{
-				// 2019-12-06 - polybackend merge
-				// migrate vid_enablevulkan to vid_preferbackend
-				auto var = FindCVar("vid_enablevulkan", NULL);
-				if (var != NULL)
-				{
-					UCVarValue v = var->GetGenericRep(CVAR_Int);
-					vid_preferbackend = v.Int;
-				}
-				// 2019-12-31 - r_videoscale.cpp changes
-				var = FindCVar("vid_scale_customstretched", NULL);
-				if (var != NULL)
-				{
-					UCVarValue v = var->GetGenericRep(CVAR_Bool);
-					if (v.Bool)
-						vid_scale_custompixelaspect = 1.2f;
-					else
-						vid_scale_custompixelaspect = 1.0f;
-				}
-				var = FindCVar("vid_scalemode", NULL);
-				UCVarValue newvalue;
-				if (var != NULL)
-				{
-					UCVarValue v = var->GetGenericRep(CVAR_Int);
-					switch (v.Int)
-					{
-					case 1:
-						newvalue.Int = 0;
-						var->SetGenericRep(newvalue, CVAR_Int);
-						[[fallthrough]];
-					case 3:
-					case 4:
-						vid_scale_linear = true;
-						break;
-					default:
-						vid_scale_linear = false;
-						break;
-					}
-				}
-			}
-			if (last < 220)
-			{
-				auto var = FindCVar("Gamma", NULL);
-				if (var != NULL)
+				if (const auto var = FindCVar("m_sensitivity_x", NULL))
 				{
 					UCVarValue v = var->GetGenericRep(CVAR_Float);
-					vid_gamma = v.Float;
-				}
-				var = FindCVar("fullscreen", NULL);
-				if (var != NULL)
-				{
-					UCVarValue v = var->GetGenericRep(CVAR_Bool);
-					vid_fullscreen = v.Float;
+					v.Float *= 0.5f;
+					var->SetGenericRep(v, CVAR_Float);
 				}
 			}
-			if (last < 221)
+			if (last < 225)
 			{
-				// Transfer the messed up mouse scaling config to something sane and consistent.
-#ifndef _WIN32
-				double xfact = 3, yfact = 2;
-#else
-				double xfact = in_mouse == 1? 1.5 : 4, yfact = 1;
-#endif
-				auto var = FindCVar("m_noprescale", NULL);
-				if (var != NULL)
+				if (const auto var = FindCVar("gl_lightmode", NULL))
 				{
-					UCVarValue v = var->GetGenericRep(CVAR_Bool);
-					if (v.Bool) xfact = yfact = 1;
-				}
-
-				var = FindCVar("mouse_sensitivity", NULL);
-				if (var != NULL)
-				{
-					UCVarValue v = var->GetGenericRep(CVAR_Float);
-					xfact *= v.Float;
-					yfact *= v.Float;
-				}
-				m_sensitivity_x = (float)xfact;
-				m_sensitivity_y = (float)yfact;
-
-				adl_volume_model = 0;
-
-				// if user originally wanted the in-game textures resized, set model skins to resize too
-				int old_targets = gl_texture_hqresize_targets;
-				old_targets |= (old_targets & 1) ? 8 : 0;
-				gl_texture_hqresize_targets = old_targets;
-			}
-			if (last < 222)
-			{
-				auto var = FindCVar("mod_dumb_mastervolume", NULL);
-				if (var != NULL)
-				{
-					UCVarValue v = var->GetGenericRep(CVAR_Float);
-					v.Float /= 4.f;
-					if (v.Float < 1.f) v.Float = 1.f;
+					UCVarValue v = var->GetGenericRep(CVAR_Int);
+					v.Int = v.Int == 16 ? 2 : v.Int == 8 ? 1 : 0;
+					var->SetGenericRep(v, CVAR_Int);
 				}
 			}
-			if (last < 223)
-			{
-				// ooooh boy did i open a can of worms with this one.
-				i_pauseinbackground = !(i_soundinbackground);
-			}
-			*/
 		}
 	}
 }
@@ -898,40 +627,40 @@ void FGameConfigFile::SetRavenDefaults (bool isHexen)
 	UCVarValue val;
 
 	val.Bool = false;
-	wi_percents.SetGenericRepDefault (val, CVAR_Bool);
+	wi_percents->SetGenericRepDefault (val, CVAR_Bool);
 	val.Bool = true;
-	con_centernotify.SetGenericRepDefault (val, CVAR_Bool);
-	snd_pitched.SetGenericRepDefault (val, CVAR_Bool);
+	con_centernotify->SetGenericRepDefault (val, CVAR_Bool);
+	snd_pitched->SetGenericRepDefault (val, CVAR_Bool);
 	val.Int = 9;
-	msg0color.SetGenericRepDefault (val, CVAR_Int);
+	msg0color->SetGenericRepDefault (val, CVAR_Int);
 	val.Int = CR_WHITE;
-	msgmidcolor.SetGenericRepDefault (val, CVAR_Int);
+	msgmidcolor->SetGenericRepDefault (val, CVAR_Int);
 	val.Int = CR_YELLOW;
-	msgmidcolor2.SetGenericRepDefault (val, CVAR_Int);
+	msgmidcolor2->SetGenericRepDefault (val, CVAR_Int);
 
 	val.Int = 0x543b17;
-	am_wallcolor.SetGenericRepDefault (val, CVAR_Int);
+	am_wallcolor->SetGenericRepDefault (val, CVAR_Int);
 	val.Int = 0xd0b085;
-	am_fdwallcolor.SetGenericRepDefault (val, CVAR_Int);
+	am_fdwallcolor->SetGenericRepDefault (val, CVAR_Int);
 	val.Int = 0x734323;
-	am_cdwallcolor.SetGenericRepDefault (val, CVAR_Int);
+	am_cdwallcolor->SetGenericRepDefault (val, CVAR_Int);
 
 	val.Int = 0;
-	wipetype.SetGenericRepDefault(val, CVAR_Int);
+	wipetype->SetGenericRepDefault(val, CVAR_Int);
 
 	// Fix the Heretic/Hexen automap colors so they are correct.
 	// (They were wrong on older versions.)
 	if (*am_wallcolor == 0x2c1808 && *am_fdwallcolor == 0x887058 && *am_cdwallcolor == 0x4c3820)
 	{
-		am_wallcolor.ResetToDefault ();
-		am_fdwallcolor.ResetToDefault ();
-		am_cdwallcolor.ResetToDefault ();
+		am_wallcolor->ResetToDefault ();
+		am_fdwallcolor->ResetToDefault ();
+		am_cdwallcolor->ResetToDefault ();
 	}
 
 	if (!isHexen)
 	{
 		val.Int = 0x3f6040;
-		color.SetGenericRepDefault (val, CVAR_Int);
+		color->SetGenericRepDefault (val, CVAR_Int);
 	}
 }
 
@@ -939,7 +668,7 @@ void FGameConfigFile::SetStrifeDefaults ()
 {
 	UCVarValue val;
 	val.Int = 3;
-	wipetype.SetGenericRepDefault(val, CVAR_Int);
+	wipetype->SetGenericRepDefault(val, CVAR_Int);
 }
 
 CCMD (whereisini)

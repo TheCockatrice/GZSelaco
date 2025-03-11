@@ -64,7 +64,7 @@ DEFINE_ACTION_FUNCTION(FLevelLocals, SetNewSkill)
 	if (primaryLevel->localEventManager->SkillShouldChange(oldSkill, skill)) {
 		UCVarValue cv;
 		cv.Int = skill;
-		gameskill.ForceSet(cv, CVAR_Int);
+		gameskill->ForceSet(cv, CVAR_Int);
 		primaryLevel->localEventManager->SkillChanged(oldSkill, skill);
 	}
 	else if (developer > 0) {

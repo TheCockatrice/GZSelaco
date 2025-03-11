@@ -31,6 +31,11 @@ public:
 	virtual void AddAxes(float axes[NUM_JOYAXIS]) = 0;
 	virtual void ProcessInput() = 0;
 	bool IsConnected() { return Connected; }
+	bool GetEnabled() { return Enabled; }
+	void SetEnabled(bool enabled) { Enabled = enabled; }
+	bool AllowsEnabledInBackground() { return true; }
+	bool GetEnabledInBackground() { return EnabledInBackground; }
+	void SetEnabledInBackground(bool enabled) { EnabledInBackground = enabled; }
 
 	// Getters
 	float GetSensitivity() {
@@ -137,7 +142,8 @@ protected:
 	TArray<AxisInfo>	Axes;
 	int					NumAxes;
 	bool				Connected;
-
+	bool 				Enabled;
+	bool 				EnabledInBackground;
 
     static inline void ProcessAcceleration(AxisInfo *axis, double val) {
 		// Curve value - Circular

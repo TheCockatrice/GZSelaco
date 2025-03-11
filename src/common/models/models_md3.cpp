@@ -187,10 +187,9 @@ bool FMD3Model::Load(const char * path, int lumpnum, const char * buffer, int le
 //
 //===========================================================================
 
-void FMD3Model::LoadGeometry()
+void FMD3Model::LoadGeometry(FileSys::FileData* lumpData)
 {
-	auto lumpdata = fileSystem.ReadFile(mLumpNum);
-	auto buffer = lumpdata.string();
+	auto buffer = lumpData->string();
 	md3_header_t * hdr = (md3_header_t *)buffer;
 	md3_surface_t * surf = (md3_surface_t*)(buffer + LittleLong(hdr->Ofs_Surfaces));
 
@@ -244,7 +243,12 @@ void FMD3Model::BuildVertexBuffer(FModelRenderer *renderer)
 {
 	if (!GetVertexBuffer(renderer->GetType()))
 	{
-		LoadGeometry();
+		// If we already have the data, don't read it again
+		// Data could have been created during background fetch
+		if (Surfaces.size() > 0 && Surfaces[0].Vertices.Size() == 0) {
+			auto lumpdata = fileSystem.ReadFile(mLumpNum);
+			LoadGeometry(&lumpdata);
+		}
 
 		unsigned int vbufsize = 0;
 		unsigned int ibufsize = 0;

@@ -306,8 +306,10 @@ void SystemBaseFrameBuffer::PositionWindow(bool fullscreen, bool initialcall)
 	style = WS_VISIBLE | WS_CLIPSIBLINGS;
 	exStyle = 0;
 
-	if (fullscreen)
+	if (fullscreen) {
 		style |= WS_POPUP;
+		exStyle |= WS_EX_APPWINDOW;
+	} 
 	else
 	{
 		style |= WS_OVERLAPPEDWINDOW;

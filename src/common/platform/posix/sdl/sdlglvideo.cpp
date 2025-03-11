@@ -55,11 +55,11 @@
 #endif
 
 #ifdef HAVE_VULKAN
-#include "vulkan/system/vk_framebuffer.h"
-#endif
-
-#ifdef HAVE_SOFTPOLY
-#include "poly_framebuffer.h"
+#include "vulkan/system/vk_renderdevice.h"
+#include <zvulkan/vulkaninstance.h>
+#include <zvulkan/vulkansurface.h>
+#include <zvulkan/vulkandevice.h>
+#include <zvulkan/vulkanbuilders.h>
 #endif
 
 // MACROS ------------------------------------------------------------------
@@ -81,8 +81,8 @@ EXTERN_CVAR (Int, vid_adapter)
 EXTERN_CVAR (Int, vid_displaybits)
 EXTERN_CVAR (Int, vid_defwidth)
 EXTERN_CVAR (Int, vid_defheight)
-EXTERN_CVAR (Int, vid_preferbackend)
 EXTERN_CVAR (Bool, cl_capfps)
+EXTERN_CVAR(Bool, vk_debug)
 EXTERN_CVAR(Int, gl_max_transfer_threads)
 
 
@@ -96,8 +96,6 @@ CUSTOM_CVAR(Bool, gl_es, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG | CVAR_NOINITCA
 {
 	Printf("This won't take effect until " GAMENAME " is restarted.\n");
 }
-
-CVAR (Int, vid_adapter, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 
 CUSTOM_CVAR(String, vid_sdl_render_driver, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG | CVAR_NOINITCALL)
 {
@@ -122,31 +120,63 @@ namespace Priv
 	bool vulkanEnabled;
 	bool softpolyEnabled;
 	bool fullscreenSwitch;
+	int numberOfDisplays;
+	SDL_Rect* displayBounds = nullptr;
+
+	void updateDisplayInfo()
+	{
+		Priv::numberOfDisplays = SDL_GetNumVideoDisplays();
+		if (Priv::numberOfDisplays <= 0) {
+			Printf("%sWrong number of displays detected.\n", TEXTCOLOR_BOLD);
+			return;
+		}
+		Printf("Number of detected displays %d .\n", Priv::numberOfDisplays);
+
+		if (Priv::displayBounds != nullptr) {
+			free(Priv::displayBounds);
+		}
+		Priv::displayBounds = (SDL_Rect*) calloc(Priv::numberOfDisplays, sizeof(SDL_Rect));
+
+		for (int i=0; i < Priv::numberOfDisplays; i++) {
+			if (0 != SDL_GetDisplayBounds(i, &Priv::displayBounds[i])) {
+				Printf("%sError getting display %d size: %s\n", TEXTCOLOR_BOLD, i, SDL_GetError());
+				if (i == 0) {
+					free(Priv::displayBounds);
+					displayBounds = nullptr;
+				}
+				Priv::numberOfDisplays = i;
+				return;
+			}
+		}
+	}
 
 	void CreateWindow(uint32_t extraFlags)
 	{
 		assert(Priv::window == nullptr);
 
-		// Set default size
-		SDL_Rect bounds;
-		SDL_GetDisplayBounds(vid_adapter, &bounds);
+		// Get displays and default display size
+		updateDisplayInfo();
+
+		// TODO control better when updateDisplayInfo fails
+		SDL_Rect* bounds = &displayBounds[vid_adapter % numberOfDisplays];
 
 		if (win_w <= 0 || win_h <= 0)
 		{
-			win_w = bounds.w * 8 / 10;
-			win_h = bounds.h * 8 / 10;
+			win_w = bounds->w * 8 / 10;
+			win_h = bounds->h * 8 / 10;
 		}
 
+		int xWindowPos = (win_x <= 0) ? SDL_WINDOWPOS_CENTERED_DISPLAY(vid_adapter) : win_x;
+		int yWindowPos = (win_y <= 0) ? SDL_WINDOWPOS_CENTERED_DISPLAY(vid_adapter) : win_y;
+		Printf("Creating window [%dx%d] on adapter %d\n", (*win_w), (*win_h), (*vid_adapter));
+		
 		FString caption;
 		caption.Format(GAMENAME " %s (%s)", GetVersionString(), GetGitTime());
 
 		SDL_GL_SetAttribute(SDL_GL_SHARE_WITH_CURRENT_CONTEXT, 1);
 
 		const uint32_t windowFlags = (win_maximized ? SDL_WINDOW_MAXIMIZED : 0) | SDL_WINDOW_RESIZABLE | extraFlags;
-		Priv::window = SDL_CreateWindow(caption,
-			(win_x <= 0) ? SDL_WINDOWPOS_CENTERED_DISPLAY(vid_adapter) : win_x,
-			(win_y <= 0) ? SDL_WINDOWPOS_CENTERED_DISPLAY(vid_adapter) : win_y,
-			win_w, win_h, windowFlags);
+		Priv::window = SDL_CreateWindow(caption.GetChars(), xWindowPos, yWindowPos, win_w, win_h, windowFlags);
 
 		if (Priv::window != nullptr)
 		{
@@ -163,6 +193,11 @@ namespace Priv
 
 		SDL_DestroyWindow(Priv::window);
 		Priv::window = nullptr;
+
+		if (Priv::displayBounds != nullptr) {
+			free(Priv::displayBounds);
+			Priv::displayBounds = nullptr;
+		}
 	}
 
 	void SetupPixelFormat(int multisample, const int *glver)
@@ -198,17 +233,75 @@ namespace Priv
 	}
 }
 
+CUSTOM_CVAR(Int, vid_adapter, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG | CVAR_NOINITCALL)
+{
+  if (Priv::window != nullptr) {
+		// Get displays and default display size
+		Priv::updateDisplayInfo();
+
+    int display = (*self) % Priv::numberOfDisplays;
+
+		// TODO control better when updateDisplayInfo fails
+		SDL_Rect* bounds = &Priv::displayBounds[vid_adapter % Priv::numberOfDisplays];
+
+		if (win_w <= 0 || win_h <= 0)
+		{
+			win_w = bounds->w * 8 / 10;
+			win_h = bounds->h * 8 / 10;
+		}
+		// Forces to set to the ini this vars to -1, so +vid_adapter keeps working the next time that the game it's launched
+		win_x = -1;
+		win_y = -1;
+
+		if ((SDL_GetWindowFlags(Priv::window) & SDL_WINDOW_FULLSCREEN_DESKTOP) != 0) {
+
+			// TODO This not works. For some reason keeps stuck on the previus screen
+			/*
+			SDL_DisplayMode currentDisplayMode;
+			SDL_GetWindowDisplayMode(Priv::window, &currentDisplayMode);
+			currentDisplayMode.w = win_w;
+			currentDisplayMode.h = win_h;
+			if ( 0 != SDL_SetWindowDisplayMode(Priv::window, &currentDisplayMode)) {
+				Printf("A problem occured trying to change of display %s\n", SDL_GetError());
+			}
+			*/
+
+			// TODO This workaround also isn't working
+			/*
+			SDL_SetWindowFullscreen(Priv::window, 0);
+			SDL_SetWindowSize(Priv::window, win_w, win_h);
+			SDL_SetWindowPosition(Priv::window, bounds->x , bounds->y);
+			SDL_SetWindowFullscreen(Priv::window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+			*/
+			Printf("Changing adapter on fullscreen, isn't full supported by SDL. Instead try to switch to windowed mode, change the adapter and then switch again to fullscreen.\n");
+
+		} else {
+			SDL_SetWindowSize(Priv::window, win_w, win_h);
+			SDL_SetWindowPosition(Priv::window, SDL_WINDOWPOS_CENTERED_DISPLAY(display), SDL_WINDOWPOS_CENTERED_DISPLAY(display));
+		}
+
+    display = SDL_GetWindowDisplayIndex(Priv::window);
+    if (display >= 0) {
+			Printf("New display is %d\n", display );
+		} else {
+			Printf("A problem occured trying to change of display %s\n", SDL_GetError());
+		}
+  }
+}
+
 class SDLVideo : public IVideo
 {
 public:
 	SDLVideo ();
 	~SDLVideo ();
 
+	void DumpAdapters();
+	
 	DFrameBuffer *CreateFrameBuffer ();
 
 private:
 #ifdef HAVE_VULKAN
-	VulkanDevice *device = nullptr;
+	std::shared_ptr<VulkanSurface> surface;
 #endif
 };
 
@@ -237,157 +330,6 @@ bool I_CreateVulkanSurface(VkInstance instance, VkSurfaceKHR *surface)
 }
 #endif
 
-#ifdef HAVE_SOFTPOLY
-namespace
-{
-	SDL_Renderer* polyrendertarget = nullptr;
-	SDL_Texture* polytexture = nullptr;
-	int polytexturew = 0;
-	int polytextureh = 0;
-	bool polyvsync = false;
-	bool polyfirstinit = true;
-}
-
-void I_PolyPresentInit()
-{
-	assert(Priv::softpolyEnabled);
-	assert(Priv::window != nullptr);
-
-	if (strcmp(vid_sdl_render_driver, "") != 0)
-	{
-		SDL_SetHint(SDL_HINT_RENDER_DRIVER, vid_sdl_render_driver);
-	}
-}
-
-uint8_t *I_PolyPresentLock(int w, int h, bool vsync, int &pitch)
-{
-	// When vsync changes we need to reinitialize
-	if (polyrendertarget && polyvsync != vsync)
-	{
-		I_PolyPresentDeinit();
-	}
-
-	if (!polyrendertarget)
-	{
-		polyvsync = vsync;
-
-		polyrendertarget = SDL_CreateRenderer(Priv::window, -1, vsync ? SDL_RENDERER_PRESENTVSYNC : 0);
-		if (!polyrendertarget)
-		{
-			I_FatalError("Could not create render target for softpoly: %s\n", SDL_GetError());
-		}
-
-		// Tell the user which render driver is being used, but don't repeat
-		// outselves if we're just changing vsync.
-		if (polyfirstinit)
-		{
-			polyfirstinit = false;
-
-			SDL_RendererInfo rendererInfo;
-			if (SDL_GetRendererInfo(polyrendertarget, &rendererInfo) == 0)
-			{
-				Printf("Using render driver %s\n", rendererInfo.name);
-			}
-			else
-			{
-				Printf("Failed to query render driver\n");
-			}
-		}
-
-		// Mask color
-		SDL_SetRenderDrawColor(polyrendertarget, 0, 0, 0, 255);
-	}
-
-	if (!polytexture || polytexturew != w || polytextureh != h)
-	{
-		if (polytexture)
-		{
-			SDL_DestroyTexture(polytexture);
-			polytexture = nullptr;
-			polytexturew = polytextureh = 0;
-		}
-		if ((polytexture = SDL_CreateTexture(polyrendertarget, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w, h)) == nullptr)
-			I_Error("Failed to create %dx%d render target texture.", w, h);
-		polytexturew = w;
-		polytextureh = h;
-	}
-
-	uint8_t* pixels;
-	SDL_LockTexture(polytexture, nullptr, (void**)&pixels, &pitch);
-	return pixels;
-}
-
-void I_PolyPresentUnlock(int x, int y, int width, int height)
-{
-	SDL_UnlockTexture(polytexture);
-
-	int ClientWidth, ClientHeight;
-	SDL_GetRendererOutputSize(polyrendertarget, &ClientWidth, &ClientHeight);
-
-	SDL_Rect clearrects[4];
-	int count = 0;
-	if (y > 0)
-	{
-		clearrects[count].x = 0;
-		clearrects[count].y = 0;
-		clearrects[count].w = ClientWidth;
-		clearrects[count].h = y;
-		count++;
-	}
-	if (y + height < ClientHeight)
-	{
-		clearrects[count].x = 0;
-		clearrects[count].y = y + height;
-		clearrects[count].w = ClientWidth;
-		clearrects[count].h = ClientHeight - clearrects[count].y;
-		count++;
-	}
-	if (x > 0)
-	{
-		clearrects[count].x = 0;
-		clearrects[count].y = y;
-		clearrects[count].w = x;
-		clearrects[count].h = height;
-		count++;
-	}
-	if (x + width < ClientWidth)
-	{
-		clearrects[count].x = x + width;
-		clearrects[count].y = y;
-		clearrects[count].w = ClientWidth - clearrects[count].x;
-		clearrects[count].h = height;
-		count++;
-	}
-
-	if (count > 0)
-		SDL_RenderFillRects(polyrendertarget, clearrects, count);
-
-	SDL_Rect dstrect;
-	dstrect.x = x;
-	dstrect.y = y;
-	dstrect.w = width;
-	dstrect.h = height;
-	SDL_RenderCopy(polyrendertarget, polytexture, nullptr, &dstrect);
-
-	SDL_RenderPresent(polyrendertarget);
-}
-
-void I_PolyPresentDeinit()
-{
-	if (polytexture)
-	{
-		SDL_DestroyTexture(polytexture);
-		polytexture = nullptr;
-	}
-
-	if (polyrendertarget)
-	{
-		SDL_DestroyRenderer(polyrendertarget);
-		polyrendertarget = nullptr;
-	}
-}
-#endif
-
 
 SDLVideo::SDLVideo ()
 {
@@ -403,11 +345,8 @@ SDLVideo::SDLVideo ()
 		I_FatalError("Only SDL 2.0.6 or later is supported.");
 	}
 
-#ifdef HAVE_SOFTPOLY
-	Priv::softpolyEnabled = vid_preferbackend == 2;
-#endif
 #ifdef HAVE_VULKAN
-	Priv::vulkanEnabled = vid_preferbackend == 1;
+	Priv::vulkanEnabled = V_GetBackend() == 1;
 
 	if (Priv::vulkanEnabled)
 	{
@@ -419,24 +358,30 @@ SDLVideo::SDLVideo ()
 		}
 	}
 #endif
-#ifdef HAVE_SOFTPOLY
-	if (Priv::softpolyEnabled)
-	{
-		Priv::CreateWindow(SDL_WINDOW_HIDDEN);
-		if (Priv::window == nullptr)
-		{
-			I_FatalError("Could not create SoftPoly window:\n%s\n",SDL_GetError());
-		}
-	}
-#endif
 }
 
 SDLVideo::~SDLVideo ()
 {
 #ifdef HAVE_VULKAN
-	delete device;
+	surface.reset();
 #endif
 }
+
+void SDLVideo::DumpAdapters()
+{
+	Priv::updateDisplayInfo();
+  for (int i=0; i < Priv::numberOfDisplays; i++) {
+    Printf("%s%d. [%dx%d @ (%d,%d)]\n",
+        vid_adapter == i ? TEXTCOLOR_BOLD : "",
+        i,
+        Priv::displayBounds[i].w,
+        Priv::displayBounds[i].h,
+        Priv::displayBounds[i].x,
+        Priv::displayBounds[i].y
+      );
+  }
+}
+
 
 DFrameBuffer *SDLVideo::CreateFrameBuffer ()
 {
@@ -448,9 +393,24 @@ DFrameBuffer *SDLVideo::CreateFrameBuffer ()
 	{
 		try
 		{
-			assert(device == nullptr);
-			device = new VulkanDevice();
-			fb = new VulkanFrameBuffer(nullptr, vid_fullscreen, device);
+			unsigned int count = 64;
+			const char* names[64];
+			if (!I_GetVulkanPlatformExtensions(&count, names))
+				VulkanError("I_GetVulkanPlatformExtensions failed");
+
+			VulkanInstanceBuilder builder;
+			builder.DebugLayer(vk_debug);
+			for (unsigned int i = 0; i < count; i++)
+				builder.RequireExtension(names[i]);
+			auto instance = builder.Create();
+
+			VkSurfaceKHR surfacehandle = nullptr;
+			if (!I_CreateVulkanSurface(instance->Instance, &surfacehandle))
+				VulkanError("I_CreateVulkanSurface failed");
+
+			surface = std::make_shared<VulkanSurface>(instance, surfacehandle);
+
+			fb = new VulkanRenderDevice(nullptr, vid_fullscreen, surface);
 		}
 		catch (CVulkanError const &error)
 		{
@@ -465,16 +425,10 @@ DFrameBuffer *SDLVideo::CreateFrameBuffer ()
 	}
 #endif
 
-#ifdef HAVE_SOFTPOLY
-	if (Priv::softpolyEnabled)
-	{
-		fb = new PolyFrameBuffer(nullptr, vid_fullscreen);
-	}
-#endif
 	if (fb == nullptr)
 	{
 #ifdef HAVE_GLES2
-		if( (Args->CheckParm ("-gles2_renderer")) || (vid_preferbackend == 3) )
+		if (V_GetBackend() != 0)
 			fb = new OpenGLESRenderer::OpenGLFrameBuffer(0, vid_fullscreen);
 		else
 #endif
@@ -507,16 +461,6 @@ int SystemBaseFrameBuffer::GetClientWidth()
 {
 	int width = 0;
 
-#ifdef HAVE_SOFTPOLY
-	if (Priv::softpolyEnabled)
-	{
-		if (polyrendertarget)
-			SDL_GetRendererOutputSize(polyrendertarget, &width, nullptr);
-		else
-			SDL_GetWindowSize(Priv::window, &width, nullptr);
-		return width;
-	}
-#endif
 
 #ifdef HAVE_VULKAN
 	assert(Priv::vulkanEnabled);
@@ -529,17 +473,6 @@ int SystemBaseFrameBuffer::GetClientWidth()
 int SystemBaseFrameBuffer::GetClientHeight()
 {
 	int height = 0;
-
-#ifdef HAVE_SOFTPOLY
-	if (Priv::softpolyEnabled)
-	{
-		if (polyrendertarget)
-			SDL_GetRendererOutputSize(polyrendertarget, nullptr, &height);
-		else
-			SDL_GetWindowSize(Priv::window, nullptr, &height);
-		return height;
-	}
-#endif
 
 #ifdef HAVE_VULKAN
 	assert(Priv::vulkanEnabled);
@@ -595,6 +528,7 @@ void SystemBaseFrameBuffer::SetWindowSize(int w, int h)
 		SDL_GetWindowPosition(Priv::window, &x, &y);
 		win_x = x;
 		win_y = y;
+		
 	}
 }
 
@@ -820,7 +754,7 @@ void I_SetWindowTitle(const char* caption)
 	{
 		FString default_caption;
 		default_caption.Format(GAMENAME " %s (%s)", GetVersionString(), GetGitTime());
-		SDL_SetWindowTitle(Priv::window, default_caption);
+		SDL_SetWindowTitle(Priv::window, default_caption.GetChars());
 	}
 }
 

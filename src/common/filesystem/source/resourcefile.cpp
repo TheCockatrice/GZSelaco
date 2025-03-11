@@ -669,7 +669,8 @@ FileReader FResourceFile::GetEntryReader(uint32_t entry, int readertype, int rea
 	{
 		if (Entries[entry].Flags & RESFF_NEEDFILESTART)
 		{
-			SetEntryAddress(entry);
+			if(mainThread) 
+				SetEntryAddress(entry);
 		}
 		if (!(Entries[entry].Flags & RESFF_COMPRESSED))
 		{
@@ -693,6 +694,7 @@ FileReader FResourceFile::GetEntryReader(uint32_t entry, int readertype, int rea
 				}
 				else if (readertype == READER_CACHED)
 				{
+					assert(mainThread);
 					Reader.Seek(Entries[entry].Position, FileReader::SeekSet);
 					auto data = Reader.Read(Entries[entry].Length);
 					fr.OpenMemoryArray(data);
@@ -702,8 +704,16 @@ FileReader FResourceFile::GetEntryReader(uint32_t entry, int readertype, int rea
 		else
 		{
 			FileReader fri;
-			if (readertype == READER_NEW || !mainThread) fri.OpenFile(FileName, Entries[entry].Position, Entries[entry].CompressedSize);
-			else fri.OpenFilePart(Reader, Entries[entry].Position, Entries[entry].CompressedSize);
+			
+			if (readertype == READER_NEW || !mainThread) {
+				fri.OpenFile(FileName, Entries[entry].Position, Entries[entry].CompressedSize);
+				
+				// @Cockatrice - To make this properly thread safe we CANNOT write the filestart info
+				// in a thread, so skip to the correct location without storing
+				if (!mainThread && Entries[entry].Flags & RESFF_NEEDFILESTART) {
+					SkipHeader(fri);
+				}
+			} else fri.OpenFilePart(Reader, Entries[entry].Position, Entries[entry].CompressedSize);
 			int flags = DCF_TRANSFEROWNER | DCF_EXCEPTIONS;
 			if (readertype == READER_CACHED) flags |= DCF_CACHED;
 			else if (readerflags & READERFLAG_SEEKABLE) flags |= DCF_SEEKABLE;
@@ -712,6 +722,12 @@ FileReader FResourceFile::GetEntryReader(uint32_t entry, int readertype, int rea
 	}
 	return fr;
 }
+
+
+void FResourceFile::SkipHeader(FileReader& fr) {
+	// Do nothing by defualt
+}
+
 
 FileData FResourceFile::Read(uint32_t entry)
 {

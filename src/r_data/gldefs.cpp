@@ -1800,7 +1800,9 @@ class GLDefsParser
 						skipOpeningBrace = true;
 					}
 					else {
-						//Printf("Duplicating texture, making new tex with name: %s\n", sc.String);
+						#ifndef NDEBUG
+							Printf("Duplicating texture, making new tex with name: %s\n", sc.String);
+						#endif
 						auto orig = tex->GetTexture();
 						auto newTex = MakeGameTexture(orig, sc.String, type);
 						tex->CopySize(tex, false);
@@ -1808,13 +1810,23 @@ class GLDefsParser
 
 						// I have no idea if this will actually work
 						if (tex->GetBrightmap()) newTex->Brightmap = tex->GetBrightmap();
-						if (tex->Normal.get()) newTex->Normal = tex->Normal;
-						if (tex->AmbientOcclusion.get()) newTex->AmbientOcclusion = tex->AmbientOcclusion;
-						if (tex->Roughness.get()) newTex->Roughness = tex->Roughness;
-						if (tex->Metallic.get()) newTex->Metallic = tex->Metallic;
-						if (tex->Specular.get()) newTex->Specular = tex->Specular;
-						if (tex->Glowmap.get()) newTex->Glowmap = tex->Glowmap;
-						if (tex->Detailmap.get()) newTex->Detailmap = tex->Detailmap;
+
+						// Copy layers
+						FMaterialLayers* layers = tex->Layers.get();
+						
+						if (layers != nullptr) {
+							if (layers->Normal.get()) newTex->Layers->Normal = layers->Normal;
+							if (layers->AmbientOcclusion.get()) newTex->Layers->AmbientOcclusion = layers->AmbientOcclusion;
+							if (layers->Roughness.get()) newTex->Layers->Roughness = layers->Roughness;
+							if (layers->Metallic.get()) newTex->Layers->Metallic = layers->Metallic;
+							if (layers->Specular.get()) newTex->Layers->Specular = layers->Specular;
+							if (layers->Glowmap.get()) newTex->Layers->Glowmap = layers->Glowmap;
+							if (layers->Detailmap.get()) newTex->Layers->Detailmap = layers->Detailmap;
+
+							for (int x = 0; x < MAX_CUSTOM_HW_SHADER_TEXTURES; x++) {
+								newTex->Layers->CustomShaderTextures[x] = layers->CustomShaderTextures[x];
+							}
+						}
 
 						tex = newTex;
 					}

@@ -138,7 +138,7 @@ public:
 	}
 
 
-	void SetDefaultConfig()
+	void SetDefaultConfig() override
 	{
 		// Remove existing axis information
 		Axes.Clear();
@@ -430,7 +430,7 @@ public:
 	bool IsGamepad() override { return true; }
 
 
-	void SetDefaultConfig()
+	void SetDefaultConfig() override
 	{
 		// Remove existing axis information
 		Axes.Clear();

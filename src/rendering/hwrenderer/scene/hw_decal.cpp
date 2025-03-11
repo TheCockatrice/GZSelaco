@@ -233,7 +233,7 @@ void HWWall::ProcessDecal(HWDrawInfo *di, DBaseDecal *decal, const FVector3 &nor
 		if (shouldUpscale(texture, UF_Sprite)) scaleflags |= CTF_Upscale;
 
 		FMaterial * gltex = FMaterial::ValidateTexture(texture, scaleflags, false);
-		if (!gltex || !gltex->IsHardwareCached(decal->Translation)) {
+		if (!gltex || !gltex->IsHardwareCached(decal->Translation.index())) {
 			if (gltex) {
 				screen->BackgroundCacheMaterial(gltex, decal->Translation, true);  // TODO: Prevent calling this every time the sprite wants to render, it's incredibly wasteful
 			}

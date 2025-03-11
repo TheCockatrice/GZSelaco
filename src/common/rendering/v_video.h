@@ -61,6 +61,7 @@ class FMaterial;
 class FGameTexture;
 class FRenderState;
 class BoneBuffer;
+class FModel;
 
 enum EHWCaps
 {
@@ -226,8 +227,9 @@ public:
 	virtual void PrecacheMaterial(FMaterial *mat, int translation) {}
 	virtual void PrequeueMaterial(FMaterial *mat, int translation) {}
 
-	virtual bool BackgroundCacheMaterial(FMaterial *mat, int translation, bool makeSPI = false, bool secondary = false) { PrecacheMaterial(mat, translation); return true; }	// @Cockatrice - Default implementation for now. DOES NOT BG CACHE 
-	virtual bool BackgroundCacheTextureMaterial(FGameTexture *tex, int translation, int scaleFlags, bool makeSPI = false) { return false; }
+	virtual bool BackgroundCacheMaterial(FMaterial *mat, FTranslationID translation, bool makeSPI = false, bool secondary = false) { PrecacheMaterial(mat, translation.index()); return true; }	// @Cockatrice - Default implementation for now. DOES NOT BG CACHE 
+	virtual bool BackgroundCacheTextureMaterial(FGameTexture *tex, FTranslationID translation, int scaleFlags, bool makeSPI = false) { return false; }
+	virtual bool BackgroundLoadModel(FModel* model) { return false; }
 	virtual bool CachingActive() { return false; }																	// Is background cache currently running?
 	virtual float CacheProgress() { return 0; }																		// Current progress of background cache op
 	virtual bool SupportsBackgroundCache() { return false; }

@@ -79,9 +79,9 @@ CVAR(String, screenshot_dir, "", CVAR_ARCHIVE|CVAR_GLOBALCONFIG);
 EXTERN_CVAR(Bool, longsavemessages);
 EXTERN_CVAR(Int, developer)
 
-TMap<FString, FString> globalStorage;
+static size_t ParseCommandLine (const char *args, int *argc, char **argv);
 
-static long ParseCommandLine (const char *args, int *argc, char **argv);
+TMap<FString, FString> globalStorage;
 void M_LoadGlobalVars(const char* filename);
 bool M_SaveGlobalVars(const char* filename);
 void M_ReadGlobalVars(FileReader& fr, TMap<FString, FString>& map);
@@ -221,10 +221,9 @@ void M_FindResponseFile (void)
 		else
 		{
 			char	**argv;
-			TArray<uint8_t> file;
+			FileSys::FileData file;
 			int		argc = 0;
-			int 	size;
-			long	argsize = 0;
+			size_t	argsize = 0;
 			int 	index;
 
 			// Any more response files after the limit will be removed from the
@@ -240,10 +239,8 @@ void M_FindResponseFile (void)
 				else
 				{
 					Printf ("Found response file %s!\n", Args->GetArg(i) + 1);
-					size = (int)fr.GetLength();
-					file = fr.Read (size);
-					file[size] = 0;
-					argsize = ParseCommandLine ((char*)file.Data(), &argc, NULL);
+					file = fr.ReadPadded(1);
+					argsize = ParseCommandLine (file.string(), &argc, nullptr);
 				}
 			}
 			else
@@ -255,7 +252,7 @@ void M_FindResponseFile (void)
 			{
 				argv = (char **)M_Malloc (argc*sizeof(char *) + argsize);
 				argv[0] = (char *)argv + argc*sizeof(char *);
-				ParseCommandLine ((char*)file.Data(), NULL, argv);
+				ParseCommandLine (file.string(), nullptr, argv);
 
 				// Create a new argument vector
 				FArgs *newargs = new FArgs;
@@ -302,17 +299,19 @@ void M_FindResponseFile (void)
 // This is just like the version in c_dispatch.cpp, except it does not
 // do cvar expansion.
 
-static long ParseCommandLine (const char *args, int *argc, char **argv)
+static size_t ParseCommandLine (const char *args, int *argc, char **argv)
 {
 	int count;
+	char* buffstart;
 	char *buffplace;
 
 	count = 0;
-	buffplace = NULL;
+	buffstart = NULL;
 	if (argv != NULL)
 	{
-		buffplace = argv[0];
+		buffstart = argv[0];
 	}
+	buffplace = buffstart;
 
 	for (;;)
 	{
@@ -380,7 +379,7 @@ static long ParseCommandLine (const char *args, int *argc, char **argv)
 	{
 		*argc = count;
 	}
-	return (long)(buffplace - (char *)0);
+	return (buffplace - buffstart);
 }
 
 
@@ -402,7 +401,7 @@ bool M_SaveDefaults (const char *filename)
 	GameConfig->ArchiveGlobalData ();
 	if (gameinfo.ConfigName.IsNotEmpty())
 	{
-		GameConfig->ArchiveGameData (gameinfo.ConfigName);
+		GameConfig->ArchiveGameData (gameinfo.ConfigName.GetChars());
 	}
 	success = GameConfig->WriteConfigFile ();
 	if (filename != nullptr)
@@ -423,7 +422,7 @@ bool M_SaveDefaults (const char *filename)
 void M_SaveDefaultsFinal ()
 {
 	if (GameConfig == nullptr) return;
-	while (!M_SaveDefaults (nullptr) && I_WriteIniFailed ())
+	while (!M_SaveDefaults (nullptr) && I_WriteIniFailed (GameConfig->GetPathName()))
 	{
 		/* Loop until the config saves or I_WriteIniFailed() returns false */
 	}
@@ -485,6 +484,12 @@ void M_MigrateGlobalVars(const char* filename, const char *newFilename) {
 	}
 }
 
+
+CCMD(openconfig)
+{
+	M_SaveDefaults(nullptr);
+	I_OpenShellFolder(ExtractFilePath(GameConfig->GetPathName()).GetChars());
+}
 
 // M_LoadGlobalVars
 // @Cockatrice - Simple as fu, load global vars in a silly binary format that is somewhat hard to edit
@@ -831,7 +836,7 @@ void WritePNGfile (FileWriter *file, const uint8_t *buffer, const PalEntry *pale
 		!M_AppendPNGText (file, "Software", software) ||
 		!M_FinishPNG (file))
 	{
-		Printf ("%s\n", GStrings("TXT_SCREENSHOTERR"));
+		Printf ("%s\n", GStrings.GetString("TXT_SCREENSHOTERR"));
 	}
 }
 
@@ -846,7 +851,7 @@ static bool FindFreeName (FString &fullname, const char *extension)
 
 	for (i = 0; i <= 9999; i++)
 	{
-		const char *gamename = gameinfo.ConfigName;
+		const char *gamename = gameinfo.ConfigName.GetChars();
 
 		time_t now;
 		tm *tm;
@@ -910,8 +915,8 @@ void M_ScreenShot (const char *filename)
 				autoname += '/';
 			}
 		}
-		autoname = NicePath(autoname);
-		CreatePath(autoname);
+		autoname = NicePath(autoname.GetChars());
+		CreatePath(autoname.GetChars());
 		if (!FindFreeName (autoname, writepcx ? "pcx" : "png"))
 		{
 			Printf ("M_ScreenShot: Delete some screenshots\n");
@@ -932,7 +937,7 @@ void M_ScreenShot (const char *filename)
 	auto buffer = screen->GetScreenshotBuffer(pitch, color_type, gamma);
 	if (buffer.Size() > 0)
 	{
-		file = FileWriter::Open(autoname);
+		file = FileWriter::Open(autoname.GetChars());
 		if (file == NULL)
 		{
 			Printf ("Could not open %s\n", autoname.GetChars());
@@ -972,5 +977,34 @@ UNSAFE_CCMD (screenshot)
 		G_ScreenShot (NULL);
 	else
 		G_ScreenShot (argv[1]);
+}
+
+CCMD(openscreenshots)
+{
+	size_t dirlen;
+	FString autoname;
+	autoname = Args->CheckValue("-shotdir");
+	if (autoname.IsEmpty())
+	{
+		autoname = screenshot_dir;
+	}
+	dirlen = autoname.Len();
+	if (dirlen == 0)
+	{
+		autoname = M_GetScreenshotsPath();
+		dirlen = autoname.Len();
+	}
+	if (dirlen > 0)
+	{
+		if (autoname[dirlen-1] != '/' && autoname[dirlen-1] != '\\')
+		{
+			autoname += '/';
+		}
+	}
+	autoname = NicePath(autoname.GetChars());
+
+	CreatePath(autoname.GetChars());
+
+	I_OpenShellFolder(autoname.GetChars());
 }
 

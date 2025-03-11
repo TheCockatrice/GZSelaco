@@ -41,6 +41,8 @@ public:
 	int GetMaxIwadNum() { return MaxIwadIndex; }
 	void SetMaxIwadNum(int x) { MaxIwadIndex = x; }
 
+	bool HasExtraWads() { return (int)Files.size() > MaxIwadIndex + 1; }
+
 	bool InitSingleFile(const char *filename, FileSystemMessageFunc Printf = nullptr);
 	bool InitMultipleFiles (std::vector<std::string>& filenames, LumpFilterInfo* filter = nullptr, FileSystemMessageFunc Printf = nullptr, bool allowduplicates = false);
 	void AddFile (const char *filename, FileReader *wadinfo, LumpFilterInfo* filter, FileSystemMessageFunc Printf);
@@ -140,6 +142,12 @@ public:
 	int GetNumWads() const
 	{
 		return (int)Files.size();
+	}
+
+	const char * GetWadName(int wadnum) const
+	{
+		if (wadnum < 0 || wadnum >(int)Files.size()) return "";
+		return Files[wadnum]->GetFileName();
 	}
 
 	int AddFromBuffer(const char* name, char* data, int size, int id, int flags);

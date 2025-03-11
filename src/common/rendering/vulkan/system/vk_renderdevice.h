@@ -1,8 +1,9 @@
 #pragma once
 
 #include "gl_sysfb.h"
-#include "vk_device.h"
-#include "vk_objects.h"
+#include "engineerrors.h"
+#include <zvulkan/vulkandevice.h>
+#include <zvulkan/vulkanobjects.h>
 #include "TSQueue.h"
 #include "bitmap.h"
 #include "printf.h"
@@ -16,6 +17,7 @@ class VkShaderManager;
 class VkCommandBufferManager;
 class VkDescriptorSetManager;
 class VkRenderPassManager;
+class VkFramebufferManager;
 class VkRaytrace;
 class VkRenderState;
 class VkStreamBuffer;
@@ -39,7 +41,7 @@ struct VkTexLoadIn {
 	FImageSource *imgSource;
 	FImageLoadParams *params;
 	VkTexLoadSpi spi;
-	VkHardwareTexture *tex;		// We can create the texture on the main thread
+	VkHardwareTexture *tex;					// Texture is created in main thread
 	FGameTexture *gtex;
 	bool allowMipmaps;
 };
@@ -51,25 +53,21 @@ struct VkTexLoadOut {
 	int conversion, translation;
 	bool isTranslucent, createMipmaps;
 	FImageSource *imgSource;
-	VulkanSemaphore *releaseSemaphore;
+	VulkanSemaphore *releaseSemaphore;		// Only used to release the resource when we have to transfer ownership (IE: Not using a graphics queue for upload)
+	unsigned char* pixels = nullptr;		// Returned when we can't upload in the backghround thread
+	size_t pixelsSize = 0, totalDataSize = 0;
+	int pixelW = 0, pixelH = 0;
 };
 
 struct VkModelLoadIn {
-
+	int lump = -1;
+	FModel* model = nullptr;
 };
 
 struct VkModelLoadOut {
-
-};
-
-struct VkLoadJobIn {
-	VkTexLoadIn* texJob;
-	VkModelLoadIn* modelJob;
-};
-
-struct VkLoadJobOut{
-	VkTexLoadOut* texJob;
-	VkModelLoadOut* modelJob;
+	int lump = -1;
+	FileSys::FileData data;
+	FModel* model = nullptr;
 };
 
 
@@ -77,34 +75,27 @@ struct VkLoadJobOut{
 // TODO: Move the queue outside of the object and have each thread pull from a central queue
 class VkTexLoadThread : public ResourceLoader2<VkTexLoadIn, VkTexLoadOut> {
 public:
-	/*VkTexLoadThread(VkCommandBufferManager* bgCmd, VulkanDevice* device, int uploadQueueIndex) {
-		cmd = bgCmd;
-		submits = 0;
-		uploadQueue = device->uploadQueues[uploadQueueIndex];
-
-		for (auto& fence : submitFences)
-			fence.reset(new VulkanFence(device));
-
-		for (int i = 0; i < 8; i++)
-			submitWaitFences[i] = submitFences[i]->fence;
-	}*/
-
 	VkTexLoadThread(VkCommandBufferManager* bgCmd, VulkanDevice* device, int uploadQueueIndex, TSQueue<VkTexLoadIn>* inQueue, TSQueue<VkTexLoadIn>* secondaryQueue, TSQueue<VkTexLoadOut>* outQueue) : ResourceLoader2(inQueue, secondaryQueue, outQueue) {
 		cmd = bgCmd;
 		submits = 0;
-		uploadQueue = device->uploadQueues[uploadQueueIndex];
+		if (uploadQueueIndex >= 0) uploadQueue = device->uploadQueues[uploadQueueIndex];
 
-		for (auto& fence : submitFences)
-			fence.reset(new VulkanFence(device));
+		if (cmd && device) {
+			for (auto& fence : submitFences)
+				fence.reset(new VulkanFence(device));
 
-		for (int i = 0; i < 8; i++)
-			submitWaitFences[i] = submitFences[i]->fence;
+			for (int i = 0; i < 8; i++)
+				submitWaitFences[i] = submitFences[i]->fence;
+		}
+		else {
+			for (int i = 0; i < 8; i++)
+				submitWaitFences[i] = VK_NULL_HANDLE;
+		}
 	}
 
 	~VkTexLoadThread() override;
 
 	int getCurrentImageID() { return currentImageID.load(); }
-	//bool moveToMainQueue(VkHardwareTexture *tex);
 	VulkanUploadSlot& getUploadQueue() { return uploadQueue; }
 
 protected:
@@ -126,13 +117,27 @@ protected:
 };
 
 
-class VulkanFrameBuffer : public SystemBaseFrameBuffer
+class VkModelLoadThread : public ResourceLoader2<VkModelLoadIn, VkModelLoadOut> {
+public:
+	VkModelLoadThread(TSQueue<VkModelLoadIn>* inQueue, TSQueue<VkModelLoadOut>* outQueue) : ResourceLoader2(inQueue, nullptr, outQueue) {
+		
+	}
+
+protected:
+	std::atomic<int> maxQueue;
+
+	bool loadResource(VkModelLoadIn& input, VkModelLoadOut& output) override;
+};
+
+
+
+class VulkanRenderDevice : public SystemBaseFrameBuffer
 {
 	typedef SystemBaseFrameBuffer Super;
 
 
 public:
-	VulkanDevice *device;
+	std::shared_ptr<VulkanDevice> device;
 
 	VkCommandBufferManager* GetCommands() { return mCommands.get(); }
 	//VkCommandBufferManager* GetBGCommands() { return mBGTransferCommands.get(); }
@@ -140,6 +145,7 @@ public:
 	VkSamplerManager *GetSamplerManager() { return mSamplerManager.get(); }
 	VkBufferManager* GetBufferManager() { return mBufferManager.get(); }
 	VkTextureManager* GetTextureManager() { return mTextureManager.get(); }
+	VkFramebufferManager* GetFramebufferManager() { return mFramebufferManager.get(); }
 	VkDescriptorSetManager* GetDescriptorSetManager() { return mDescriptorSetManager.get(); }
 	VkRenderPassManager *GetRenderPassManager() { return mRenderPassManager.get(); }
 	VkRaytrace* GetRaytrace() { return mRaytrace.get(); }
@@ -150,8 +156,8 @@ public:
 
 	unsigned int GetLightBufferBlockSize() const;
 
-	VulkanFrameBuffer(void *hMonitor, bool fullscreen, VulkanDevice *dev);
-	~VulkanFrameBuffer();
+	VulkanRenderDevice(void *hMonitor, bool fullscreen, std::shared_ptr<VulkanSurface> surface);
+	~VulkanRenderDevice();
 	bool IsVulkan() override { return true; }
 
 	void Update() override;
@@ -160,14 +166,16 @@ public:
 	bool CompileNextShader() override;
 	void PrecacheMaterial(FMaterial *mat, int translation) override;
 	void PrequeueMaterial(FMaterial *mat, int translation) override;
-	bool BackgroundCacheMaterial(FMaterial *mat, int translation, bool makeSPI = false, bool secondary = false) override;
-	bool BackgroundCacheTextureMaterial(FGameTexture *tex, int translation, int scaleFlags, bool makeSPI = false) override;
+	bool BackgroundCacheMaterial(FMaterial *mat, FTranslationID translation, bool makeSPI = false, bool secondary = false) override;
+	bool BackgroundCacheTextureMaterial(FGameTexture *tex, FTranslationID translation, int scaleFlags, bool makeSPI = false) override;
+	bool BackgroundLoadModel(FModel* model) override;
 	bool CachingActive() override;
 	bool SupportsBackgroundCache() override { return bgTransferEnabled; }
 	void StopBackgroundCache() override;
 	void FlushBackground() override;
 	float CacheProgress() override;
 	void UpdateBackgroundCache(bool flush = false) override;
+	void UploadLoadedTextures(bool flush = false);
 	void UpdatePalette() override;
 	const char* DeviceName() const override;
 	int Backend() override { return 1; }
@@ -207,8 +215,9 @@ public:
 	bool RaytracingEnabled();
 
 	// Cache stats helpers
-	void GetBGQueueSize(int& current, int& currentSec, int& collisions, int& max, int& maxSec, int& total, int& outSize);
+	void GetBGQueueSize(int& current, int& currentSec, int& collisions, int& max, int& maxSec, int& total, int& outSize, int &models);
 	void GetBGStats(double& min, double& max, double& avg);
+	void GetBGStats2(double& min, double& max, double& avg);
 	void ResetBGStats();
 	int GetNumThreads() { return (int)bgTransferThreads.size(); }
 
@@ -228,22 +237,29 @@ private:
 
 	// BG Thread management
 	// TODO: Move these into their own manager object
-	int statMaxQueued = 0, statMaxQueuedSecondary = 0, statCollisions = 0;
+	int statMaxQueued = 0, statMaxQueuedSecondary = 0, statCollisions = 0, statModelsLoaded = 0;
 	TSQueue<VkTexLoadIn> primaryTexQueue, secondaryTexQueue;
 	TSQueue<VkTexLoadOut> outputTexQueue;
-	TSQueue<QueuedPatch> patchQueue;									// @Cockatrice - Thread safe queue of textures to create materials for and submit to the bg thread
+	TSQueue<QueuedPatch> patchQueue;									// @Cockatrice - Queue of textures to create materials for and submit to the bg thread
+	TSQueue<VkModelLoadIn> modelInQueue;
+	TSQueue<VkModelLoadOut> modelOutQueue;
+	std::unique_ptr<VkModelLoadThread> modelThread;						// Loads models, always 1 thread
 	std::vector<std::unique_ptr<VkTexLoadThread>> bgTransferThreads;	// @Cockatrice - Threads that handle the background transfers
 	std::unique_ptr<VulkanFence> bgtFence;								// @Cockatrice - Used to block for tranferring resources between queues
 	std::vector<std::unique_ptr<VulkanSemaphore>> bgtSm4List;			// Semaphores to release after queue resource transfers
 	std::unique_ptr<VulkanCommandBuffer> bgtCmds;
+	std::vector<VkTexLoadOut> bgtUploads;								// Main-thread uploads need to be moved here (for gpus that can't transfer in another queue)
 	bool bgtHasFence = false;
 	bool bgTransferEnabled = true;
+	bool bgUploadEnabled = true;
+	double fgTotalTime = 0, fgCurTime = 0, fgTotalCount = 0, fgMin = 0, fgMax = 0;		// Foreground integration time stats
 
 	std::unique_ptr<VkCommandBufferManager> mCommands;
 	std::vector<std::unique_ptr<VkCommandBufferManager>> mBGTransferCommands;		// @Cockatrice - Command pool for submitting background transfers
 	std::unique_ptr<VkBufferManager> mBufferManager;
 	std::unique_ptr<VkSamplerManager> mSamplerManager;
 	std::unique_ptr<VkTextureManager> mTextureManager;
+	std::unique_ptr<VkFramebufferManager> mFramebufferManager;
 	std::unique_ptr<VkShaderManager> mShaderManager;
 	std::unique_ptr<VkRenderBuffers> mScreenBuffers;
 	std::unique_ptr<VkRenderBuffers> mSaveBuffers;
@@ -256,4 +272,11 @@ private:
 	VkRenderBuffers *mActiveRenderBuffers = nullptr;
 
 	bool mVSync = false;
+};
+
+class CVulkanError : public CEngineError
+{
+public:
+	CVulkanError() : CEngineError() {}
+	CVulkanError(const char* message) : CEngineError(message) {}
 };

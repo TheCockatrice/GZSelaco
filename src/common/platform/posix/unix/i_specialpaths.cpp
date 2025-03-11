@@ -191,7 +191,7 @@ FString M_GetScreenshotsPath()
 
 FString M_GetSavegamesPath()
 {
-	return NicePath("$HOME/" GAME_DIR "/savegames/");
+	return NicePath("$HOME/" GAME_DIR "/");
 }
 
 //===========================================================================
@@ -203,9 +203,21 @@ FString M_GetSavegamesPath()
 //===========================================================================
 
 int M_GetSavegamesPaths(TArray<FString>& outputAr) {
-	// Only one path on nix so far
-	outputAr.Push(M_GetSavegamesPath());
-	return 1;
+	FString alternatePath = NicePath("$HOME/" GAME_DIR "/savegames/");
+	FString mainPath = M_GetSavegamesPath();
+	int cnt = 1;
+
+	outputAr.Push(mainPath);
+	
+	// At one time we accidentally saved into the /savegames/ folder
+	// So look there for old games
+	if(mainPath.CompareNoCase(alternatePath.GetChars())) {
+		outputAr.Push(alternatePath);
+		cnt++;
+	}
+
+
+	return cnt;
 }
 
 //===========================================================================

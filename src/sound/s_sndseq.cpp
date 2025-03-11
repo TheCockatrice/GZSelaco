@@ -857,13 +857,13 @@ void DSeqNode::PreloadSounds() {
 			if (cmd == SS_CMD_PLAY || cmd == SS_CMD_PLAYREPEAT || cmd == SS_CMD_PLAYLOOP)
 			{
 				auto sound_id = GetData(seq->Script[i]);
-				sfxinfo_t* sfx = const_cast<sfxinfo_t*>(soundEngine->GetSfx(sound_id));
+				sfxinfo_t* sfx = const_cast<sfxinfo_t*>(soundEngine->GetSfx(FSoundID::fromInt(sound_id)));
 				if (sfx != nullptr && !sfx->data.isValid()) {
 					if (initialLoad) {
 						soundEngine->LoadSound(sfx);
 					}
 					else {
-						AudioLoaderQueue::Instance->queue(sfx, sound_id, nullptr);
+						AudioLoaderQueue::Instance->queue(sfx, FSoundID::fromInt(sound_id), nullptr);
 					}
 				}
 			}

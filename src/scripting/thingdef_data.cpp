@@ -57,6 +57,7 @@
 #include "a_dynlight.h"
 #include "types.h"
 #include "dictionary.h"
+#include "events.h"
 
 static TArray<FPropertyInfo*> properties;
 static TArray<AFuncDesc> AFTable;
@@ -326,10 +327,11 @@ static FFlagDef ActorFlagDefs[]=
 	DEFINE_FLAG(MF8, RETARGETAFTERSLAM, AActor, flags8),
 	DEFINE_FLAG(MF8, STOPRAILS, AActor, flags8),
 	DEFINE_FLAG(MF8, FALLDAMAGE, AActor, flags8),
+	DEFINE_FLAG(MF9, MINVISIBLE, AActor, flags9),
+	DEFINE_FLAG(MF9, MVISBLOCKED, AActor, flags9),
 	DEFINE_FLAG(MF8, ABSDAMAGE, AActor, flags8),
 	DEFINE_FLAG(MF8, HITSCANTHRU, AActor, flags8),
-	DEFINE_FLAG(MF8, BLOCKLOF, AActor, flags8),
-	DEFINE_FLAG(MF8, ABSVIEWANGLES, AActor, flags8),
+	DEFINE_FLAG(MF8, BLOCKLOF, AActor, flags8), // @Cockatrice - These have been moved, put them back where they belong	DEFINE_FLAG(MF8, ABSVIEWANGLES, AActor, flags8),
 	DEFINE_FLAG(MF8, ALLOWTHRUBITS, AActor, flags8),
 	DEFINE_FLAG(MF8, FULLVOLSEE, AActor, flags8),
 	DEFINE_FLAG(MF8, E1M8BOSS, AActor, flags8),
@@ -348,6 +350,13 @@ static FFlagDef ActorFlagDefs[]=
 	DEFINE_FLAG(MF8, ADDLIGHTLEVEL, AActor, flags8),
 	DEFINE_FLAG(MF8, PRECACHEALWAYS, AActor, flags8),
 
+	DEFINE_FLAG(MF9, ONLYSLAMSOLID, AActor, flags9),
+	DEFINE_FLAG(MF9, SHADOWAIM, AActor, flags9),
+	DEFINE_FLAG(MF9, DOSHADOWBLOCK, AActor, flags9),
+	DEFINE_FLAG(MF9, SHADOWBLOCK, AActor, flags9),
+	DEFINE_FLAG(MF9, SHADOWAIMVERT, AActor, flags9),
+	DEFINE_FLAG(MF9, DECOUPLEDANIMATIONS, AActor, flags9),
+
 	// Effect flags
 	DEFINE_FLAG(FX, VISIBILITYPULSE, AActor, effects),
 	DEFINE_FLAG2(FX_ROCKET, ROCKETTRAIL, AActor, effects),
@@ -356,8 +365,7 @@ static FFlagDef ActorFlagDefs[]=
 	DEFINE_FLAG(RF, FORCEYBILLBOARD, AActor, renderflags),
 	DEFINE_FLAG(RF, FORCEXYBILLBOARD, AActor, renderflags),
 	DEFINE_FLAG(RF, ROLLSPRITE, AActor, renderflags), // [marrub] roll the sprite billboard
-			// [fgsfds] Flat sprites
-	DEFINE_FLAG(RF, FLATSPRITE, AActor, renderflags),
+	DEFINE_FLAG(RF, FLATSPRITE, AActor, renderflags), // [fgsfds] Flat sprites
 	DEFINE_FLAG(RF, WALLSPRITE, AActor, renderflags),
 	DEFINE_FLAG(RF, DONTFLIP, AActor, renderflags),
 	DEFINE_FLAG(RF, ROLLCENTER, AActor, renderflags),
@@ -374,6 +382,14 @@ static FFlagDef ActorFlagDefs[]=
 	DEFINE_FLAG(RF, NOSPRITESHADOW, AActor, renderflags),
 	DEFINE_FLAG(RF2, INVISIBLEINMIRRORS, AActor, renderflags2),
 	DEFINE_FLAG(RF2, ONLYVISIBLEINMIRRORS, AActor, renderflags2),
+	DEFINE_FLAG(RF2, BILLBOARDFACECAMERA, AActor, renderflags2),
+	DEFINE_FLAG(RF2, BILLBOARDNOFACECAMERA, AActor, renderflags2),
+	DEFINE_FLAG(RF2, FLIPSPRITEOFFSETX, AActor, renderflags2),
+	DEFINE_FLAG(RF2, FLIPSPRITEOFFSETY, AActor, renderflags2),
+	DEFINE_FLAG(RF2, CAMFOLLOWSPLAYER, AActor, renderflags2),
+	DEFINE_FLAG(RF2, NOMIPMAP, AActor, renderflags2),
+	DEFINE_FLAG(RF2, ISOMETRICSPRITES, AActor, renderflags2),
+	DEFINE_FLAG(RF2, SQUAREPIXELS, AActor, renderflags2),
 
 	// Bounce flags
 	DEFINE_FLAG2(BOUNCE_Walls, BOUNCEONWALLS, AActor, BounceFlags),
@@ -393,6 +409,8 @@ static FFlagDef ActorFlagDefs[]=
 	DEFINE_FLAG2(BOUNCE_NotOnShootables, DONTBOUNCEONSHOOTABLES, AActor, BounceFlags),
 	DEFINE_FLAG2(BOUNCE_BounceOnUnrips, BOUNCEONUNRIPPABLES, AActor, BounceFlags),
 	DEFINE_FLAG2(BOUNCE_NotOnSky, DONTBOUNCEONSKY, AActor, BounceFlags),
+	
+	DEFINE_FLAG2(OF_Transient, NOSAVEGAME, AActor, ObjectFlags),
 };
 
 // These won't be accessible through bitfield variables
@@ -640,6 +658,15 @@ static int propcmp(const void * a, const void * b)
 //==========================================================================
 void InitImports();
 
+struct UserInfoCVarNamePlayer
+{
+	FBaseCVar** addr;
+	FString name;
+	int pnum;
+};
+
+TArray<UserInfoCVarNamePlayer> LoadGameUserInfoCVars;
+
 void InitThingdef()
 {
 	// Some native types need size and serialization information added before the scripts get compiled.
@@ -711,6 +738,10 @@ void InitThingdef()
 	sectorportalstruct->Size = sizeof(FSectorPortal);
 	sectorportalstruct->Align = alignof(FSectorPortal);
 
+	auto lineportalstruct = NewStruct("LinePortal", nullptr, true);
+	lineportalstruct->Size = sizeof(FLinePortal);
+	lineportalstruct->Align = alignof(FLinePortal);
+
 	auto playerclassstruct = NewStruct("PlayerClass", nullptr, true);
 	playerclassstruct->Size = sizeof(FPlayerClass);
 	playerclassstruct->Align = alignof(FPlayerClass);
@@ -722,6 +753,10 @@ void InitThingdef()
 	auto teamstruct = NewStruct("Team", nullptr, true);
 	teamstruct->Size = sizeof(FTeam);
 	teamstruct->Align = alignof(FTeam);
+
+	auto terraindefstruct = NewStruct("TerrainDef", nullptr, true);
+	terraindefstruct->Size = sizeof(FTerrainDef);
+	terraindefstruct->Align = alignof(FTerrainDef);
 
 	PStruct *pstruct = NewStruct("PlayerInfo", nullptr, true);
 	pstruct->Size = sizeof(player_t);
@@ -782,9 +817,90 @@ void InitThingdef()
 	frp->Size = sizeof(FRailParams);
 	frp->Align = alignof(FRailParams);
 
+	auto netcmdstruct = NewStruct("NetworkCommand", nullptr, true);
+	netcmdstruct->Size = sizeof(FNetworkCommand);
+	netcmdstruct->Align = alignof(FNetworkCommand);
+
 	auto fltd = NewStruct("FLineTraceData", nullptr);
 	fltd->Size = sizeof(FLineTraceData);
 	fltd->Align = alignof(FLineTraceData);
+
+	auto fspp = NewStruct("FSpawnParticleParams", nullptr);
+	fspp->Size = sizeof(FSpawnParticleParams);
+	fspp->Align = alignof(FSpawnParticleParams);
+
+	auto cvst = NewStruct("CVar", nullptr, true);
+	NewPointer(cvst, false)->InstallHandlers(
+		[](FSerializer &arc, const char *key, const void *addr)
+		{
+			const FBaseCVar * self = *(const FBaseCVar**)addr;
+			
+			if(self)
+			{
+				arc.BeginObject(key);
+
+
+				if(self->pnum != -1)
+				{
+					int32_t pnum = self->pnum;
+					FName name = self->userinfoName;
+					arc("name", name);
+					arc("player", pnum);
+				}
+				else
+				{
+					FString name = self->GetName();
+					arc("name", name);
+				}
+
+				arc.EndObject();
+			}
+		},
+		[](FSerializer &arc, const char *key, void *addr)
+		{
+			FBaseCVar ** self = (FBaseCVar**)addr;
+
+			FString name;
+			arc.BeginObject(key);
+
+			arc("name", name);
+
+			FBaseCVar * backing = FindCVar(name.GetChars(), nullptr);
+			if(!backing)
+			{
+				I_Error("Attempt to load pointer to inexisted CVar '%s'", name.GetChars());
+			}
+			else if((backing->GetFlags()  & (CVAR_USERINFO|CVAR_IGNORE)) == CVAR_USERINFO)
+			{
+				if(int pnum; arc.ReadOptionalInt("player", pnum))
+				{
+					*self = nullptr;
+					LoadGameUserInfoCVars.Push({self, name, pnum}); // this needs to be done later, since userinfo isn't loaded yet
+					arc.EndObject();
+					return true;
+				}
+			}
+			
+			*self = backing;
+
+			arc.EndObject();
+
+			return true;
+		}
+	);
+}
+
+void SetupLoadingCVars()
+{
+	LoadGameUserInfoCVars.Clear();
+}
+
+void FinishLoadingCVars()
+{
+	for(UserInfoCVarNamePlayer &cvar : LoadGameUserInfoCVars)
+	{
+		(*cvar.addr) = GetCVar(cvar.pnum, cvar.name.GetChars());
+	}
 }
 
 void SynthesizeFlagFields()
@@ -809,7 +925,7 @@ void SynthesizeFlagFields()
 DEFINE_ACTION_FUNCTION(DObject, BAM)
 {
 	PARAM_PROLOGUE;
-	PARAM_FLOAT(ang);
-	ACTION_RETURN_INT(DAngle(ang).BAMs());
+	PARAM_ANGLE(ang);
+	ACTION_RETURN_INT(ang.BAMs());
 }
 

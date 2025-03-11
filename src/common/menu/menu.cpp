@@ -56,11 +56,8 @@
 #include "printf.h"
 #include "am_map.h"
 
-void M_StartControlPanel(bool makeSound, bool scaleoverride = false);
-
 int DMenu::InMenu;
 static ScaleOverrider *CurrentScaleOverrider;
-extern int chatmodeon;
 extern bool	automapactive;
 
 //
@@ -71,7 +68,7 @@ CVAR(Bool, m_blockcontrollers, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 
 CVAR (Float, snd_menuvolume, 0.6f, CVAR_ARCHIVE)
 CVAR(Int, m_use_mouse, 2, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
-CVAR(Int, m_show_backbutton, 0, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
+CVAR(Int, m_show_backbutton, -1, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Bool, m_cleanscale, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 // Option Search
 CVAR(Bool, os_isanyof, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
@@ -116,8 +113,6 @@ extern PClass *DefaultOptionMenuClass;
 
 #define KEY_REPEAT_DELAY	(GameTicRate*5/12)
 #define KEY_REPEAT_RATE		(3)
-
-bool OkForLocalization(FTextureID texnum, const char* substitute);
 
 //============================================================================
 //
@@ -357,7 +352,7 @@ DEFINE_ACTION_FUNCTION_NATIVE(DMenu, SetMouseCapture, SetMouseCapture)
 void DMenu::Close ()
 {
 	if (CurrentMenu == nullptr) return;	// double closing can happen in the save menu.
-	assert(CurrentMenu == this);
+	//assert(CurrentMenu == this);
 	CurrentMenu = mParentMenu;
 
 	if (CurrentMenu != nullptr)
@@ -439,8 +434,10 @@ bool DMenu::TranslateKeyboardEvents()
 //
 //=============================================================================
 
-void M_DoStartControlPanel (bool scaleoverride)
+
+void M_StartControlPanel (bool makesound, bool scaleoverride)
 {
+	if (sysCallbacks.OnMenuOpen) sysCallbacks.OnMenuOpen(makesound);
 	// intro might call this repeatedly
 	if (CurrentMenu != nullptr)
 		return;
@@ -519,11 +516,9 @@ DEFINE_ACTION_FUNCTION(DMenu, ActivateMenu)
 //
 //=============================================================================
 
-bool M_SetSpecialMenu(FName& menu, int param);	// game specific checks
-
 void M_SetMenu(FName menu, int param)
 {
-	if (!M_SetSpecialMenu(menu, param)) return;
+	if (sysCallbacks.SetSpecialMenu && !sysCallbacks.SetSpecialMenu(menu, param)) return;
 
 	DMenuDescriptor **desc = MenuDescriptors.CheckKey(menu);
 	if (desc != nullptr)
@@ -973,9 +968,15 @@ void M_Init (void)
 	}
 	catch (CVMAbortException &err)
 	{
+		menuDelegate = nullptr;
 		err.MaybePrintMessage();
-		Printf("%s", err.stacktrace.GetChars());
+		Printf(PRINT_NONOTIFY | PRINT_BOLD, "%s", err.stacktrace.GetChars());
 		I_FatalError("Failed to initialize menus");
+	}
+	catch (...)
+	{
+		menuDelegate = nullptr;
+		throw;
 	}
 	M_CreateMenus();
 }
@@ -1084,6 +1085,9 @@ DEFINE_FIELD(DListMenuDescriptor, mFontColor2)
 DEFINE_FIELD(DListMenuDescriptor, mAnimatedTransition)
 DEFINE_FIELD(DListMenuDescriptor, mAnimated)
 DEFINE_FIELD(DListMenuDescriptor, mCenter)
+DEFINE_FIELD(DListMenuDescriptor, mCenterText)
+DEFINE_FIELD(DListMenuDescriptor, mDontDim)
+DEFINE_FIELD(DListMenuDescriptor, mDontBlur)
 DEFINE_FIELD(DListMenuDescriptor, mVirtWidth)
 DEFINE_FIELD(DListMenuDescriptor, mVirtHeight)
 
@@ -1096,6 +1100,9 @@ DEFINE_FIELD(DOptionMenuDescriptor, mScrollPos)
 DEFINE_FIELD(DOptionMenuDescriptor, mIndent)
 DEFINE_FIELD(DOptionMenuDescriptor, mPosition)
 DEFINE_FIELD(DOptionMenuDescriptor, mDontDim)
+DEFINE_FIELD(DOptionMenuDescriptor, mDontBlur)
+DEFINE_FIELD(DOptionMenuDescriptor, mAnimatedTransition)
+DEFINE_FIELD(DOptionMenuDescriptor, mAnimated)
 DEFINE_FIELD(DOptionMenuDescriptor, mFont)
 
 DEFINE_FIELD(FOptionMenuSettings, mTitleColor)
@@ -1114,6 +1121,8 @@ DEFINE_FIELD(DImageScrollerDescriptor,textFont)
 DEFINE_FIELD(DImageScrollerDescriptor, textScale)
 DEFINE_FIELD(DImageScrollerDescriptor, mAnimatedTransition)
 DEFINE_FIELD(DImageScrollerDescriptor, mAnimated)
+DEFINE_FIELD(DImageScrollerDescriptor, mDontDim)
+DEFINE_FIELD(DImageScrollerDescriptor, mDontBlur)
 DEFINE_FIELD(DImageScrollerDescriptor, virtWidth)
 DEFINE_FIELD(DImageScrollerDescriptor, virtHeight)
 
@@ -1247,7 +1256,7 @@ bool DMenuItemBase::GetString(int i, char *s, int len)
 		FString retstr;
 		VMReturn ret[2]; ret[0].IntAt(&retval); ret[1].StringAt(&retstr);
 		VMCall(func, params, countof(params), ret, 2);
-		strncpy(s, retstr, len);
+		strncpy(s, retstr.GetChars(), len);
 		return !!retval;
 	}
 	return false;

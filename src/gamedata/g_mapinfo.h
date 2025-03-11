@@ -38,8 +38,9 @@
 #include "doomtype.h"
 #include "vectors.h"
 #include "sc_man.h"
-#include "file_zip.h"
 #include "screenjob.h"
+#include "hwrenderer/postprocessing/hw_postprocess.h"
+#include "hw_viewpointuniforms.h"
 
 struct level_info_t;
 struct cluster_info_t;
@@ -78,6 +79,10 @@ struct CutsceneDef;
 
 struct FMapInfoParser
 {
+	FMapInfoParser(FScanner* parent)
+		: sc(parent ? &parent->GetSymbols() : nullptr)
+	{
+	}
 	enum EFormatType
 	{
 		FMT_Unknown,
@@ -265,8 +270,9 @@ enum ELevelFlags : unsigned int
 	LEVEL3_AVOIDMELEE			= 0x00020000,	// global flag needed for proper MBF support.
 	LEVEL3_NOJUMPDOWN			= 0x00040000,	// only for MBF21. Inverse of MBF's dog_jumping flag.
 	LEVEL3_LIGHTCREATED			= 0x00080000,	// a light had been created in the last frame
-	LEVEL3_RAINYMAP				= 0x00100000,	// @Cockatrice - Indicates map should draw rain effects under F_SKY
-	LEVEL3_SAFEROOM				= 0x00200000	// @Cockatrice - Indicates a saferoom is in this map, available for fast travel
+	LEVEL3_NOFOGOFWAR			= 0x00100000,	// disables effect of r_radarclipper CVAR on this map
+	LEVEL3_RAINYMAP				= 0x00200000,	// @Cockatrice - Indicates map should draw rain effects under F_SKY
+	LEVEL3_SAFEROOM				= 0x00400000	// @Cockatrice - Indicates a saferoom is in this map, available for fast travel
 };
 
 
@@ -328,6 +334,7 @@ struct level_info_t
 	FString		SkyPic1;
 	FString		SkyPic2;
 	FString		FadeTable;
+	FString		CustomColorMap;
 	FString		F1Pic;
 	FString		BorderTexture;
 	FString		MapBackground;
@@ -344,12 +351,13 @@ struct level_info_t
 	uint32_t	flags2;
 	uint32_t	flags3;
 
+	FString		LightningSound = "world/thunder";
 	FString		Music;
 	FString		LevelName;
 	FString		AuthorName;
 	int8_t		WallVertLight, WallHorizLight;
 	int			musicorder;
-	FCompressedBuffer	Snapshot;
+	FileSys::FCompressedBuffer	Snapshot;
 	TArray<acsdefered_t> deferred;
 	float		skyspeed1;
 	float		skyspeed2;
@@ -380,6 +388,11 @@ struct level_info_t
 	FName		RedirectType;
 	FString		RedirectMapName;
 
+	// CVAR Redirection: If the CVAR Bool returns true, then
+	// you go to the RedirectMap instead of this one.
+	FName		RedirectCVAR;
+	FString		RedirectCVARMapName;
+
 	FString		EnterPic;
 	FString		ExitPic;
 	FString 	InterMusic;
@@ -395,7 +408,7 @@ struct level_info_t
 
 	TArray<FSpecialAction> specialactions;
 
-	TArray<int> PrecacheSounds;
+	TArray<FSoundID> PrecacheSounds;
 	TArray<FString> PrecacheTextures;
 	TArray<FName> PrecacheClasses;
 	
@@ -411,6 +424,8 @@ struct level_info_t
 	FString		EDName;
 	FString		acsName;
 	bool		fs_nocheckposition;
+	ELightBlendMode lightblendmode;
+	ETonemapMode tonemap;
 	
 	CutsceneDef intro, outro;
 
@@ -501,6 +516,7 @@ enum ESkillProperty
 	SKILLP_PlayerRespawn,
 	SKILLP_SpawnMulti,
 	SKILLP_InstantReaction,
+	SKILLP_SpawnMultiCoopOnly,
 };
 enum EFSkillProperty	// floating point properties
 {
@@ -546,6 +562,7 @@ struct FSkillInfo
 	int SpawnFilter;
 	bool SpawnMulti;
 	bool InstantReaction;
+	bool SpawnMultiCoopOnly;
 	int ACSReturn;
 	FString MenuName;
 	FString PicName;

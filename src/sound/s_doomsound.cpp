@@ -66,15 +66,11 @@
 #include "g_game.h"
 #include "s_music.h"
 #include "v_draw.h"
+#include "m_argv.h"
 #include "s_loader.h"
 
 
 // PUBLIC DATA DEFINITIONS -------------------------------------------------
-
-
-FBoolCVar noisedebug("noise", false, 0);	// [RH] Print sound debugging info?
-CVAR (Bool, i_soundinbackground, false, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
-CVAR (Bool, i_pauseinbackground, true, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 
 
 static FString LastLocalSndInfo;
@@ -88,15 +84,15 @@ class DoomSoundEngine : public SoundEngine
 	void CalcPosVel(int type, const void* source, const float pt[3], int channum, int chanflags, FSoundID soundid, FVector3* pos, FVector3* vel, FSoundChan *) override;
 	bool ValidatePosVel(int sourcetype, const void* source, const FVector3& pos, const FVector3& vel);
 	TArray<uint8_t> ReadSound(int lumpnum);
-	int PickReplacement(int refid);
+	FSoundID PickReplacement(FSoundID refid);
 	FSoundID ResolveSound(const void *ent, int type, FSoundID soundid, float &attenuation) override;
 	void CacheSound(sfxinfo_t* sfx) override;
 	void StopChannel(FSoundChan* chan) override;
-	int AddSoundLump(const char* logicalname, int lump, int CurrentPitchMask, int resid = -1, int nearlimit = 2) override
+	FSoundID AddSoundLump(const char* logicalname, int lump, int CurrentPitchMask, int resid = -1, int nearlimit = 2) override
 	{
 		auto ndx = SoundEngine::AddSoundLump(logicalname, lump, CurrentPitchMask, resid, nearlimit);
-		S_sfx[ndx].UserData.Resize(1);
-		S_sfx[ndx].UserData[0] = 0;
+		S_sfx[ndx.index()].UserData.Resize(1);
+		S_sfx[ndx.index()].UserData[0] = 0;
 		return ndx;
 	}
 	bool CheckSoundLimit(sfxinfo_t* sfx, const FVector3& pos, int near_limit, float limit_range, int sourcetype, const void* actor, int channel, float attenuation, sfxinfo_t* compareOrgID = nullptr) override
@@ -160,11 +156,11 @@ static FString LookupMusic(const char* musicname, int& order)
 		// handle dehacked replacement.
 		// Any music name defined this way needs to be prefixed with 'D_' because
 		// Doom.exe does not contain the prefix so these strings don't either.
-		const char* mus_string = GStrings[musicname + 1];
+		const char* mus_string = GStrings.CheckString(musicname + 1);
 		if (mus_string != nullptr)
 		{
 			DEH_Music << "D_" << mus_string;
-			musicname = DEH_Music;
+			musicname = DEH_Music.GetChars();
 		}
 	}
 
@@ -183,36 +179,17 @@ static FString LookupMusic(const char* musicname, int& order)
 
 //==========================================================================
 //
-// OpenMusic
+// FindMusic
 //
-// opens a FileReader for the music - used as a callback to keep
-// implementation details out of the core player.
+// loops up a music resource according to the engine's rules
 //
 //==========================================================================
 
-static FileReader OpenMusic(const char* musicname)
+static int FindMusic(const char* musicname)
 {
-	FileReader reader;
-	if (!FileExists(musicname))
-	{
-		int lumpnum;
-		lumpnum = fileSystem.CheckNumForFullName(musicname);
-		if (lumpnum == -1) lumpnum = fileSystem.CheckNumForName(musicname, ns_music);
-		if (lumpnum == -1)
-		{
-			Printf("Music \"%s\" not found\n", musicname);
-		}
-		else if (fileSystem.FileLength(lumpnum) != 0)
-		{
-			reader = fileSystem.ReopenFileReader(lumpnum);
-		}
-	}
-	else
-	{
-		// Load an external file.
-		reader.OpenFile(musicname);
-	}
-	return reader;
+	int lumpnum = fileSystem.CheckNumForFullName(musicname);
+	if (lumpnum == -1) lumpnum = fileSystem.CheckNumForName(musicname, FileSys::ns_music);
+	return lumpnum;
 }
 
 //==========================================================================
@@ -226,7 +203,7 @@ static FileReader OpenMusic(const char* musicname)
 void S_Init()
 {
 	// Hook up the music player with the engine specific customizations.
-	static MusicCallbacks cb = { LookupMusic, OpenMusic };
+	static MusicCallbacks cb = { LookupMusic, FindMusic };
 	S_SetMusicCallbacks(&cb);
 
 	// Must be up before I_InitSound.
@@ -236,14 +213,15 @@ void S_Init()
 	}
 
 	I_InitSound();
-	I_InitMusic();
+	I_InitMusic((int)(Args->CheckParm("-nomusic") || Args->CheckParm("-nosound")));
 
 	// Heretic and Hexen have sound curve lookup tables. Doom does not.
 	int curvelump = fileSystem.CheckNumForName("SNDCURVE");
 	TArray<uint8_t> curve;
 	if (curvelump >= 0)
 	{
-		curve = fileSystem.GetFileData(curvelump);
+		curve.Resize(fileSystem.FileLength(curvelump));
+		fileSystem.ReadFile(curvelump, curve.Data());
 	}
 	soundEngine->Init(curve);
 }
@@ -325,7 +303,7 @@ void S_Start()
 			if (LocalSndInfo.IsNotEmpty())
 			{
 				// Now parse the local SNDINFO
-				int j = fileSystem.CheckNumForFullName(LocalSndInfo, true);
+				int j = fileSystem.CheckNumForFullName(LocalSndInfo.GetChars(), true);
 				if (j >= 0) S_AddLocalSndInfo(j);
 			}
 
@@ -339,7 +317,7 @@ void S_Start()
 
 		if (parse_ss)
 		{
-			S_ParseSndSeq(LocalSndSeq.IsNotEmpty() ? fileSystem.CheckNumForFullName(LocalSndSeq, true) : -1);
+			S_ParseSndSeq(LocalSndSeq.IsNotEmpty() ? fileSystem.CheckNumForFullName(LocalSndSeq.GetChars(), true) : -1);
 		}
 
 		LastLocalSndInfo = LocalSndInfo;
@@ -533,7 +511,7 @@ void DoomSoundEngine::CacheSound(sfxinfo_t* sfx)
 
 FSoundID DoomSoundEngine::ResolveSound(const void * ent, int type, FSoundID soundid, float &attenuation)
 {
-	auto sfx = &S_sfx[soundid];
+	auto sfx = &S_sfx[soundid.index()];
 	if (sfx->UserData[0] & SND_PlayerReserve)
 	{
 		AActor *src;
@@ -716,12 +694,12 @@ void S_PlaySound(AActor *a, int chan, EChanFlags flags, FSoundID sid, float vol,
 
 void A_StartSound(AActor *self, int soundid, int channel, int flags, double volume, double attenuation, double pitch, double startTime)
 {
-	S_PlaySoundPitch(self, channel, EChanFlags::FromInt(flags), soundid, (float)volume, (float)attenuation, (float)pitch, (float)startTime);
+	S_PlaySoundPitch(self, channel, EChanFlags::FromInt(flags), FSoundID::fromInt(soundid), (float)volume, (float)attenuation, (float)pitch, (float)startTime);
 }
 
 int StartSound(AActor* self, int soundid, int channel, int flags, double volume, double attenuation, double pitch, double startTime)
 {
-	return S_PlaySoundPitch(self, channel, EChanFlags::FromInt(flags), soundid, (float)volume, (float)attenuation, (float)pitch, (float)startTime);
+	return S_PlaySoundPitch(self, channel, EChanFlags::FromInt(flags), FSoundID::fromInt(soundid), (float)volume, (float)attenuation, (float)pitch, (float)startTime);
 }
 
 void A_PlaySound(AActor* self, int soundid, int channel, double volume, int looping, double attenuation, int local, double pitch)
@@ -844,17 +822,17 @@ bool S_ChangeSoundPitch(FSoundHandle &handle, double pitch) {
 // Is a sound being played by a specific emitter?
 //==========================================================================
 
-bool S_GetSoundPlayingInfo (const AActor *actor, int sound_id)
+bool S_GetSoundPlayingInfo (const AActor *actor, FSoundID sound_id)
 {
 	return soundEngine->GetSoundPlayingInfo(SOURCE_Actor, actor, sound_id);
 }
 
-bool S_GetSoundPlayingInfo (const sector_t *sec, int sound_id)
+bool S_GetSoundPlayingInfo (const sector_t *sec, FSoundID sound_id)
 {
 	return soundEngine->GetSoundPlayingInfo(SOURCE_Sector, sec, sound_id);
 }
 
-bool S_GetSoundPlayingInfo (const FPolyObj *poly, int sound_id)
+bool S_GetSoundPlayingInfo (const FPolyObj *poly, FSoundID sound_id)
 {
 	return soundEngine->GetSoundPlayingInfo(SOURCE_Polyobj, poly, sound_id);
 }
@@ -865,7 +843,7 @@ bool S_GetSoundPlayingInfo (const FPolyObj *poly, int sound_id)
 //
 //==========================================================================
 
-int S_IsActorPlayingSomething (AActor *actor, int channel, int sound_id)
+bool S_IsActorPlayingSomething (AActor *actor, int channel, FSoundID sound_id)
 {
 	if (compatflags & COMPATF_MAGICSILENCE)
 	{
@@ -968,6 +946,8 @@ static FSerializer &Serialize(FSerializer &arc, const char *key, FSoundChan &cha
 			chan.HandleID = ++soundEngine->LastSoundHandle;
 		}
 
+		//if (SaveVersion < 4560) chan.Pitch /= 128.f;
+
 		switch (chan.SourceType)
 		{
 		case SOURCE_None:										break;
@@ -1052,52 +1032,6 @@ void S_SerializeSounds(FSerializer &arc)
 
 //==========================================================================
 //
-// S_SetSoundPaused
-//
-// Called with state non-zero when the app is active, zero when it isn't.
-//
-//==========================================================================
-
-void S_SetSoundPaused(int state)
-{
-	if (!netgame && (i_pauseinbackground)
-#ifdef _DEBUG
-		&& !demoplayback
-#endif
-		)
-	{
-		pauseext = !state;
-	}
-
-	if ((state || i_soundinbackground) && !pauseext)
-	{
-		if (paused == 0)
-		{
-			S_ResumeSound(true);
-			if (GSnd != nullptr)
-			{
-				GSnd->SetInactive(SoundRenderer::INACTIVE_Active);
-			}
-		}
-	}
-	else
-	{
-		if (paused == 0)
-		{
-			S_PauseSound(false, true);
-			if (GSnd != nullptr)
-			{
-				GSnd->SetInactive(gamestate == GS_LEVEL || gamestate == GS_TITLELEVEL ?
-					SoundRenderer::INACTIVE_Complete :
-					SoundRenderer::INACTIVE_Mute);
-			}
-		}
-	}
-}
-
-
-//==========================================================================
-//
 // CalcSectorSoundOrg
 //
 // Returns the perceived sound origin for a sector. If the listener is
@@ -1121,7 +1055,7 @@ static void CalcSectorSoundOrg(const DVector3& listenpos, const sector_t* sec, i
 			// Find the closest point on the sector's boundary lines and use
 			// that as the perceived origin of the sound.
 			DVector2 xy;
-			sec->ClosestPoint(listenpos, xy);
+			sec->ClosestPoint(listenpos.XY(), xy);
 			pos.X = (float)xy.X;
 			pos.Z = (float)xy.Y;
 		}
@@ -1164,7 +1098,7 @@ static void CalcPolyobjSoundOrg(const DVector3& listenpos, const FPolyObj* poly,
 	sector_t* sec;
 
 	DVector2 ppos;
-	poly->ClosestPoint(listenpos, ppos, &side);
+	poly->ClosestPoint(listenpos.XY(), ppos, &side);
 	pos.X = (float)ppos.X;
 	pos.Z = (float)ppos.Y;
 	sec = side->sector;
@@ -1344,7 +1278,10 @@ bool DoomSoundEngine::ValidatePosVel(int sourcetype, const void* source, const F
 TArray<uint8_t> DoomSoundEngine::ReadSound(int lumpnum)
 {
 	auto wlump = fileSystem.OpenFileReader(lumpnum);
-	return wlump.Read();
+	TArray<uint8_t> buffer(wlump.GetLength(), true);
+	auto len = wlump.Read(buffer.data(), buffer.size());
+	buffer.Resize(len);
+	return buffer;
 }
 
 //==========================================================================
@@ -1356,11 +1293,11 @@ TArray<uint8_t> DoomSoundEngine::ReadSound(int lumpnum)
 //==========================================================================
 static FRandom pr_randsound("RandSound");
 
-int DoomSoundEngine::PickReplacement(int refid)
+FSoundID DoomSoundEngine::PickReplacement(FSoundID refid)
 {
-	while (S_sfx[refid].bRandomHeader)
+	while (S_sfx[refid.index()].bRandomHeader)
 	{
-		const FRandomSoundList* list = &S_rnd[S_sfx[refid].link];
+		const FRandomSoundList* list = &S_rnd[S_sfx[refid.index()].link.index()];
 		refid = list->Choices[pr_randsound(list->Choices.Size())];
 	}
 	return refid;
@@ -1417,9 +1354,8 @@ void DoomSoundEngine::NoiseDebug()
 		color = (chan->ChanFlags & CHANF_LOOP) ? CR_BROWN : CR_GREY;
 
 		// Name
-		fileSystem.GetFileShortName(temp, S_sfx[chan->SoundID].lumpnum);
-		temp[8] = 0;
-		DrawText(twod, NewConsoleFont, color, 0, y, temp, TAG_DONE);
+		auto tname = fileSystem.GetFileShortName(S_sfx[chan->SoundID.index()].lumpnum);
+		DrawText(twod, NewConsoleFont, color, 0, y, tname, TAG_DONE);
 
 		if (!(chan->ChanFlags & CHANF_IS3D))
 		{
@@ -1497,9 +1433,10 @@ void DoomSoundEngine::NoiseDebug()
 	}
 }
 
-void S_NoiseDebug(void)
+ADD_STAT(sounddebug)
 {
 	static_cast<DoomSoundEngine*>(soundEngine)->NoiseDebug();
+	return "";
 }
 
 
@@ -1511,36 +1448,32 @@ void S_NoiseDebug(void)
 
 void DoomSoundEngine::PrintSoundList()
 {
-	auto &S_sfx = soundEngine->GetSounds();
-	char lumpname[9];
 	unsigned int i;
 
-	lumpname[8] = 0;
-	for (i = 0; i < S_sfx.Size(); i++)
+	for (i = 0; i < soundEngine->GetNumSounds(); i++)
 	{
-		const sfxinfo_t* sfx = &S_sfx[i];
+		const sfxinfo_t* sfx = soundEngine->GetSfx(FSoundID::fromInt(i));
 		if (sfx->bRandomHeader)
 		{
-			Printf("%3d. %s -> #%d {", i, sfx->name.GetChars(), sfx->link);
-			const FRandomSoundList* list = &S_rnd[sfx->link];
+			Printf("%3d. %s -> #%d {", i, sfx->name.GetChars(), sfx->link.index());
+			const FRandomSoundList* list = &S_rnd[sfx->link.index()];
 			for (auto& me : list->Choices)
 			{
-				Printf(" %s ", S_sfx[me].name.GetChars());
+				Printf(" %s ", S_sfx[me.index()].name.GetChars());
 			}
 			Printf("}\n");
 		}
 		else if (sfx->UserData[0] & SND_PlayerReserve)
 		{
-			Printf("%3d. %s <<player sound %d>>\n", i, sfx->name.GetChars(), sfx->link);
+			Printf("%3d. %s <<player sound %d>>\n", i, sfx->name.GetChars(), sfx->link.index());
 		}
 		else if (S_sfx[i].lumpnum != -1)
 		{
-			fileSystem.GetFileShortName(lumpname, sfx->lumpnum);
-			Printf("%3d. %s (%s)\n", i, sfx->name.GetChars(), lumpname);
+			Printf("%3d. %s (%s)\n", i, sfx->name.GetChars(), fileSystem.GetFileShortName(sfx->lumpnum));
 		}
 		else if (S_sfx[i].link != sfxinfo_t::NO_LINK)
 		{
-			Printf("%3d. %s -> %s\n", i, sfx->name.GetChars(), S_sfx[sfx->link].name.GetChars());
+			Printf("%3d. %s -> %s\n", i, sfx->name.GetChars(), S_sfx[sfx->link.index()].name.GetChars());
 		}
 		else
 		{
@@ -1565,8 +1498,8 @@ CCMD (playsound)
 {
 	if (argv.argc() > 1)
 	{
-		FSoundID id = argv[1];
-		if (id == 0)
+		FSoundID id = S_FindSound(argv[1]);
+		if (!id.isvalid())
 		{
 			Printf("'%s' is not a sound\n", argv[1]);
 		}
@@ -1587,8 +1520,8 @@ CCMD (loopsound)
 {
 	if (players[consoleplayer].mo != nullptr && !netgame && argv.argc() > 1)
 	{
-		FSoundID id = argv[1];
-		if (id == 0)
+		FSoundID id = S_FindSound(argv[1]);
+		if (!id.isvalid())
 		{
 			Printf("'%s' is not a sound\n", argv[1]);
 		}
@@ -1603,111 +1536,8 @@ CCMD (loopsound)
 	}
 }
 
-//==========================================================================
-//
-// CCMD cachesound <sound name>
-//
-//==========================================================================
-
-CCMD (cachesound)
-{
-	if (argv.argc() < 2)
-	{
-		Printf ("Usage: cachesound <sound> ...\n");
-		return;
-	}
-	for (int i = 1; i < argv.argc(); ++i)
-	{
-		FSoundID sfxnum = argv[i];
-		if (sfxnum != FSoundID(0))
-		{
-			soundEngine->CacheSound(sfxnum);
-		}
-	}
-}
-
-
-CCMD(listsoundchannels)
-{	
-	Printf("%s", soundEngine->ListSoundChannels().GetChars());
-}
-
-// intentionally moved here to keep the s_music include out of the rest of the file.
-
-//==========================================================================
-//
-// S_PauseSound
-//
-// Stop music and sound effects, during game PAUSE.
-//==========================================================================
-#include "s_music.h"
-
-void S_PauseSound (bool notmusic, bool notsfx)
-{
-	if (!notmusic)
-	{
-		S_PauseMusic();
-	}
-	if (!notsfx)
-	{
-		soundEngine->SetPaused(true);
-		GSnd->SetSfxPaused (true, 0);
-	}
-}
-
-DEFINE_ACTION_FUNCTION(DObject, S_PauseSound)
-{
-	PARAM_PROLOGUE;
-	PARAM_BOOL(notmusic);
-	PARAM_BOOL(notsfx);
-	S_PauseSound(notmusic, notsfx);
-	return 0;
-}
-
-//==========================================================================
-//
-// S_ResumeSound
-//
-// Resume music and sound effects, after game PAUSE.
-//==========================================================================
-
-void S_ResumeSound (bool notsfx)
-{
-	S_ResumeMusic();
-	if (!notsfx)
-	{
-		soundEngine->SetPaused(false);
-		GSnd->SetSfxPaused (false, 0);
-	}
-}
-
-DEFINE_ACTION_FUNCTION(DObject, S_ResumeSound)
-{
-	PARAM_PROLOGUE;
-	PARAM_BOOL(notsfx);
-	S_ResumeSound(notsfx);
-	return 0;
-}
-
-
-CCMD (snd_status)
-{
-	GSnd->PrintStatus ();
-}
-
-CCMD (snd_reset)
+CCMD(snd_reset)
 {
 	S_SoundReset();
 }
-
-CCMD (snd_listdrivers)
-{
-	GSnd->PrintDriversList ();
-}
-
-ADD_STAT (sound)
-{
-	return GSnd->GatherStats ();
-}
-
 

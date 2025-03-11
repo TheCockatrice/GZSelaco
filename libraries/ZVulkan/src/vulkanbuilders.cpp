@@ -1,30 +1,9 @@
-/*
-**  Vulkan backend
-**  Copyright (c) 2016-2020 Magnus Norddahl
-**
-**  This software is provided 'as-is', without any express or implied
-**  warranty.  In no event will the authors be held liable for any damages
-**  arising from the use of this software.
-**
-**  Permission is granted to anyone to use this software for any purpose,
-**  including commercial applications, and to alter it and redistribute it
-**  freely, subject to the following restrictions:
-**
-**  1. The origin of this software must not be misrepresented; you must not
-**     claim that you wrote the original software. If you use this software
-**     in a product, an acknowledgment in the product documentation would be
-**     appreciated but is not required.
-**  2. Altered source versions must be plainly marked as such, and must not be
-**     misrepresented as being the original software.
-**  3. This notice may not be removed or altered from any source distribution.
-**
-*/
-
-#include "vk_builders.h"
-#include "engineerrors.h"
-#include "renderstyle.h"
-#include <ShaderLang.h>
-#include <GlslangToSpv.h>
+#include "vulkanbuilders.h"
+#include "vulkansurface.h"
+#include "vulkancompatibledevice.h"
+#include "vulkanswapchain.h"
+#include "glslang/glslang/Public/ShaderLang.h"
+#include "glslang/spirv/GlslangToSpv.h"
 
 static const TBuiltInResource DefaultTBuiltInResource = {
 	/* .MaxLights = */ 32,
@@ -134,35 +113,159 @@ static const TBuiltInResource DefaultTBuiltInResource = {
 	}
 };
 
+void ShaderBuilder::Init()
+{
+	ShInitialize();
+}
+
+void ShaderBuilder::Deinit()
+{
+	ShFinalize();
+}
+
 ShaderBuilder::ShaderBuilder()
 {
 }
 
-ShaderBuilder& ShaderBuilder::VertexShader(const FString &c)
+ShaderBuilder& ShaderBuilder::Type(ShaderType type)
 {
-	code = c;
-	stage = EShLanguage::EShLangVertex;
+	switch (type)
+	{
+	case ShaderType::Vertex: stage = EShLanguage::EShLangVertex; break;
+	case ShaderType::TessControl: stage = EShLanguage::EShLangTessControl; break;
+	case ShaderType::TessEvaluation: stage = EShLanguage::EShLangTessEvaluation; break;
+	case ShaderType::Geometry: stage = EShLanguage::EShLangGeometry; break;
+	case ShaderType::Fragment: stage = EShLanguage::EShLangFragment; break;
+	case ShaderType::Compute: stage = EShLanguage::EShLangCompute; break;
+	}
 	return *this;
 }
 
-ShaderBuilder& ShaderBuilder::FragmentShader(const FString &c)
+ShaderBuilder& ShaderBuilder::AddSource(const std::string& name, const std::string& code)
 {
-	code = c;
-	stage = EShLanguage::EShLangFragment;
+	sources.push_back({ name, code });
 	return *this;
 }
+
+ShaderBuilder& ShaderBuilder::OnIncludeSystem(std::function<ShaderIncludeResult(std::string headerName, std::string includerName, size_t inclusionDepth)> onIncludeSystem)
+{
+	this->onIncludeSystem = std::move(onIncludeSystem);
+	return *this;
+}
+
+ShaderBuilder& ShaderBuilder::OnIncludeLocal(std::function<ShaderIncludeResult(std::string headerName, std::string includerName, size_t inclusionDepth)> onIncludeLocal)
+{
+	this->onIncludeLocal = std::move(onIncludeLocal);
+	return *this;
+}
+
+class ShaderBuilderIncluderImpl : public glslang::TShader::Includer
+{
+public:
+	ShaderBuilderIncluderImpl(ShaderBuilder* shaderBuilder) : shaderBuilder(shaderBuilder)
+	{
+	}
+
+	IncludeResult* includeSystem(const char* headerName, const char* includerName, size_t inclusionDepth) override
+	{
+		if (!shaderBuilder->onIncludeSystem)
+		{
+			return nullptr;
+		}
+
+		try
+		{
+			std::unique_ptr<ShaderIncludeResult> result;
+			try
+			{
+				result = std::make_unique<ShaderIncludeResult>(shaderBuilder->onIncludeSystem(headerName, includerName, inclusionDepth));
+			}
+			catch (const std::exception& e)
+			{
+				result = std::make_unique<ShaderIncludeResult>(e.what());
+			}
+
+			if (!result || (result->name.empty() && result->text.empty()))
+			{
+				return nullptr;
+			}
+
+			IncludeResult* outer = new IncludeResult(result->name, result->text.data(), result->text.size(), result.get());
+			result.release();
+			return outer;
+		}
+		catch (...)
+		{
+			return nullptr;
+		}
+	}
+
+	IncludeResult* includeLocal(const char* headerName, const char* includerName, size_t inclusionDepth) override
+	{
+		if (!shaderBuilder->onIncludeLocal)
+		{
+			return nullptr;
+		}
+
+		try
+		{
+			std::unique_ptr<ShaderIncludeResult> result;
+			try
+			{
+				result = std::make_unique<ShaderIncludeResult>(shaderBuilder->onIncludeLocal(headerName, includerName, inclusionDepth));
+			}
+			catch (const std::exception& e)
+			{
+				result = std::make_unique<ShaderIncludeResult>(e.what());
+			}
+
+			if (!result || (result->name.empty() && result->text.empty()))
+			{
+				return nullptr;
+			}
+
+			IncludeResult* outer = new IncludeResult(result->name, result->text.data(), result->text.size(), result.get());
+			result.release();
+			return outer;
+		}
+		catch (...)
+		{
+			return nullptr;
+		}
+	}
+
+	void releaseInclude(IncludeResult* result) override
+	{
+		if (result)
+		{
+			delete (ShaderIncludeResult*)result->userData;
+			delete result;
+		}
+	}
+
+private:
+	ShaderBuilder* shaderBuilder = nullptr;
+};
 
 std::unique_ptr<VulkanShader> ShaderBuilder::Create(const char *shadername, VulkanDevice *device)
 {
 	EShLanguage stage = (EShLanguage)this->stage;
-	const char *sources[] = { code.GetChars() };
+
+	std::vector<const char*> namesC, sourcesC;
+	std::vector<int> lengthsC;
+	for (const auto& s : sources)
+	{
+		namesC.push_back(s.first.c_str());
+		sourcesC.push_back(s.second.c_str());
+		lengthsC.push_back((int)s.second.size());
+	}
 
 	TBuiltInResource resources = DefaultTBuiltInResource;
 
 	glslang::TShader shader(stage);
-	shader.setStrings(sources, 1);
+	shader.setStringsWithLengthsAndNames(sourcesC.data(), lengthsC.data(), namesC.data(), (int)sources.size());
 	shader.setEnvInput(glslang::EShSourceGlsl, stage, glslang::EShClientVulkan, 100);
-    if (device->ApiVersion >= VK_API_VERSION_1_2)
+    if (device->Instance->ApiVersion >= VK_API_VERSION_1_2)
     {
         shader.setEnvClient(glslang::EShClientVulkan, glslang::EShTargetVulkan_1_2);
         shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_4);
@@ -172,10 +275,12 @@ std::unique_ptr<VulkanShader> ShaderBuilder::Create(const char *shadername, Vulk
         shader.setEnvClient(glslang::EShClientVulkan, glslang::EShTargetVulkan_1_0);
         shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_0);
     }
-	bool compileSuccess = shader.parse(&resources, 110, false, EShMsgVulkanRules);
+
+	ShaderBuilderIncluderImpl includer(this);
+	bool compileSuccess = shader.parse(&resources, 110, false, EShMsgVulkanRules, includer);
 	if (!compileSuccess)
 	{
-		I_FatalError("Shader '%s' could not be compiled:\n%s\n", shadername, shader.getInfoLog());
+		VulkanError((std::string("Shader compile failed: ") + shader.getInfoLog()).c_str());
 	}
 
 	glslang::TProgram program;
@@ -183,13 +288,13 @@ std::unique_ptr<VulkanShader> ShaderBuilder::Create(const char *shadername, Vulk
 	bool linkSuccess = program.link(EShMsgDefault);
 	if (!linkSuccess)
 	{
-		I_FatalError("Shader '%s' could not be linked:\n%s\n", shadername, program.getInfoLog());
+		VulkanError((std::string("Shader link failed: ") + program.getInfoLog()).c_str());
 	}
 
 	glslang::TIntermediate *intermediate = program.getIntermediate(stage);
 	if (!intermediate)
 	{
-		I_FatalError("Internal shader compiler error while processing '%s'\n", shadername);
+		VulkanError("Internal shader compiler error");
 	}
 
 	glslang::SpvOptions spvOptions;
@@ -209,11 +314,7 @@ std::unique_ptr<VulkanShader> ShaderBuilder::Create(const char *shadername, Vulk
 	VkShaderModule shaderModule;
 	VkResult result = vkCreateShaderModule(device->device, &createInfo, nullptr, &shaderModule);
 	if (result != VK_SUCCESS)
-	{
-		FString msg;
-		msg.Format("Could not create vulkan shader module for '%s': %s", shadername, VkResultToString(result).GetChars());
-		VulkanError(msg.GetChars());
-	}
+		VulkanError("Could not create vulkan shader module");
 
 	auto obj = std::make_unique<VulkanShader>(device, shaderModule);
 	if (debugName)
@@ -223,44 +324,50 @@ std::unique_ptr<VulkanShader> ShaderBuilder::Create(const char *shadername, Vulk
 
 /////////////////////////////////////////////////////////////////////////////
 
-GraphicsPipelineBuilder& GraphicsPipelineBuilder::BlendMode(const FRenderStyle &style)
+CommandPoolBuilder::CommandPoolBuilder()
 {
-	// Just in case Vulkan doesn't do this optimization itself
-	if (style.BlendOp == STYLEOP_Add && style.SrcAlpha == STYLEALPHA_One && style.DestAlpha == STYLEALPHA_Zero && style.Flags == 0)
-	{
-		colorBlendAttachment.blendEnable = VK_FALSE;
-		return *this;
-	}
+}
 
-	static const int blendstyles[] = {
-		VK_BLEND_FACTOR_ZERO,
-		VK_BLEND_FACTOR_ONE,
-		VK_BLEND_FACTOR_SRC_ALPHA,
-		VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-		VK_BLEND_FACTOR_SRC_COLOR,
-		VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR,
-		VK_BLEND_FACTOR_DST_COLOR,
-		VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR,
-		VK_BLEND_FACTOR_DST_ALPHA,
-		VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA,
-	};
+CommandPoolBuilder& CommandPoolBuilder::QueueFamily(int index)
+{
+	queueFamilyIndex = index;
+	return *this;
+}
 
-	static const int renderops[] = {
-		0, VK_BLEND_OP_ADD, VK_BLEND_OP_SUBTRACT, VK_BLEND_OP_REVERSE_SUBTRACT, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
-	};
+std::unique_ptr<VulkanCommandPool> CommandPoolBuilder::Create(VulkanDevice* device)
+{
+	auto obj = std::make_unique<VulkanCommandPool>(device, queueFamilyIndex != -1 ? queueFamilyIndex : device->GraphicsFamily);
+	if (debugName)
+		obj->SetDebugName(debugName);
+	return obj;
+}
 
-	int srcblend = blendstyles[style.SrcAlpha%STYLEALPHA_MAX];
-	int dstblend = blendstyles[style.DestAlpha%STYLEALPHA_MAX];
-	int blendequation = renderops[style.BlendOp & 15];
+/////////////////////////////////////////////////////////////////////////////
 
-	if (blendequation == -1)	// This was a fuzz style.
-	{
-		srcblend = VK_BLEND_FACTOR_DST_COLOR;
-		dstblend = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-		blendequation = VK_BLEND_OP_ADD;
-	}
+SemaphoreBuilder::SemaphoreBuilder()
+{
+}
 
-	return BlendMode((VkBlendOp)blendequation, (VkBlendFactor)srcblend, (VkBlendFactor)dstblend);
+std::unique_ptr<VulkanSemaphore> SemaphoreBuilder::Create(VulkanDevice* device)
+{
+	auto obj = std::make_unique<VulkanSemaphore>(device);
+	if (debugName)
+		obj->SetDebugName(debugName);
+	return obj;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+FenceBuilder::FenceBuilder()
+{
+}
+
+std::unique_ptr<VulkanFence> FenceBuilder::Create(VulkanDevice* device)
+{
+	auto obj = std::make_unique<VulkanFence>(device);
+	if (debugName)
+		obj->SetDebugName(debugName);
+	return obj;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -397,13 +504,15 @@ ImageViewBuilder& ImageViewBuilder::Type(VkImageViewType type)
 	return *this;
 }
 
-ImageViewBuilder& ImageViewBuilder::Image(VulkanImage* image, VkFormat format, VkImageAspectFlags aspectMask)
+ImageViewBuilder& ImageViewBuilder::Image(VulkanImage* image, VkFormat format, VkImageAspectFlags aspectMask, int mipLevel, int arrayLayer, int levelCount, int layerCount)
 {
 	viewInfo.image = image->image;
 	viewInfo.format = format;
-	viewInfo.subresourceRange.levelCount = image->mipLevels;
+	viewInfo.subresourceRange.levelCount = levelCount == 0 ? image->mipLevels : levelCount;
 	viewInfo.subresourceRange.aspectMask = aspectMask;
-	viewInfo.subresourceRange.layerCount = image->layerCount;
+	viewInfo.subresourceRange.layerCount = layerCount == 0 ? image->layerCount : layerCount;
+	viewInfo.subresourceRange.baseMipLevel = mipLevel;
+	viewInfo.subresourceRange.baseArrayLayer = arrayLayer;
 	return *this;
 }
 
@@ -482,6 +591,12 @@ SamplerBuilder& SamplerBuilder::Anisotropy(float maxAnisotropy)
 	return *this;
 }
 
+SamplerBuilder& SamplerBuilder::MipLodBias(float bias)
+{
+	samplerInfo.mipLodBias = bias;
+	return *this;
+}
+
 SamplerBuilder& SamplerBuilder::MaxLod(float value)
 {
 	samplerInfo.maxLod = value;
@@ -509,7 +624,7 @@ BufferBuilder::BufferBuilder()
 
 BufferBuilder& BufferBuilder::Size(size_t size)
 {
-	bufferInfo.size = max(size, (size_t)16);
+	bufferInfo.size = std::max(size, (size_t)16);
 	return *this;
 }
 
@@ -529,15 +644,69 @@ BufferBuilder& BufferBuilder::MemoryType(VkMemoryPropertyFlags requiredFlags, Vk
 	return *this;
 }
 
+BufferBuilder& BufferBuilder::MinAlignment(VkDeviceSize memoryAlignment)
+{
+	minAlignment = memoryAlignment;
+	return *this;
+}
+
 std::unique_ptr<VulkanBuffer> BufferBuilder::Create(VulkanDevice* device)
 {
 	VkBuffer buffer;
 	VmaAllocation allocation;
 
-	VkResult result = vmaCreateBuffer(device->allocator, &bufferInfo, &allocInfo, &buffer, &allocation, nullptr);
-	CheckVulkanError(result, "Could not allocate memory for vulkan buffer");
+	if (minAlignment == 0)
+	{
+		VkResult result = vmaCreateBuffer(device->allocator, &bufferInfo, &allocInfo, &buffer, &allocation, nullptr);
+		CheckVulkanError(result, "Could not allocate memory for vulkan buffer");
+	}
+	else
+	{
+		VkResult result = vmaCreateBufferWithAlignment(device->allocator, &bufferInfo, &allocInfo, minAlignment, &buffer, &allocation, nullptr);
+		CheckVulkanError(result, "Could not allocate memory for vulkan buffer");
+	}
 
 	auto obj = std::make_unique<VulkanBuffer>(device, buffer, allocation, bufferInfo.size);
+	if (debugName)
+		obj->SetDebugName(debugName);
+	return obj;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+AccelerationStructureBuilder::AccelerationStructureBuilder()
+{
+}
+
+AccelerationStructureBuilder& AccelerationStructureBuilder::Type(VkAccelerationStructureTypeKHR type)
+{
+	createInfo.type = type;
+	return *this;
+}
+
+AccelerationStructureBuilder& AccelerationStructureBuilder::Buffer(VulkanBuffer* buffer, VkDeviceSize size)
+{
+	createInfo.buffer = buffer->buffer;
+	createInfo.offset = 0;
+	createInfo.size = size;
+	return *this;
+}
+
+AccelerationStructureBuilder& AccelerationStructureBuilder::Buffer(VulkanBuffer* buffer, VkDeviceSize offset, VkDeviceSize size)
+{
+	createInfo.buffer = buffer->buffer;
+	createInfo.offset = offset;
+	createInfo.size = size;
+	return *this;
+}
+
+std::unique_ptr<VulkanAccelerationStructure> AccelerationStructureBuilder::Create(VulkanDevice* device)
+{
+	VkAccelerationStructureKHR hande = {};
+	VkResult result = vkCreateAccelerationStructureKHR(device->device, &createInfo, nullptr, &hande);
+	if (result != VK_SUCCESS)
+		VulkanError("vkCreateAccelerationStructureKHR failed");
+	auto obj = std::make_unique<VulkanAccelerationStructure>(device, hande);
 	if (debugName)
 		obj->SetDebugName(debugName);
 	return obj;
@@ -549,6 +718,12 @@ ComputePipelineBuilder::ComputePipelineBuilder()
 {
 	pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
 	stageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+}
+
+ComputePipelineBuilder& ComputePipelineBuilder::Cache(VulkanPipelineCache* cache)
+{
+	this->cache = cache;
+	return *this;
 }
 
 ComputePipelineBuilder& ComputePipelineBuilder::Layout(VulkanPipelineLayout* layout)
@@ -570,7 +745,7 @@ ComputePipelineBuilder& ComputePipelineBuilder::ComputeShader(VulkanShader* shad
 std::unique_ptr<VulkanPipeline> ComputePipelineBuilder::Create(VulkanDevice* device)
 {
 	VkPipeline pipeline;
-	vkCreateComputePipelines(device->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline);
+	vkCreateComputePipelines(device->device, cache ? cache->cache : VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline);
 	auto obj = std::make_unique<VulkanPipeline>(device, pipeline);
 	if (debugName)
 		obj->SetDebugName(debugName);
@@ -581,10 +756,15 @@ std::unique_ptr<VulkanPipeline> ComputePipelineBuilder::Create(VulkanDevice* dev
 
 DescriptorSetLayoutBuilder::DescriptorSetLayoutBuilder()
 {
-	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 }
 
-DescriptorSetLayoutBuilder& DescriptorSetLayoutBuilder::AddBinding(int index, VkDescriptorType type, int arrayCount, VkShaderStageFlags stageFlags)
+DescriptorSetLayoutBuilder& DescriptorSetLayoutBuilder::Flags(VkDescriptorSetLayoutCreateFlags flags)
+{
+	layoutInfo.flags = flags;
+	return *this;
+}
+
+DescriptorSetLayoutBuilder& DescriptorSetLayoutBuilder::AddBinding(int index, VkDescriptorType type, int arrayCount, VkShaderStageFlags stageFlags, VkDescriptorBindingFlags flags)
 {
 	VkDescriptorSetLayoutBinding binding = { };
 	binding.binding = index;
@@ -592,10 +772,18 @@ DescriptorSetLayoutBuilder& DescriptorSetLayoutBuilder::AddBinding(int index, Vk
 	binding.descriptorCount = arrayCount;
 	binding.stageFlags = stageFlags;
 	binding.pImmutableSamplers = nullptr;
-	bindings.Push(binding);
+	bindings.push_back(binding);
+	bindingFlags.push_back(flags);
 
-	layoutInfo.bindingCount = (uint32_t)bindings.Size();
-	layoutInfo.pBindings = &bindings[0];
+	layoutInfo.bindingCount = (uint32_t)bindings.size();
+	layoutInfo.pBindings = bindings.data();
+
+	bindingFlagsInfo.bindingCount = (uint32_t)bindings.size();
+	bindingFlagsInfo.pBindingFlags = bindingFlags.data();
+
+	if (flags != 0)
+		layoutInfo.pNext = &bindingFlagsInfo;
+
 	return *this;
 }
 
@@ -617,6 +805,12 @@ DescriptorPoolBuilder::DescriptorPoolBuilder()
 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	poolInfo.maxSets = 1;
 	poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+}
+
+DescriptorPoolBuilder& DescriptorPoolBuilder::Flags(VkDescriptorPoolCreateFlags flags)
+{
+	poolInfo.flags = flags | VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+	return *this;
 }
 
 DescriptorPoolBuilder& DescriptorPoolBuilder::MaxSets(int value)
@@ -726,6 +920,63 @@ std::unique_ptr<VulkanFramebuffer> FramebufferBuilder::Create(VulkanDevice* devi
 
 /////////////////////////////////////////////////////////////////////////////
 
+
+ColorBlendAttachmentBuilder::ColorBlendAttachmentBuilder()
+{
+	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+	colorBlendAttachment.blendEnable = VK_FALSE;
+	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+	colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+	colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+}
+
+ColorBlendAttachmentBuilder& ColorBlendAttachmentBuilder::ColorWriteMask(VkColorComponentFlags mask)
+{
+	colorBlendAttachment.colorWriteMask = mask;
+	return *this;
+}
+
+ColorBlendAttachmentBuilder& ColorBlendAttachmentBuilder::AdditiveBlendMode()
+{
+	colorBlendAttachment.blendEnable = VK_TRUE;
+	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+	colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+	colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+	return *this;
+}
+
+ColorBlendAttachmentBuilder& ColorBlendAttachmentBuilder::AlphaBlendMode()
+{
+	colorBlendAttachment.blendEnable = VK_TRUE;
+	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+	return *this;
+}
+
+ColorBlendAttachmentBuilder& ColorBlendAttachmentBuilder::BlendMode(VkBlendOp op, VkBlendFactor src, VkBlendFactor dst)
+{
+	colorBlendAttachment.blendEnable = VK_TRUE;
+	colorBlendAttachment.srcColorBlendFactor = src;
+	colorBlendAttachment.dstColorBlendFactor = dst;
+	colorBlendAttachment.colorBlendOp = op;
+	colorBlendAttachment.srcAlphaBlendFactor = src;
+	colorBlendAttachment.dstAlphaBlendFactor = dst;
+	colorBlendAttachment.alphaBlendOp = op;
+	return *this;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
 GraphicsPipelineBuilder::GraphicsPipelineBuilder()
 {
 	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -752,6 +1003,10 @@ GraphicsPipelineBuilder::GraphicsPipelineBuilder()
 	inputAssembly.primitiveRestartEnable = VK_FALSE;
 
 	viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+	viewportState.viewportCount = 1;
+	viewportState.pViewports = &viewport;
+	viewportState.scissorCount = 1;
+	viewportState.pScissors = &scissor;
 
 	depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 	depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
@@ -782,20 +1037,9 @@ GraphicsPipelineBuilder::GraphicsPipelineBuilder()
 	multisampling.alphaToCoverageEnable = VK_FALSE;
 	multisampling.alphaToOneEnable = VK_FALSE;
 
-	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-	colorBlendAttachment.blendEnable = VK_FALSE;
-	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-	colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-	colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-
 	colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
 	colorBlending.logicOpEnable = VK_FALSE;
 	colorBlending.logicOp = VK_LOGIC_OP_COPY;
-	colorBlending.attachmentCount = 1;
-	colorBlending.pAttachments = &colorBlendAttachment;
 	colorBlending.blendConstants[0] = 0.0f;
 	colorBlending.blendConstants[1] = 0.0f;
 	colorBlending.blendConstants[2] = 0.0f;
@@ -807,6 +1051,12 @@ GraphicsPipelineBuilder::GraphicsPipelineBuilder()
 GraphicsPipelineBuilder& GraphicsPipelineBuilder::RasterizationSamples(VkSampleCountFlagBits samples)
 {
 	multisampling.rasterizationSamples = samples;
+	return *this;
+}
+
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::Cache(VulkanPipelineCache* cache)
+{
+	this->cache = cache;
 	return *this;
 }
 
@@ -842,9 +1092,6 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::Viewport(float x, float y, flo
 	viewport.height = height;
 	viewport.minDepth = minDepth;
 	viewport.maxDepth = maxDepth;
-
-	viewportState.viewportCount = 1;
-	viewportState.pViewports = &viewport;
 	return *this;
 }
 
@@ -854,9 +1101,6 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::Scissor(int x, int y, int widt
 	scissor.offset.y = y;
 	scissor.extent.width = width;
 	scissor.extent.height = height;
-
-	viewportState.scissorCount = 1;
-	viewportState.pScissors = &scissor;
 	return *this;
 }
 
@@ -916,53 +1160,9 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::DepthBias(bool enable, float b
 	return *this;
 }
 
-GraphicsPipelineBuilder& GraphicsPipelineBuilder::ColorWriteMask(VkColorComponentFlags mask)
+GraphicsPipelineBuilder& GraphicsPipelineBuilder::AddColorBlendAttachment(VkPipelineColorBlendAttachmentState state)
 {
-	colorBlendAttachment.colorWriteMask = mask;
-	return *this;
-}
-
-GraphicsPipelineBuilder& GraphicsPipelineBuilder::AdditiveBlendMode()
-{
-	colorBlendAttachment.blendEnable = VK_TRUE;
-	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
-	colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-	colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-	return *this;
-}
-
-GraphicsPipelineBuilder& GraphicsPipelineBuilder::AlphaBlendMode()
-{
-	colorBlendAttachment.blendEnable = VK_TRUE;
-	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-	colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-	colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-	return *this;
-}
-
-GraphicsPipelineBuilder& GraphicsPipelineBuilder::BlendMode(VkBlendOp op, VkBlendFactor src, VkBlendFactor dst)
-{
-	colorBlendAttachment.blendEnable = VK_TRUE;
-	colorBlendAttachment.srcColorBlendFactor = src;
-	colorBlendAttachment.dstColorBlendFactor = dst;
-	colorBlendAttachment.colorBlendOp = op;
-	colorBlendAttachment.srcAlphaBlendFactor = src;
-	colorBlendAttachment.dstAlphaBlendFactor = dst;
-	colorBlendAttachment.alphaBlendOp = op;
-	return *this;
-}
-
-GraphicsPipelineBuilder& GraphicsPipelineBuilder::SubpassColorAttachmentCount(int count)
-{
-	colorBlendAttachments.resize(count, colorBlendAttachment);
-	colorBlending.pAttachments = colorBlendAttachments.data();
-	colorBlending.attachmentCount = (uint32_t)colorBlendAttachments.size();
+	colorBlendAttachments.push_back(state);
 	return *this;
 }
 
@@ -1031,8 +1231,13 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::AddDynamicState(VkDynamicState
 
 std::unique_ptr<VulkanPipeline> GraphicsPipelineBuilder::Create(VulkanDevice* device)
 {
+	if (colorBlendAttachments.empty())
+		colorBlendAttachments.push_back(ColorBlendAttachmentBuilder().Create());
+	colorBlending.pAttachments = colorBlendAttachments.data();
+	colorBlending.attachmentCount = (uint32_t)colorBlendAttachments.size();
+
 	VkPipeline pipeline = 0;
-	VkResult result = vkCreateGraphicsPipelines(device->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline);
+	VkResult result = vkCreateGraphicsPipelines(device->device, cache ? cache->cache : VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline);
 	CheckVulkanError(result, "Could not create graphics pipeline");
 	auto obj = std::make_unique<VulkanPipeline>(device, pipeline);
 	if (debugName)
@@ -1073,6 +1278,54 @@ std::unique_ptr<VulkanPipelineLayout> PipelineLayoutBuilder::Create(VulkanDevice
 	VkResult result = vkCreatePipelineLayout(device->device, &pipelineLayoutInfo, nullptr, &pipelineLayout);
 	CheckVulkanError(result, "Could not create pipeline layout");
 	auto obj = std::make_unique<VulkanPipelineLayout>(device, pipelineLayout);
+	if (debugName)
+		obj->SetDebugName(debugName);
+	return obj;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+PipelineCacheBuilder::PipelineCacheBuilder()
+{
+	pipelineCacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+}
+
+PipelineCacheBuilder& PipelineCacheBuilder::InitialData(const void* data, size_t size)
+{
+	initData.resize(size);
+	memcpy(initData.data(), data, size);
+	return *this;
+}
+
+PipelineCacheBuilder& PipelineCacheBuilder::Flags(VkPipelineCacheCreateFlags flags)
+{
+	pipelineCacheInfo.flags = flags;
+	return *this;
+}
+
+std::unique_ptr<VulkanPipelineCache> PipelineCacheBuilder::Create(VulkanDevice* device)
+{
+	pipelineCacheInfo.pInitialData = nullptr;
+	pipelineCacheInfo.initialDataSize = 0;
+
+	// Check if the saved cache data is compatible with our device:
+	if (initData.size() >= sizeof(VkPipelineCacheHeaderVersionOne))
+	{
+		VkPipelineCacheHeaderVersionOne* header = (VkPipelineCacheHeaderVersionOne*)initData.data();
+		if (header->headerVersion == VK_PIPELINE_CACHE_HEADER_VERSION_ONE &&
+			header->vendorID == device->PhysicalDevice.Properties.Properties.vendorID &&
+			header->deviceID == device->PhysicalDevice.Properties.Properties.deviceID &&
+			memcmp(header->pipelineCacheUUID, device->PhysicalDevice.Properties.Properties.pipelineCacheUUID, VK_UUID_SIZE) == 0)
+		{
+			pipelineCacheInfo.pInitialData = initData.data();
+			pipelineCacheInfo.initialDataSize = initData.size();
+		}
+	}
+
+	VkPipelineCache pipelineCache;
+	VkResult result = vkCreatePipelineCache(device->device, &pipelineCacheInfo, nullptr, &pipelineCache);
+	CheckVulkanError(result, "Could not create pipeline cache");
+	auto obj = std::make_unique<VulkanPipelineCache>(device, pipelineCache);
 	if (debugName)
 		obj->SetDebugName(debugName);
 	return obj;
@@ -1214,12 +1467,12 @@ PipelineBarrier& PipelineBarrier::AddBuffer(VulkanBuffer* buffer, VkDeviceSize o
 	return *this;
 }
 
-PipelineBarrier& PipelineBarrier::AddImage(VulkanImage* image, VkImageLayout oldLayout, VkImageLayout newLayout, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, VkImageAspectFlags aspectMask, int baseMipLevel, int levelCount)
+PipelineBarrier& PipelineBarrier::AddImage(VulkanImage* image, VkImageLayout oldLayout, VkImageLayout newLayout, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, VkImageAspectFlags aspectMask, int baseMipLevel, int levelCount, int baseArrayLayer, int layerCount)
 {
-	return AddImage(image->image, oldLayout, newLayout, srcAccessMask, dstAccessMask, aspectMask, baseMipLevel, levelCount);
+	return AddImage(image->image, oldLayout, newLayout, srcAccessMask, dstAccessMask, aspectMask, baseMipLevel, levelCount, baseArrayLayer, layerCount);
 }
 
-PipelineBarrier& PipelineBarrier::AddImage(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, VkImageAspectFlags aspectMask, int baseMipLevel, int levelCount)
+PipelineBarrier& PipelineBarrier::AddImage(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, VkImageAspectFlags aspectMask, int baseMipLevel, int levelCount, int baseArrayLayer, int layerCount)
 {
 	VkImageMemoryBarrier barrier = { };
 	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -1233,8 +1486,8 @@ PipelineBarrier& PipelineBarrier::AddImage(VkImage image, VkImageLayout oldLayou
 	barrier.subresourceRange.aspectMask = aspectMask;
 	barrier.subresourceRange.baseMipLevel = baseMipLevel;
 	barrier.subresourceRange.levelCount = levelCount;
-	barrier.subresourceRange.baseArrayLayer = 0;
-	barrier.subresourceRange.layerCount = 1;
+	barrier.subresourceRange.baseArrayLayer = baseArrayLayer;
+	barrier.subresourceRange.layerCount = layerCount;
 	imageMemoryBarriers.push_back(barrier);
 	return *this;
 }
@@ -1375,6 +1628,11 @@ WriteDescriptors& WriteDescriptors::AddStorageImage(VulkanDescriptorSet* descrip
 
 WriteDescriptors& WriteDescriptors::AddCombinedImageSampler(VulkanDescriptorSet* descriptorSet, int binding, VulkanImageView* view, VulkanSampler* sampler, VkImageLayout imageLayout)
 {
+	return AddCombinedImageSampler(descriptorSet, binding, 0, view, sampler, imageLayout);
+}
+
+WriteDescriptors& WriteDescriptors::AddCombinedImageSampler(VulkanDescriptorSet* descriptorSet, int binding, int arrayIndex, VulkanImageView* view, VulkanSampler* sampler, VkImageLayout imageLayout)
+{
 	VkDescriptorImageInfo imageInfo = {};
 	imageInfo.imageView = view->view;
 	imageInfo.sampler = sampler->sampler;
@@ -1387,7 +1645,7 @@ WriteDescriptors& WriteDescriptors::AddCombinedImageSampler(VulkanDescriptorSet*
 	descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 	descriptorWrite.dstSet = descriptorSet->set;
 	descriptorWrite.dstBinding = binding;
-	descriptorWrite.dstArrayElement = 0;
+	descriptorWrite.dstArrayElement = arrayIndex;
 	descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	descriptorWrite.descriptorCount = 1;
 	descriptorWrite.pImageInfo = &extra->imageInfo;
@@ -1419,5 +1677,402 @@ WriteDescriptors& WriteDescriptors::AddAccelerationStructure(VulkanDescriptorSet
 
 void WriteDescriptors::Execute(VulkanDevice* device)
 {
-	vkUpdateDescriptorSets(device->device, (uint32_t)writes.size(), writes.data(), 0, nullptr);
+	if (!writes.empty())
+		vkUpdateDescriptorSets(device->device, (uint32_t)writes.size(), writes.data(), 0, nullptr);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+VulkanInstanceBuilder::VulkanInstanceBuilder()
+{
+	apiVersionsToTry = { VK_API_VERSION_1_2, VK_API_VERSION_1_1, VK_API_VERSION_1_0 };
+
+	OptionalExtension(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME);
+	OptionalExtension(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+}
+
+VulkanInstanceBuilder& VulkanInstanceBuilder::ApiVersionsToTry(const std::vector<uint32_t>& versions)
+{
+	apiVersionsToTry = versions;
+	return *this;
+}
+
+VulkanInstanceBuilder& VulkanInstanceBuilder::RequireExtension(const std::string& extensionName)
+{
+	requiredExtensions.insert(extensionName);
+	return *this;
+}
+
+VulkanInstanceBuilder& VulkanInstanceBuilder::RequireSurfaceExtensions(bool enable)
+{
+	if (enable)
+	{
+		RequireExtension(VK_KHR_SURFACE_EXTENSION_NAME);
+
+#if defined(VK_USE_PLATFORM_WIN32_KHR)
+		RequireExtension(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+#elif defined(VK_USE_PLATFORM_MACOS_MVK)
+		RequireExtension(VK_MVK_MACOS_SURFACE_EXTENSION_NAME);
+#elif defined(VK_USE_PLATFORM_XLIB_KHR)
+		RequireExtension(VK_KHR_XLIB_SURFACE_EXTENSION_NAME);
+#endif
+
+		OptionalExtension(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME); // For HDR support
+	}
+	return *this;
+}
+
+VulkanInstanceBuilder& VulkanInstanceBuilder::OptionalExtension(const std::string& extensionName)
+{
+	optionalExtensions.insert(extensionName);
+	return *this;
+}
+
+VulkanInstanceBuilder& VulkanInstanceBuilder::DebugLayer(bool enable)
+{
+	debugLayer = enable;
+	return *this;
+}
+
+std::shared_ptr<VulkanInstance> VulkanInstanceBuilder::Create()
+{
+	return std::make_shared<VulkanInstance>(apiVersionsToTry, requiredExtensions, optionalExtensions, debugLayer);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+
+VulkanSurfaceBuilder::VulkanSurfaceBuilder()
+{
+}
+
+VulkanSurfaceBuilder& VulkanSurfaceBuilder::Win32Window(HWND hwnd)
+{
+	this->hwnd = hwnd;
+	return *this;
+}
+
+std::shared_ptr<VulkanSurface> VulkanSurfaceBuilder::Create(std::shared_ptr<VulkanInstance> instance)
+{
+	return std::make_shared<VulkanSurface>(std::move(instance), hwnd);
+}
+
+#endif
+
+/////////////////////////////////////////////////////////////////////////////
+
+VulkanDeviceBuilder::VulkanDeviceBuilder()
+{
+	OptionalExtension(VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME);
+	OptionalExtension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
+}
+
+VulkanDeviceBuilder& VulkanDeviceBuilder::RequireExtension(const std::string& extensionName)
+{
+	requiredDeviceExtensions.insert(extensionName);
+	return *this;
+}
+
+VulkanDeviceBuilder& VulkanDeviceBuilder::OptionalExtension(const std::string& extensionName)
+{
+	optionalDeviceExtensions.insert(extensionName);
+	return *this;
+}
+
+VulkanDeviceBuilder& VulkanDeviceBuilder::OptionalRayQuery()
+{
+	OptionalExtension(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
+	OptionalExtension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+	OptionalExtension(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
+	OptionalExtension(VK_KHR_RAY_QUERY_EXTENSION_NAME);
+	return *this;
+}
+
+VulkanDeviceBuilder& VulkanDeviceBuilder::OptionalDescriptorIndexing()
+{
+	OptionalExtension(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
+	return *this;
+}
+
+VulkanDeviceBuilder& VulkanDeviceBuilder::Surface(std::shared_ptr<VulkanSurface> surface)
+{
+	if (surface)
+	{
+		RequireExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+#if defined(VK_USE_PLATFORM_WIN32_KHR)
+		OptionalExtension(VK_EXT_FULL_SCREEN_EXCLUSIVE_EXTENSION_NAME);
+#endif
+	}
+	this->surface = std::move(surface);
+	return *this;
+}
+
+VulkanDeviceBuilder& VulkanDeviceBuilder::SelectDevice(int index)
+{
+	deviceIndex = index;
+	return *this;
+}
+
+std::vector<VulkanCompatibleDevice> VulkanDeviceBuilder::FindDevices(const std::shared_ptr<VulkanInstance>& instance)
+{
+	std::vector<VulkanCompatibleDevice> supportedDevices;
+
+	for (size_t idx = 0; idx < instance->PhysicalDevices.size(); idx++)
+	{
+		const auto& info = instance->PhysicalDevices[idx];
+
+		// Check if all required extensions are there
+		std::set<std::string> requiredExtensionSearch = requiredDeviceExtensions;
+		for (const auto& ext : info.Extensions)
+			requiredExtensionSearch.erase(ext.extensionName);
+		if (!requiredExtensionSearch.empty())
+			continue;
+
+		// Check if all required features are there
+		if (info.Features.Features.samplerAnisotropy != VK_TRUE ||
+			info.Features.Features.fragmentStoresAndAtomics != VK_TRUE ||
+			info.Features.Features.multiDrawIndirect != VK_TRUE ||
+			info.Features.Features.independentBlend != VK_TRUE)
+			continue;
+
+		VulkanCompatibleDevice dev;
+		dev.Device = &instance->PhysicalDevices[idx];
+		dev.EnabledDeviceExtensions = requiredDeviceExtensions;
+
+		// Enable optional extensions we are interested in, if they are available on this device
+		for (const auto& ext : dev.Device->Extensions)
+		{
+			if (optionalDeviceExtensions.find(ext.extensionName) != optionalDeviceExtensions.end())
+			{
+				dev.EnabledDeviceExtensions.insert(ext.extensionName);
+			}
+		}
+
+		// Enable optional features we are interested in, if they are available on this device
+		auto& enabledFeatures = dev.EnabledFeatures;
+		auto& deviceFeatures = dev.Device->Features;
+		enabledFeatures.Features.samplerAnisotropy = deviceFeatures.Features.samplerAnisotropy;
+		enabledFeatures.Features.fragmentStoresAndAtomics = deviceFeatures.Features.fragmentStoresAndAtomics;
+		enabledFeatures.Features.depthClamp = deviceFeatures.Features.depthClamp;
+		enabledFeatures.Features.shaderClipDistance = deviceFeatures.Features.shaderClipDistance;
+		enabledFeatures.Features.multiDrawIndirect = deviceFeatures.Features.multiDrawIndirect;
+		enabledFeatures.Features.independentBlend = deviceFeatures.Features.independentBlend;
+		enabledFeatures.BufferDeviceAddress.bufferDeviceAddress = deviceFeatures.BufferDeviceAddress.bufferDeviceAddress;
+		enabledFeatures.AccelerationStructure.accelerationStructure = deviceFeatures.AccelerationStructure.accelerationStructure;
+		enabledFeatures.RayQuery.rayQuery = deviceFeatures.RayQuery.rayQuery;
+		enabledFeatures.DescriptorIndexing.runtimeDescriptorArray = deviceFeatures.DescriptorIndexing.runtimeDescriptorArray;
+		enabledFeatures.DescriptorIndexing.descriptorBindingPartiallyBound = deviceFeatures.DescriptorIndexing.descriptorBindingPartiallyBound;
+		enabledFeatures.DescriptorIndexing.descriptorBindingSampledImageUpdateAfterBind = deviceFeatures.DescriptorIndexing.descriptorBindingSampledImageUpdateAfterBind;
+		enabledFeatures.DescriptorIndexing.descriptorBindingVariableDescriptorCount = deviceFeatures.DescriptorIndexing.descriptorBindingVariableDescriptorCount;
+		enabledFeatures.DescriptorIndexing.shaderSampledImageArrayNonUniformIndexing = deviceFeatures.DescriptorIndexing.shaderSampledImageArrayNonUniformIndexing;
+
+
+		// @Cocaktrice - Changed the logic a bit
+		// So, lets Find our graphics queue family first, this should be the easiest one
+		for (int i = 0; i < (int)info.QueueFamilies.size(); i++) {
+			const auto& queueFamily = info.QueueFamilies[i];
+			if (queueFamily.queueCount > 0 && (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)) {
+				dev.GraphicsFamily = i;
+				dev.GraphicsTimeQueries = queueFamily.timestampValidBits != 0;
+				break;
+			}
+		}
+
+		// Find a transfer queue family. This can be a graphics family if necessary, but make sure there is enough
+		// room. AMD cards do not seem to allow blit ops on a Transfer only queue, to the point where most drivers
+		// seem to freeze the entire operating system if you try. We will first try a unique graphics family queue.
+		// If we can't get a graphics family queue, mipmaps need to be generated in the main thread which is obviously
+		// a bit slower, so avoid this when possible.
+		for (int i = 0; i < (int)info.QueueFamilies.size(); i++) {
+			const auto& queueFamily = info.QueueFamilies[i];
+			if (queueFamily.queueCount > 0 && (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) && (queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT)) {
+				// Make sure the family has room for another queue
+				if (i == dev.GraphicsFamily && queueFamily.queueCount < 2) {
+					continue;
+				}
+
+				// We have LOTS of misalignments between our textures, so we NEED a granularity of 1.
+				if (queueFamily.minImageTransferGranularity.width > 1 || queueFamily.minImageTransferGranularity.depth > 1) {
+					continue;
+				}
+
+				// We are lucky! We found a graphics family for our upload queue, and we can generate mipmaps in
+				// the background thread
+				dev.UploadFamily = i;
+				dev.UploadFamilySupportsGraphics = true;
+				break;
+			}
+		}
+
+		// If we didn't find one, loosen the restrictions
+		if (dev.UploadFamily == -1) {
+			for (int i = 0; i < (int)info.QueueFamilies.size(); i++) {
+				const auto& queueFamily = info.QueueFamilies[i];
+
+				if (i == dev.GraphicsFamily && queueFamily.queueCount < 2) {
+					continue;
+				}
+
+				// We have LOTS of misalignments between our textures, so we NEED a granularity of 1.
+				if (queueFamily.minImageTransferGranularity.width > 1 || queueFamily.minImageTransferGranularity.depth > 1) {
+					continue;
+				}
+
+				// Spec states all families must support Transfer, so we should be able to grab any one that passes the other criteria
+				// Note: It turns out that this isn't true. Newer drivers are specifying queues that do not have transfer enabled so we need to check (I'm look at you ARC!!)
+				if (queueFamily.queueCount > 0 && (queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT)) {
+					dev.UploadFamily = i;
+					dev.UploadFamilySupportsGraphics = false;
+					break;
+				}
+			}
+		}
+
+		// Now find a Present family. In the end the Present and Graphics queue CAN be the same queue, but we need to treat that specially
+		// The original Vulkan implementation accidentally always ended up with the same queue for graphics and present anyways 
+		if (surface) {
+			for (int i = 0; i < (int)info.QueueFamilies.size(); i++) {
+				const auto& queueFamily = info.QueueFamilies[i];
+				VkBool32 presentSupport = false;
+				VkResult result = vkGetPhysicalDeviceSurfaceSupportKHR(info.Device, i, surface->Surface, &presentSupport);
+				if (result == VK_SUCCESS && queueFamily.queueCount > 0 && presentSupport) {
+					// Make sure there is enough room in this queue
+					uint32_t requiredCount = 1;
+					if (i == dev.GraphicsFamily) requiredCount++;
+					if (i == dev.UploadFamily) requiredCount++;
+					if (requiredCount > queueFamily.queueCount) continue;
+
+					dev.PresentFamily = i;
+					break;
+				}
+			}
+		}
+
+		// If we didn't find a present family with enough room, let's make sure the graphics queue family supports it
+		if (dev.PresentFamily < 0 && dev.GraphicsFamily >= 0) {
+			VkBool32 presentSupport = false;
+			VkResult result = vkGetPhysicalDeviceSurfaceSupportKHR(info.Device, dev.GraphicsFamily, surface->Surface, &presentSupport);
+			if (result == VK_SUCCESS && presentSupport) {
+				dev.PresentFamily = -2;
+			}
+		}
+
+		// Only use device if we found the required graphics and present queues
+		if (dev.GraphicsFamily != -1 && (!surface || dev.PresentFamily != -1))
+		{
+			supportedDevices.push_back(dev);
+		}
+	}
+
+	// The device order returned by Vulkan can be anything. Prefer discrete > integrated > virtual gpu > cpu > other
+	auto sortFunc = [&](const auto& a, const auto b)
+	{
+		// Sort by GPU type first. This will ensure the "best" device is most likely to map to vk_device 0
+		static const int typeSort[] = { 4, 1, 0, 2, 3 };
+		int sortA = a.Device->Properties.Properties.deviceType < 5 ? typeSort[a.Device->Properties.Properties.deviceType] : (int)a.Device->Properties.Properties.deviceType;
+		int sortB = b.Device->Properties.Properties.deviceType < 5 ? typeSort[b.Device->Properties.Properties.deviceType] : (int)b.Device->Properties.Properties.deviceType;
+		if (sortA != sortB)
+			return sortA < sortB;
+
+		// Any driver that is emulating vulkan (i.e. via Direct3D 12) should only be chosen as the last option within each GPU type
+		sortA = a.Device->Properties.LayeredDriver.underlyingAPI;
+		sortB = b.Device->Properties.LayeredDriver.underlyingAPI;
+		if (sortA != sortB)
+			return sortA < sortB;
+
+		// Then sort by the device's unique ID so that vk_device uses a consistent order
+		int sortUUID = memcmp(a.Device->Properties.Properties.pipelineCacheUUID, b.Device->Properties.Properties.pipelineCacheUUID, VK_UUID_SIZE);
+		return sortUUID < 0;
+	};
+	std::stable_sort(supportedDevices.begin(), supportedDevices.end(), sortFunc);
+
+	return supportedDevices;
+}
+
+std::shared_ptr<VulkanDevice> VulkanDeviceBuilder::Create(std::shared_ptr<VulkanInstance> instance, int numUploadSlots)
+{
+	if (instance->PhysicalDevices.empty())
+		VulkanError("No Vulkan devices found. The graphics card may have no vulkan support or the driver may be too old.");
+
+	std::vector<VulkanCompatibleDevice> supportedDevices = FindDevices(instance);
+	if (supportedDevices.empty())
+		VulkanError("No Vulkan device found supports the minimum requirements of this application");
+
+	size_t selected = deviceIndex;
+	if (selected >= supportedDevices.size())
+		selected = 0;
+	return std::make_shared<VulkanDevice>(instance, surface, supportedDevices[selected], numUploadSlots);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+VulkanSwapChainBuilder::VulkanSwapChainBuilder()
+{
+}
+
+std::shared_ptr<VulkanSwapChain> VulkanSwapChainBuilder::Create(VulkanDevice* device)
+{
+	return std::make_shared<VulkanSwapChain>(device);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+BufferTransfer& BufferTransfer::AddBuffer(VulkanBuffer* buffer, size_t offset, const void* data, size_t size)
+{
+	bufferCopies.push_back({ buffer, offset, data, size, nullptr, 0 });
+	return *this;
+}
+
+BufferTransfer& BufferTransfer::AddBuffer(VulkanBuffer* buffer, const void* data, size_t size)
+{
+	bufferCopies.push_back({ buffer, 0, data, size, nullptr, 0 });
+	return *this;
+}
+
+BufferTransfer& BufferTransfer::AddBuffer(VulkanBuffer* buffer, const void* data0, size_t size0, const void* data1, size_t size1)
+{
+	bufferCopies.push_back({ buffer, 0, data0, size0, data1, size1 });
+	return *this;
+}
+
+std::unique_ptr<VulkanBuffer> BufferTransfer::Execute(VulkanDevice* device, VulkanCommandBuffer* cmdbuffer)
+{
+	size_t transferbuffersize = 0;
+	for (const auto& copy : bufferCopies)
+		transferbuffersize += copy.size0 + copy.size1;
+
+	if (transferbuffersize == 0)
+		return nullptr;
+
+	auto transferBuffer = BufferBuilder()
+		.Usage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY)
+		.Size(transferbuffersize)
+		.DebugName("BufferTransfer.transferBuffer")
+		.Create(device);
+
+	uint8_t* data = (uint8_t*)transferBuffer->Map(0, transferbuffersize);
+	size_t pos = 0;
+	for (const auto& copy : bufferCopies)
+	{
+		memcpy(data + pos, copy.data0, copy.size0);
+		pos += copy.size0;
+		memcpy(data + pos, copy.data1, copy.size1);
+		pos += copy.size1;
+	}
+	transferBuffer->Unmap();
+
+	pos = 0;
+	for (const auto& copy : bufferCopies)
+	{
+		if (copy.size0 > 0)
+			cmdbuffer->copyBuffer(transferBuffer.get(), copy.buffer, pos, copy.offset, copy.size0);
+		pos += copy.size0;
+
+		if (copy.size1 > 0)
+			cmdbuffer->copyBuffer(transferBuffer.get(), copy.buffer, pos, copy.offset + copy.size0, copy.size1);
+		pos += copy.size1;
+	}
+
+	return transferBuffer;
 }

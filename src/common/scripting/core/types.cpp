@@ -33,11 +33,17 @@
 **
 */
 
+#include <cinttypes>
+
 #include "vmintern.h"
 #include "s_soundinternal.h"
 #include "types.h"
 #include "printf.h"
 #include "textureid.h"
+#include "maps.h"
+#include "palettecontainer.h"
+#include "texturemanager.h"
+#include "i_interface.h"
 
 
 FTypeTable TypeTable;
@@ -56,19 +62,27 @@ PSound *TypeSound;
 PSoundHandle* TypeSoundHandle;
 PColor *TypeColor;
 PTextureID *TypeTextureID;
+PTranslationID* TypeTranslationID;
 PSpriteID *TypeSpriteID;
 PStatePointer *TypeState;
 PPointer *TypeFont;
 PStateLabel *TypeStateLabel;
 PStruct *TypeVector2;
 PStruct *TypeVector3;
+PStruct* TypeVector4;
+PStruct* TypeQuaternion;
 PStruct* TypeFVector2;
 PStruct* TypeFVector3;
+PStruct* TypeFVector4;
+PStruct* TypeFQuaternion;
 PStruct *TypeColorStruct;
 PStruct *TypeStringStruct;
-PStruct *TypeSoundHandleStruct;
+
+PStruct *TypeSoundHandleStruct;PStruct* TypeQuaternionStruct;
 PPointer *TypeNullPtr;
 PPointer *TypeVoidPtr;
+PPointer *TypeRawFunction;
+PPointer* TypeVMFunction;
 
 
 // CODE --------------------------------------------------------------------
@@ -104,7 +118,7 @@ void DumpTypeTable()
 		}
 		Printf("\n");
 	}
-	Printf("Used buckets: %d/%lu (%.2f%%) for %d entries\n", used, countof(TypeTable.TypeHash), double(used)/countof(TypeTable.TypeHash)*100, all);
+	Printf("Used buckets: %d/%zu (%.2f%%) for %d entries\n", used, countof(TypeTable.TypeHash), double(used)/countof(TypeTable.TypeHash)*100, all);
 	Printf("Min bucket size: %d\n", min);
 	Printf("Max bucket size: %d\n", max);
 	Printf("Avg bucket size: %.2f\n", double(all) / used);
@@ -180,15 +194,19 @@ void PType::SetDefaultValue(void *base, unsigned offset, TArray<FTypeAndOffset> 
 
 //==========================================================================
 //
-// PType :: SetDefaultValue
+// PType :: SetPointer*
 //
 //==========================================================================
 
-void PType::SetPointer(void *base, unsigned offset, TArray<size_t> *stroffs)
+void PType::SetPointer(void *base, unsigned offset, TArray<std::pair<size_t, PObjectPointer *>> *stroffs)
 {
 }
 
-void PType::SetPointerArray(void *base, unsigned offset, TArray<size_t> *stroffs)
+void PType::SetPointerArray(void *base, unsigned offset, TArray<std::pair<size_t, PDynArray *>> *stroffs)
+{
+}
+
+void PType::SetPointerMap(void *base, unsigned offset, TArray<std::pair<size_t, PMap *>> *ptrofs)
 {
 }
 
@@ -311,11 +329,17 @@ void PType::StaticInit()
 	TypeTable.AddType(TypeNullPtr = new PPointer, NAME_Pointer);
 	TypeTable.AddType(TypeSpriteID = new PSpriteID, NAME_SpriteID);
 	TypeTable.AddType(TypeTextureID = new PTextureID, NAME_TextureID);
+	TypeTable.AddType(TypeTranslationID = new PTranslationID, NAME_TranslationID);
 
 	TypeVoidPtr = NewPointer(TypeVoid, false);
+	TypeRawFunction = new PPointer;
+		TypeRawFunction->mDescriptiveName = "Raw Function Pointer";
+	TypeVMFunction = NewPointer(NewStruct("VMFunction", nullptr, true));
 	TypeColorStruct = NewStruct("@ColorStruct", nullptr);	//This name is intentionally obfuscated so that it cannot be used explicitly. The point of this type is to gain access to the single channels of a color value.
 	TypeStringStruct = NewStruct("Stringstruct", nullptr, true);
+
 	TypeSoundHandleStruct = NewStruct("SoundHandleStruct", nullptr, true);
+	TypeQuaternionStruct = NewStruct("QuatStruct", nullptr, true);
 	TypeFont = NewPointer(NewStruct("Font", nullptr, true));
 
 #ifdef __BIG_ENDIAN__
@@ -339,6 +363,7 @@ void PType::StaticInit()
 	TypeVector2->moveOp = OP_MOVEV2;
 	TypeVector2->RegType = REGT_FLOAT;
 	TypeVector2->RegCount = 2;
+	TypeVector2->isOrdered = true;
 
 	TypeVector3 = new PStruct(NAME_Vector3, nullptr);
 	TypeVector3->AddField(NAME_X, TypeFloat64);
@@ -352,6 +377,23 @@ void PType::StaticInit()
 	TypeVector3->moveOp = OP_MOVEV3;
 	TypeVector3->RegType = REGT_FLOAT;
 	TypeVector3->RegCount = 3;
+	TypeVector3->isOrdered = true;
+
+	TypeVector4 = new PStruct(NAME_Vector4, nullptr);
+	TypeVector4->AddField(NAME_X, TypeFloat64);
+	TypeVector4->AddField(NAME_Y, TypeFloat64);
+	TypeVector4->AddField(NAME_Z, TypeFloat64);
+	TypeVector4->AddField(NAME_W, TypeFloat64);
+	// allow accessing xyz as a vector3. This is not supposed to be serialized so it's marked transient
+	TypeVector4->Symbols.AddSymbol(Create<PField>(NAME_XYZ, TypeVector3, VARF_Transient, 0));
+	TypeVector4->Symbols.AddSymbol(Create<PField>(NAME_XY, TypeVector2, VARF_Transient, 0));
+	TypeTable.AddType(TypeVector4, NAME_Struct);
+	TypeVector4->loadOp = OP_LV4;
+	TypeVector4->storeOp = OP_SV4;
+	TypeVector4->moveOp = OP_MOVEV4;
+	TypeVector4->RegType = REGT_FLOAT;
+	TypeVector4->RegCount = 4;
+	TypeVector4->isOrdered = true;
 
 
 	TypeFVector2 = new PStruct(NAME_FVector2, nullptr);
@@ -363,6 +405,7 @@ void PType::StaticInit()
 	TypeFVector2->moveOp = OP_MOVEV2;
 	TypeFVector2->RegType = REGT_FLOAT;
 	TypeFVector2->RegCount = 2;
+	TypeFVector2->isOrdered = true;
 
 	TypeFVector3 = new PStruct(NAME_FVector3, nullptr);
 	TypeFVector3->AddField(NAME_X, TypeFloat32);
@@ -376,6 +419,57 @@ void PType::StaticInit()
 	TypeFVector3->moveOp = OP_MOVEV3;
 	TypeFVector3->RegType = REGT_FLOAT;
 	TypeFVector3->RegCount = 3;
+	TypeFVector3->isOrdered = true;
+
+	TypeFVector4 = new PStruct(NAME_FVector4, nullptr);
+	TypeFVector4->AddField(NAME_X, TypeFloat32);
+	TypeFVector4->AddField(NAME_Y, TypeFloat32);
+	TypeFVector4->AddField(NAME_Z, TypeFloat32);
+	TypeFVector4->AddField(NAME_W, TypeFloat32);
+	// allow accessing xyz as a vector3
+	TypeFVector4->Symbols.AddSymbol(Create<PField>(NAME_XYZ, TypeFVector3, VARF_Transient, 0));
+	TypeFVector4->Symbols.AddSymbol(Create<PField>(NAME_XY, TypeFVector2, VARF_Transient, 0));
+	TypeTable.AddType(TypeFVector4, NAME_Struct);
+	TypeFVector4->loadOp = OP_LFV4;
+	TypeFVector4->storeOp = OP_SFV4;
+	TypeFVector4->moveOp = OP_MOVEV4;
+	TypeFVector4->RegType = REGT_FLOAT;
+	TypeFVector4->RegCount = 4;
+	TypeFVector4->isOrdered = true;
+
+
+	TypeQuaternion = new PStruct(NAME_Quat, nullptr);
+	TypeQuaternion->AddField(NAME_X, TypeFloat64);
+	TypeQuaternion->AddField(NAME_Y, TypeFloat64);
+	TypeQuaternion->AddField(NAME_Z, TypeFloat64);
+	TypeQuaternion->AddField(NAME_W, TypeFloat64);
+	// allow vector access.
+	TypeQuaternion->Symbols.AddSymbol(Create<PField>(NAME_XYZ, TypeVector3, VARF_Transient, 0));
+	TypeQuaternion->Symbols.AddSymbol(Create<PField>(NAME_XY, TypeVector2, VARF_Transient, 0));
+	TypeTable.AddType(TypeQuaternion, NAME_Struct);
+	TypeQuaternion->loadOp = OP_LV4;
+	TypeQuaternion->storeOp = OP_SV4;
+	TypeQuaternion->moveOp = OP_MOVEV4;
+	TypeQuaternion->RegType = REGT_FLOAT;
+	TypeQuaternion->RegCount = 4;
+	TypeQuaternion->isOrdered = true;
+
+	TypeFQuaternion = new PStruct(NAME_FQuat, nullptr);
+	TypeFQuaternion->AddField(NAME_X, TypeFloat32);
+	TypeFQuaternion->AddField(NAME_Y, TypeFloat32);
+	TypeFQuaternion->AddField(NAME_Z, TypeFloat32);
+	TypeFQuaternion->AddField(NAME_W, TypeFloat32);
+	// allow accessing xyz as a vector3
+	TypeFQuaternion->Symbols.AddSymbol(Create<PField>(NAME_XYZ, TypeFVector3, VARF_Transient, 0));
+	TypeFQuaternion->Symbols.AddSymbol(Create<PField>(NAME_XY, TypeFVector2, VARF_Transient, 0));
+	TypeTable.AddType(TypeFQuaternion, NAME_Struct);
+	TypeFQuaternion->loadOp = OP_LFV4;
+	TypeFQuaternion->storeOp = OP_SFV4;
+	TypeFQuaternion->moveOp = OP_MOVEV4;
+	TypeFQuaternion->RegType = REGT_FLOAT;
+	TypeFQuaternion->RegCount = 4;
+	TypeFQuaternion->isOrdered = true;
+
 
 	Namespaces.GlobalNamespace->Symbols.AddSymbol(Create<PSymbolType>(NAME_sByte, TypeSInt8));
 	Namespaces.GlobalNamespace->Symbols.AddSymbol(Create<PSymbolType>(NAME_Byte, TypeUInt8));
@@ -396,8 +490,12 @@ void PType::StaticInit()
 	Namespaces.GlobalNamespace->Symbols.AddSymbol(Create<PSymbolType>(NAME_State, TypeState));
 	Namespaces.GlobalNamespace->Symbols.AddSymbol(Create<PSymbolType>(NAME_Vector2, TypeVector2));
 	Namespaces.GlobalNamespace->Symbols.AddSymbol(Create<PSymbolType>(NAME_Vector3, TypeVector3));
+	Namespaces.GlobalNamespace->Symbols.AddSymbol(Create<PSymbolType>(NAME_Vector4, TypeVector4));
+	Namespaces.GlobalNamespace->Symbols.AddSymbol(Create<PSymbolType>(NAME_Quat, TypeQuaternion));
 	Namespaces.GlobalNamespace->Symbols.AddSymbol(Create<PSymbolType>(NAME_FVector2, TypeFVector2));
 	Namespaces.GlobalNamespace->Symbols.AddSymbol(Create<PSymbolType>(NAME_FVector3, TypeFVector3));
+	Namespaces.GlobalNamespace->Symbols.AddSymbol(Create<PSymbolType>(NAME_FVector4, TypeFVector4));
+	Namespaces.GlobalNamespace->Symbols.AddSymbol(Create<PSymbolType>(NAME_FQuat, TypeFQuaternion));
 }
 
 
@@ -772,6 +870,7 @@ void PFloat::SetDoubleSymbols()
 		{ NAME_Min_Normal,		DBL_MIN },
 		{ NAME_Max,				DBL_MAX },
 		{ NAME_Epsilon,			DBL_EPSILON },
+		{ NAME_Equal_Epsilon,	EQUAL_EPSILON },
 		{ NAME_NaN,				std::numeric_limits<double>::quiet_NaN() },
 		{ NAME_Infinity,		std::numeric_limits<double>::infinity() },
 		{ NAME_Min_Denormal,	std::numeric_limits<double>::denorm_min() }
@@ -804,6 +903,7 @@ void PFloat::SetSingleSymbols()
 		{ NAME_Min_Normal,		FLT_MIN },
 		{ NAME_Max,				FLT_MAX },
 		{ NAME_Epsilon,			FLT_EPSILON },
+		{ NAME_Equal_Epsilon,	(float)EQUAL_EPSILON },
 		{ NAME_NaN,				std::numeric_limits<float>::quiet_NaN() },
 		{ NAME_Infinity,		std::numeric_limits<float>::infinity() },
 		{ NAME_Min_Denormal,	std::numeric_limits<float>::denorm_min() }
@@ -920,7 +1020,7 @@ void PFloat::SetValue(void *addr, double val)
 
 int PFloat::GetValueInt(void *addr) const
 {
-	return xs_ToInt(GetValueFloat(addr));
+	return int(GetValueFloat(addr));
 }
 
 //==========================================================================
@@ -1233,6 +1333,48 @@ bool PTextureID::ReadValue(FSerializer &ar, const char *key, void *addr) const
 	return true;
 }
 
+/* PTranslationID ******************************************************************/
+
+//==========================================================================
+//
+// PTranslationID Default Constructor
+//
+//==========================================================================
+
+PTranslationID::PTranslationID()
+	: PInt(sizeof(FTranslationID), true, false)
+{
+	mDescriptiveName = "TranslationID";
+	Flags |= TYPE_IntNotInt;
+	static_assert(sizeof(FTranslationID) == alignof(FTranslationID), "TranslationID not properly aligned");
+}
+
+//==========================================================================
+//
+// PTranslationID :: WriteValue
+//
+//==========================================================================
+
+void PTranslationID::WriteValue(FSerializer& ar, const char* key, const void* addr) const
+{
+	FTranslationID val = *(FTranslationID*)addr;
+	ar(key, val);
+}
+
+//==========================================================================
+//
+// PTranslationID :: ReadValue
+//
+//==========================================================================
+
+bool PTranslationID::ReadValue(FSerializer& ar, const char* key, void* addr) const
+{
+	FTranslationID val;
+	ar(key, val);
+	*(FTranslationID*)addr = val;
+	return true;
+}
+
 /* PSound *****************************************************************/
 
 //==========================================================================
@@ -1277,7 +1419,7 @@ bool PSound::ReadValue(FSerializer &ar, const char *key, void *addr) const
 	}
 	else
 	{
-		*(FSoundID *)addr = FSoundID(cptr);
+		*(FSoundID *)addr = S_FindSound(cptr);
 		return true;
 	}
 }
@@ -1458,10 +1600,10 @@ PObjectPointer::PObjectPointer(PClass *cls, bool isconst)
 //
 //==========================================================================
 
-void PObjectPointer::SetPointer(void *base, unsigned offset, TArray<size_t> *special)
+void PObjectPointer::SetPointer(void *base, unsigned offset, TArray<std::pair<size_t, PObjectPointer *>> *special)
 {
 	// Add to the list of pointers for this class.
-	special->Push(offset);
+	special->Push({offset, this});
 }
 
 //==========================================================================
@@ -1544,7 +1686,8 @@ PClassPointer::PClassPointer(PClass *restrict)
 	loadOp = OP_LP;
 	storeOp = OP_SP;
 	Flags |= TYPE_ClassPointer;
-	mVersion = restrict->VMType->mVersion;
+	if (restrict) mVersion = restrict->VMType->mVersion;
+	else mVersion = 0;
 }
 
 //==========================================================================
@@ -1588,7 +1731,7 @@ bool PClassPointer::isCompatible(PType *type)
 //
 //==========================================================================
 
-void PClassPointer::SetPointer(void *base, unsigned offset, TArray<size_t> *special)
+void PClassPointer::SetPointer(void *base, unsigned offset, TArray<std::pair<size_t, PObjectPointer *>> *special)
 {
 }
 
@@ -1790,7 +1933,7 @@ void PArray::SetDefaultValue(void *base, unsigned offset, TArray<FTypeAndOffset>
 //
 //==========================================================================
 
-void PArray::SetPointer(void *base, unsigned offset, TArray<size_t> *special)
+void PArray::SetPointer(void *base, unsigned offset, TArray<std::pair<size_t, PObjectPointer *>> *special)
 {
 	for (unsigned i = 0; i < ElementCount; ++i)
 	{
@@ -1804,13 +1947,30 @@ void PArray::SetPointer(void *base, unsigned offset, TArray<size_t> *special)
 //
 //==========================================================================
 
-void PArray::SetPointerArray(void *base, unsigned offset, TArray<size_t> *special)
+void PArray::SetPointerArray(void *base, unsigned offset, TArray<std::pair<size_t, PDynArray *>> *special)
 {
-	if (ElementType->isStruct())
+	if (ElementType->isStruct() || ElementType->isDynArray())
 	{
 		for (unsigned int i = 0; i < ElementCount; ++i)
 		{
 			ElementType->SetPointerArray(base, offset + ElementSize * i, special);
+		}
+	}
+}
+
+//==========================================================================
+//
+// PArray :: SetPointerMap
+//
+//==========================================================================
+
+void PArray::SetPointerMap(void *base, unsigned offset, TArray<std::pair<size_t, PMap *>> *special)
+{
+	if(ElementType->isStruct() || ElementType->isMap())
+	{
+		for (unsigned int i = 0; i < ElementCount; ++i)
+		{
+			ElementType->SetPointerMap(base, offset + ElementSize * i, special);
 		}
 	}
 }
@@ -1905,12 +2065,114 @@ PStaticArray *NewStaticArray(PType *type)
 //
 //==========================================================================
 
+enum OverrideFunctionRetType {
+	OFN_RET_VOID,
+	OFN_RET_VAL,
+	OFN_RET_KEY,
+	OFN_RET_BOOL,
+	OFN_RET_VAL_BOOL,
+	OFN_RET_INT,
+};
+enum OverrideFunctionArgType {
+	OFN_ARG_VOID,
+	OFN_ARG_KEY,
+	OFN_ARG_VAL,
+	OFN_ARG_KEY_VAL,
+	OFN_ARG_ELEM,
+	OFN_ARG_INT_ELEM,
+};
+
+template<OverrideFunctionRetType RetType, OverrideFunctionArgType ArgType , int ExtraFlags = 0, class MT>
+void CreateOverrideFunction(MT *self, FName name)
+{
+	auto Fn = Create<PFunction>(self->BackingType, name);
+	auto NativeFn = FindFunction(self->BackingType, name.GetChars());
+
+	assert(NativeFn);
+	assert(NativeFn->VMPointer);
+
+	TArray<PType*> ret;
+	TArray<PType*> args;
+	TArray<uint32_t> argflags;
+	TArray<FName> argnames;
+
+	if constexpr(RetType == OFN_RET_VAL)
+	{
+		ret.Push(self->ValueType);
+	}
+	else if constexpr(RetType == OFN_RET_KEY)
+	{
+		ret.Push(self->KeyType);
+	}
+	else if constexpr(RetType == OFN_RET_BOOL)
+	{
+		ret.Push(TypeBool);
+	}
+	else if constexpr(RetType == OFN_RET_VAL_BOOL)
+	{
+		ret.Push(self->ValueType);
+		ret.Push(TypeBool);
+	}
+	else if constexpr(RetType == OFN_RET_INT)
+	{
+		ret.Push(TypeSInt32);
+	}
+
+	args.Push(NewPointer(self->BackingType));
+	argnames.Push(NAME_self);
+	argflags.Push(VARF_Implicit | VARF_ReadOnly);
+
+	if constexpr(ArgType == OFN_ARG_KEY)
+	{
+		args.Push(self->KeyType);
+		argflags.Push(0);
+		argnames.Push(NAME_Key);
+	}
+	else if constexpr(ArgType == OFN_ARG_VAL)
+	{
+
+		args.Push(self->ValueType);
+		argflags.Push(0);
+		argnames.Push(NAME_Value);
+	}
+	else if constexpr(ArgType == OFN_ARG_KEY_VAL)
+	{
+		args.Push(self->KeyType);
+		args.Push(self->ValueType);
+		argflags.Push(0);
+		argflags.Push(0);
+		argnames.Push(NAME_Key);
+		argnames.Push(NAME_Value);
+	}
+	else if constexpr(ArgType == OFN_ARG_ELEM)
+	{
+		args.Push(self->ElementType);
+		argflags.Push(0);
+		argnames.Push(NAME_Item);
+	}
+	else if constexpr(ArgType == OFN_ARG_INT_ELEM)
+	{
+		args.Push(TypeSInt32);
+		args.Push(self->ElementType);
+		argflags.Push(0);
+		argflags.Push(0);
+		argnames.Push(NAME_Index);
+		argnames.Push(NAME_Item);
+	}
+
+	Fn->AddVariant(NewPrototype(ret, args), argflags, argnames, *NativeFn->VMPointer, VARF_Method | VARF_Native | ExtraFlags, SUF_ACTOR | SUF_OVERLAY | SUF_WEAPON | SUF_ITEM);
+	self->FnOverrides.Insert(name, Fn);
+}
+
 PDynArray::PDynArray(PType *etype,PStruct *backing)
 : ElementType(etype), BackingType(backing)
 {
 	mDescriptiveName.Format("DynArray<%s>", etype->DescriptiveName());
 	Size = sizeof(FArray);
 	Align = alignof(FArray);
+	CreateOverrideFunction<OFN_RET_INT ,  OFN_ARG_ELEM     , VARF_ReadOnly> (this, NAME_Find);
+	CreateOverrideFunction<OFN_RET_INT ,  OFN_ARG_ELEM     > (this, NAME_Push);
+	CreateOverrideFunction<OFN_RET_VOID , OFN_ARG_INT_ELEM > (this, NAME_Insert);
 }
 
 //==========================================================================
@@ -2017,12 +2279,12 @@ void PDynArray::SetDefaultValue(void *base, unsigned offset, TArray<FTypeAndOffs
 //
 //==========================================================================
 
-void PDynArray::SetPointerArray(void *base, unsigned offset, TArray<size_t> *special)
+void PDynArray::SetPointerArray(void *base, unsigned offset, TArray<std::pair<size_t, PDynArray *>> *special)
 {
 	if (ElementType->isObjectPointer())
 	{
 		// Add to the list of pointer arrays for this class.
-		special->Push(offset);
+		special->Push({offset, this});
 	}
 }
 
@@ -2146,12 +2408,19 @@ PDynArray *NewDynArray(PType *type)
 //
 //==========================================================================
 
-PMap::PMap(PType *keytype, PType *valtype)
-: KeyType(keytype), ValueType(valtype)
+PMap::PMap(PType *keytype, PType *valtype, PStruct *backing, int backing_class)
+: KeyType(keytype), ValueType(valtype), BackingType(backing), BackingClass((decltype(BackingClass)) backing_class)
 {
 	mDescriptiveName.Format("Map<%s, %s>", keytype->DescriptiveName(), valtype->DescriptiveName());
-	Size = sizeof(FMap);
-	Align = alignof(FMap);
+	Size = sizeof(ZSFMap);
+	Align = alignof(ZSFMap);
+	CreateOverrideFunction< OFN_RET_VAL      , OFN_ARG_KEY     > (this, NAME_Get);
+	CreateOverrideFunction< OFN_RET_VAL      , OFN_ARG_KEY     , VARF_ReadOnly> (this, NAME_GetIfExists);
+	CreateOverrideFunction< OFN_RET_BOOL     , OFN_ARG_KEY     , VARF_ReadOnly> (this, NAME_CheckKey);
+	CreateOverrideFunction< OFN_RET_VAL_BOOL , OFN_ARG_KEY     , VARF_ReadOnly> (this, NAME_CheckValue);
+	CreateOverrideFunction< OFN_RET_VOID     , OFN_ARG_KEY_VAL > (this, NAME_Insert);
+	CreateOverrideFunction< OFN_RET_VOID     , OFN_ARG_KEY     > (this, NAME_InsertNew);
+	CreateOverrideFunction< OFN_RET_VOID     , OFN_ARG_KEY     > (this, NAME_Remove);
 }
 
 //==========================================================================
@@ -2182,6 +2451,330 @@ void PMap::GetTypeIDs(intptr_t &id1, intptr_t &id2) const
 
 //==========================================================================
 //
+// PMap :: InitializeValue
+//
+//==========================================================================
+
+#define FOR_EACH_MAP_TYPE(FN) \
+		case PMap::MAP_I32_I8: \
+			FN( uint32_t , uint8_t ) \
+		case PMap::MAP_I32_I16: \
+			FN( uint32_t , uint16_t ) \
+		case PMap::MAP_I32_I32: \
+			FN( uint32_t , uint32_t ) \
+		case PMap::MAP_I32_F32: \
+			FN( uint32_t , float ) \
+		case PMap::MAP_I32_F64: \
+			FN( uint32_t , double ) \
+		case PMap::MAP_I32_OBJ: \
+			FN( uint32_t , DObject* ) \
+		case PMap::MAP_I32_PTR: \
+			FN( uint32_t , void* ) \
+		case PMap::MAP_I32_STR: \
+			FN( uint32_t , FString ) \
+		case PMap::MAP_STR_I8: \
+			FN( FString , uint8_t ) \
+		case PMap::MAP_STR_I16: \
+			FN( FString , uint16_t ) \
+		case PMap::MAP_STR_I32: \
+			FN( FString , uint32_t ) \
+		case PMap::MAP_STR_F32: \
+			FN( FString , float ) \
+		case PMap::MAP_STR_F64: \
+			FN( FString , double ) \
+		case PMap::MAP_STR_OBJ: \
+			FN( FString , DObject* ) \
+		case PMap::MAP_STR_PTR: \
+			FN( FString , void* ) \
+		case PMap::MAP_STR_STR: \
+			FN( FString , FString )
+
+void PMap::Construct(void * addr) const {
+	switch(BackingClass)
+	{
+		#define MAP_CONSTRUCT(KT, VT) new(addr) ZSMap< KT, VT >(); break;
+		FOR_EACH_MAP_TYPE(MAP_CONSTRUCT)
+		#undef MAP_CONSTRUCT
+	};
+}
+
+
+void PMap::InitializeValue(void *addr, const void *def) const
+{
+	Construct(addr);
+}
+
+//==========================================================================
+//
+// PMap :: DestroyValue
+//
+//==========================================================================
+
+void PMap::DestroyValue(void *addr) const
+{
+	switch(BackingClass)
+	{
+		#define MAP_DESTRUCT(KT, VT) static_cast<ZSMap< KT, VT >*>(addr)->~ZSMap(); break;
+		FOR_EACH_MAP_TYPE(MAP_DESTRUCT)
+		#undef MAP_DESTRUCT
+	}
+}
+
+//==========================================================================
+//
+// PMap :: SetDefaultValue
+//
+//==========================================================================
+
+void PMap::SetDefaultValue(void *base, unsigned offset, TArray<FTypeAndOffset> *special)
+{
+	if (base != nullptr)
+	{
+		Construct(((uint8_t*)base)+offset); // is this needed? string/dynarray do this initialization if base != nullptr, but their initialization doesn't need to allocate
+											// it might lead to double allocations (and memory leakage) for Map if both base and special != nullptr
+	}
+	if (special != nullptr)
+	{
+		special->Push(std::make_pair(this, offset));
+	}
+	else
+	{
+		I_Error("null special");
+	}
+}
+
+//==========================================================================
+//
+// PMap :: SetPointer
+//
+//==========================================================================
+
+void PMap::SetPointerMap(void *base, unsigned offset, TArray<std::pair<size_t, PMap *>> *special)
+{
+	if (ValueType->isObjectPointer())
+	{
+		// Add to the list of pointer arrays for this class.
+		special->Push(std::make_pair(offset, this));
+	}
+}
+
+//==========================================================================
+//
+// PMap :: WriteValue
+//
+//==========================================================================
+
+template<typename M>
+static void PMapValueWriter(FSerializer &ar, const M *map, const PMap *m)
+{
+	TMapConstIterator<typename M::KeyType, typename M::ValueType> it(*map);
+	const typename M::Pair * p;
+	while(it.NextPair(p))
+	{
+		if constexpr(std::is_same_v<typename M::KeyType,FString>)
+		{
+			m->ValueType->WriteValue(ar,p->Key.GetChars(),static_cast<const void *>(&p->Value));
+		}
+		else if constexpr(std::is_same_v<typename M::KeyType,uint32_t>)
+		{
+			if(m->KeyType->Flags & 8 /*TYPE_IntNotInt*/)
+			{
+				if(m->KeyType == TypeName)
+				{
+					m->ValueType->WriteValue(ar,FName(ENamedName(p->Key)).GetChars(),static_cast<const void *>(&p->Value));
+				}
+				else if(m->KeyType == TypeSound)
+				{
+					m->ValueType->WriteValue(ar,soundEngine->GetSoundName(FSoundID::fromInt(p->Key)),static_cast<const void *>(&p->Value));
+				}
+				else if(m->KeyType == TypeTextureID)
+				{
+					if(!!(p->Key & 0x8000000))
+					{ // invalid
+						m->ValueType->WriteValue(ar,"invalid",static_cast<const void *>(&p->Value));
+					}
+					else if(p->Key == 0 || p->Key >= (unsigned)TexMan.NumTextures())
+					{ // null
+						m->ValueType->WriteValue(ar,"null",static_cast<const void *>(&p->Value));
+					}
+					else
+					{
+						FTextureID tid;
+						tid.SetIndex(p->Key);
+						FGameTexture *tex = TexMan.GetGameTexture(tid);
+						int lump = tex->GetSourceLump();
+						unsigned useType = static_cast<unsigned>(tex->GetUseType());
+
+						FString name;
+
+						if (TexMan.GetLinkedTexture(lump) == tex)
+						{
+							name = fileSystem.GetFileFullName(lump);
+						}
+						else
+						{
+							name = tex->GetName().GetChars();
+						}
+
+						name.AppendFormat(":%u",useType);
+
+						m->ValueType->WriteValue(ar,name.GetChars(),static_cast<const void *>(&p->Value));
+					}
+				}
+				else
+				{ // bool/color/enum/sprite/translationID
+					FString key;
+					key.Format("%u",p->Key);
+					m->ValueType->WriteValue(ar,key.GetChars(),static_cast<const void *>(&p->Value));
+				}
+			}
+			else
+			{
+				FString key;
+				key.Format("%u",p->Key);
+				m->ValueType->WriteValue(ar,key.GetChars(),static_cast<const void *>(&p->Value));
+			}
+		}
+		//else unknown key type
+	}
+}
+
+void PMap::WriteValue(FSerializer &ar, const char *key, const void *addr) const
+{
+	if(ar.BeginObject(key))
+	{
+		switch(BackingClass)
+		{
+			#define MAP_WRITE(KT, VT) PMapValueWriter(ar, static_cast<const ZSMap< KT, VT >*>(addr), this); break;
+			FOR_EACH_MAP_TYPE(MAP_WRITE)
+			#undef MAP_WRITE
+		}
+		ar.EndObject();
+	}
+}
+
+//==========================================================================
+//
+// PMap :: ReadValue
+//
+//==========================================================================
+
+
+template<typename M>
+static bool PMapValueReader(FSerializer &ar, M *map, const PMap *m)
+{
+	const char * k;
+	while((k = ar.GetKey()))
+	{
+		typename M::ValueType * val = nullptr;
+		if constexpr(std::is_same_v<typename M::KeyType,FString>)
+		{
+			val = &map->InsertNew(k);
+		}
+		else if constexpr(std::is_same_v<typename M::KeyType,uint32_t>)
+		{
+			if(m->KeyType->Flags & 8 /*TYPE_IntNotInt*/)
+			{
+				if(m->KeyType == TypeName)
+				{
+					val = &map->InsertNew(FName(k).GetIndex());
+				}
+				else if(m->KeyType == TypeSound)
+				{
+					val = &map->InsertNew(S_FindSound(k).index());
+				}
+				else if(m->KeyType == TypeTextureID)
+				{
+					FString s(k);
+					FTextureID tex;
+					if(s.Compare("invalid") == 0)
+					{
+						tex.SetInvalid();
+					}
+					else if(s.Compare("null") == 0)
+					{
+						tex.SetNull();
+					}
+					else
+					{
+						ptrdiff_t sep = s.LastIndexOf(":");
+						if(sep < 0)
+						{
+							ar.EndObject();
+							return false;
+						}
+						FString texName = s.Left(sep);
+						FString useType = s.Mid(sep + 1);
+
+						tex = TexMan.GetTextureID(texName.GetChars(), (ETextureType) useType.ToULong());
+					}
+					val = &map->InsertNew(tex.GetIndex());
+				}
+				else if(m->KeyType == TypeTranslationID)
+				{
+					FString s(k);
+					if(!s.IsInt())
+					{
+						ar.EndObject();
+						return false;
+					}
+					int v = (int)s.ToULong();
+
+					if (sysCallbacks.RemapTranslation) v = sysCallbacks.RemapTranslation(FTranslationID::fromInt(v)).index();
+
+					val = &map->InsertNew(v);
+				}
+				else
+				{ // bool/color/enum/sprite
+					FString s(k);
+					if(!s.IsInt())
+					{
+						ar.EndObject();
+						return false;
+					}
+					val = &map->InsertNew(static_cast<uint32_t>(s.ToULong()));
+				}
+			}
+			else
+			{
+				FString s(k);
+				if(!s.IsInt())
+				{
+					ar.EndObject();
+					return false;
+				}
+				val = &map->InsertNew(static_cast<uint32_t>(s.ToULong()));
+			}
+		}
+		if (!m->ValueType->ReadValue(ar,nullptr,static_cast<void*>(val)))
+		{
+			ar.EndObject();
+			return false;
+		}
+	}
+	ar.EndObject();
+	return true;
+}
+
+
+bool PMap::ReadValue(FSerializer &ar, const char *key, void *addr) const
+{
+	DestroyValue(addr);
+	InitializeValue(addr, nullptr);
+	if(ar.BeginObject(key))
+	{
+		switch(BackingClass)
+		{
+			#define MAP_READ(KT, VT) return PMapValueReader(ar, static_cast<ZSMap< KT, VT >*>(addr), this);
+			FOR_EACH_MAP_TYPE(MAP_READ)
+			#undef MAP_READ
+		}
+	}
+	return false;
+}
+
+//==========================================================================
+//
 // NewMap
 //
 // Returns a PMap for the given key and value types, ensuring not to create
@@ -2189,16 +2782,468 @@ void PMap::GetTypeIDs(intptr_t &id1, intptr_t &id2) const
 //
 //==========================================================================
 
-PMap *NewMap(PType *keytype, PType *valuetype)
+int PMapBackingClass(PType *keytype, PType *valuetype, FString &backingName) {
+	int backingClass;
+	auto key_rtype = keytype->GetRegType();
+	auto value_rtype = valuetype->GetRegType();
+	if (key_rtype == REGT_INT)
+	{
+		if(keytype->Size != 4)
+		{
+			I_Error("Unsupported map requested");
+		}
+		else
+		{
+			backingName += "I32_";
+			backingClass = PMap::MAP_I32_I8;
+		}
+	}
+	else if (key_rtype == REGT_STRING)
+	{
+		backingName += "Str_";
+		backingClass = PMap::MAP_STR_I8;
+	}
+	else
+	{
+		I_Error("Unsupported map requested");
+	}
+	switch (valuetype->GetRegType())
+	{
+	case REGT_INT:
+		backingName.AppendFormat("I%d", valuetype->Size * 8);
+		backingClass += (valuetype->Size >> 1);
+		break;
+	case REGT_FLOAT:
+		backingName.AppendFormat("F%d", valuetype->Size * 8);
+		backingClass += PMap::MAP_I32_F32 + (valuetype->Size == 8);
+		break;
+	case REGT_STRING:
+		backingName += "Str";
+		backingClass += PMap::MAP_I32_STR;
+		break;
+
+	case REGT_POINTER:
+		if (valuetype->isObjectPointer())
+		{
+			backingName += "Obj";
+			backingClass += PMap::MAP_I32_OBJ;
+		}
+		else
+		{
+			backingName += "Ptr";
+			backingClass += PMap::MAP_I32_PTR;
+		}
+		break;
+	default:
+		I_Error("Unsupported map requested");
+		break;
+	}
+	return backingClass;
+}
+
+PMap *NewMap(PType *keyType, PType *valueType)
 {
 	size_t bucket;
-	PType *maptype = TypeTable.FindType(NAME_Map, (intptr_t)keytype, (intptr_t)valuetype, &bucket);
-	if (maptype == nullptr)
+	PType *mapType = TypeTable.FindType(NAME_Map, (intptr_t)keyType, (intptr_t)valueType, &bucket);
+	if (mapType == nullptr)
 	{
-		maptype = new PMap(keytype, valuetype);
-		TypeTable.AddType(maptype, NAME_Map, (intptr_t)keytype, (intptr_t)valuetype, bucket);
+		FString backingName = "Map_";
+		int backingClass = PMapBackingClass(keyType, valueType, backingName);
+		
+		auto backing = NewStruct(backingName, nullptr, true);
+		mapType = new PMap(keyType, valueType, backing, backingClass);
+		TypeTable.AddType(mapType, NAME_Map, (intptr_t)keyType, (intptr_t)valueType, bucket);
+		
 	}
-	return (PMap *)maptype;
+	return (PMap *)mapType;
+}
+
+/* PMapIterator ***********************************************************/
+
+//==========================================================================
+//
+// PMapIterator - Parameterized Constructor
+//
+//==========================================================================
+
+PMapIterator::PMapIterator(PType *keytype, PType *valtype, PStruct *backing, int backing_class)
+	: KeyType(keytype), ValueType(valtype), BackingType(backing), BackingClass((decltype(BackingClass)) backing_class)
+{
+	mDescriptiveName.Format("MapIterator<%s, %s>", keytype->DescriptiveName(), valtype->DescriptiveName());
+	Size = sizeof(ZSFMap);
+	Align = alignof(ZSFMap);
+	CreateOverrideFunction<OFN_RET_KEY,  OFN_ARG_VOID>(this, NAME_GetKey);
+	CreateOverrideFunction<OFN_RET_VAL,  OFN_ARG_VOID>(this, NAME_GetValue);
+	CreateOverrideFunction<OFN_RET_VOID, OFN_ARG_VAL>(this, NAME_SetValue);
+}
+
+//==========================================================================
+//
+// PMapIterator :: IsMatch
+//
+//==========================================================================
+
+bool PMapIterator::IsMatch(intptr_t id1, intptr_t id2) const
+{
+	const PType *keyty = (const PType *)id1;
+	const PType *valty = (const PType *)id2;
+
+	return keyty == KeyType && valty == ValueType;
+}
+
+//==========================================================================
+//
+// PMapIterator :: GetTypeIDs
+//
+//==========================================================================
+
+void PMapIterator::GetTypeIDs(intptr_t &id1, intptr_t &id2) const
+{
+	id1 = (intptr_t)KeyType;
+	id2 = (intptr_t)ValueType;
+}
+
+//==========================================================================
+//
+// PMapIterator :: InitializeValue
+//
+//==========================================================================
+
+void PMapIterator::Construct(void * addr) const {
+	switch(BackingClass)
+	{
+		#define MAP_IT_CONSTRUCT(KT, VT) new(addr) ZSMapIterator< KT, VT >(); break;
+		FOR_EACH_MAP_TYPE(MAP_IT_CONSTRUCT)
+		#undef MAP_IT_CONSTRUCT
+	};
+}
+
+void PMapIterator::InitializeValue(void *addr, const void *def) const
+{
+	Construct(addr);
+}
+
+//==========================================================================
+//
+// PMapIterator :: DestroyValue
+//
+//==========================================================================
+
+void PMapIterator::DestroyValue(void *addr) const
+{
+	switch(BackingClass)
+	{
+		#define MAP_IT_DESTROY(KT, VT) static_cast<ZSMapIterator< KT, VT >*>(addr)->~ZSMapIterator(); break;
+		FOR_EACH_MAP_TYPE(MAP_IT_DESTROY)
+		#undef MAP_IT_DESTROY
+	}
+}
+
+//==========================================================================
+//
+// PMapIterator :: SetDefaultValue
+//
+//==========================================================================
+
+void PMapIterator::SetDefaultValue(void *base, unsigned offset, TArray<FTypeAndOffset> *special)
+{
+	if (base != nullptr)
+	{
+		Construct(((uint8_t*)base)+offset);
+	}
+	if (special != nullptr)
+	{
+		special->Push(std::make_pair(this, offset));
+	}
+	else
+	{
+		I_Error("null special");
+	}
+}
+
+//==========================================================================
+//
+// PMapIterator :: WriteValue
+//
+//==========================================================================
+
+void PMapIterator::WriteValue(FSerializer &ar, const char *key, const void *addr) const
+{
+	ar.BeginObject(key);
+	ar.EndObject();
+}
+
+//==========================================================================
+//
+// PMapIterator :: ReadValue
+//
+//==========================================================================
+
+bool PMapIterator::ReadValue(FSerializer &ar, const char *key, void *addr) const
+{
+	DestroyValue(addr);
+	InitializeValue(addr, nullptr);
+	ar.BeginObject(key);
+	ar.EndObject();
+	return true;
+}
+
+//==========================================================================
+//
+// NewMapIterator
+//
+// Returns a PMapIterator for the given key and value types, ensuring not to create
+// duplicates.
+//
+//==========================================================================
+
+PMapIterator *NewMapIterator(PType *keyType, PType *valueType)
+{
+	size_t bucket;
+	PType *mapIteratorType = TypeTable.FindType(NAME_MapIterator, (intptr_t)keyType, (intptr_t)valueType, &bucket);
+	if (mapIteratorType == nullptr)
+	{
+		FString backingName = "MapIterator_";
+		int backingClass = PMapBackingClass(keyType, valueType, backingName);
+
+		auto backing = NewStruct(backingName, nullptr, true);
+		mapIteratorType = new PMapIterator(keyType, valueType, backing, backingClass);
+		TypeTable.AddType(mapIteratorType, NAME_MapIterator, (intptr_t)keyType, (intptr_t)valueType, bucket);
+	}
+	return (PMapIterator *)mapIteratorType;
+}
+
+/* PFunctionPointer *******************************************************/
+
+//==========================================================================
+//
+// PFunctionPointer - Parameterized Constructor
+//
+//==========================================================================
+
+static FString MakeFunctionPointerDescriptiveName(PPrototype * proto,const TArray<uint32_t> &ArgFlags, int scope)
+{
+	FString mDescriptiveName;
+
+	mDescriptiveName = "Function<";
+	switch(scope)
+	{
+	case FScopeBarrier::Side_PlainData:
+		mDescriptiveName += "clearscope ";
+		break;
+	case FScopeBarrier::Side_Play:
+		mDescriptiveName += "play ";
+		break;
+	case FScopeBarrier::Side_UI:
+		mDescriptiveName += "ui ";
+		break;
+	}
+	if(proto->ReturnTypes.Size() > 0)
+	{
+		mDescriptiveName += proto->ReturnTypes[0]->DescriptiveName();
+
+		const unsigned n = proto->ReturnTypes.Size();
+		for(unsigned i = 1; i < n; i++)
+		{
+			mDescriptiveName += ", ";
+			mDescriptiveName += proto->ReturnTypes[i]->DescriptiveName();
+		}
+		mDescriptiveName += " (";
+	}
+	else
+	{
+		mDescriptiveName += "void (";
+	}
+	if(proto->ArgumentTypes.Size() > 0)
+	{
+		if(ArgFlags[0] == VARF_Out) mDescriptiveName += "out ";
+		mDescriptiveName += proto->ArgumentTypes[0]->DescriptiveName();
+		const unsigned n = proto->ArgumentTypes.Size();
+		for(unsigned i = 1; i < n; i++)
+		{
+			mDescriptiveName += ", ";
+			if(ArgFlags[i] == VARF_Out) mDescriptiveName += "out ";
+			mDescriptiveName += proto->ArgumentTypes[i]->DescriptiveName();
+		}
+		mDescriptiveName += ")>";
+	}
+	else
+	{
+		mDescriptiveName += "void)>";
+	}
+
+	return mDescriptiveName;
+}
+
+
+FString PFunctionPointer::GenerateNameForError(const PFunction * from)
+{
+	return MakeFunctionPointerDescriptiveName(from->Variants[0].Proto, from->Variants[0].ArgFlags, FScopeBarrier::SideFromFlags(from->Variants[0].Flags));
+}
+
+PFunctionPointer::PFunctionPointer(PPrototype * proto, TArray<uint32_t> && argflags, int scope)
+	: PPointer(proto ? (PType*) proto : TypeVoid, false), ArgFlags(std::move(argflags)), Scope(scope)
+{
+	if(!proto)
+	{
+		mDescriptiveName = "Function<void>";
+	}
+	else
+	{
+		mDescriptiveName = MakeFunctionPointerDescriptiveName(proto, ArgFlags, scope);
+	}
+
+	Flags |= TYPE_FunctionPointer;
+
+	if(proto)
+	{
+		assert(Scope != -1); // for now, a scope is always required
+
+		TArray<FName> ArgNames;
+		TArray<uint32_t> ArgFlags2(ArgFlags); // AddVariant calls std::move on this, so it needs to be a copy,
+											  // but it takes it as a regular reference, so it needs to be a full variable instead of a temporary
+		ArgNames.Resize(ArgFlags.Size());
+		FakeFunction = Create<PFunction>();
+		FakeFunction->AddVariant(proto, ArgFlags2, ArgNames, nullptr, FScopeBarrier::FlagsFromSide(Scope), 0);
+	}
+	else
+	{
+		FakeFunction = nullptr;
+	}
+}
+
+void PFunctionPointer::WriteValue(FSerializer &ar, const char *key, const void *addr) const
+{
+	auto p = *(const PFunction**)(addr);
+	if(p)
+	{
+		FunctionPointerValue val;
+		FunctionPointerValue *fpv = &val;
+		val.ClassName = FString((p->OwningClass ? p->OwningClass->TypeName : NAME_None).GetChars());
+		val.FunctionName = FString(p->SymbolName.GetChars());
+		SerializeFunctionPointer(ar, key, fpv);
+	}
+	else
+	{
+		FunctionPointerValue *fpv = nullptr;
+		SerializeFunctionPointer(ar, key, fpv);
+	}
+}
+
+PFunction *NativeFunctionPointerCast(PFunction *from, const PFunctionPointer *to);
+
+bool PFunctionPointer::ReadValue(FSerializer &ar, const char *key, void *addr) const
+{
+	FunctionPointerValue val;
+	FunctionPointerValue *fpv = &val;
+	SerializeFunctionPointer(ar, key, fpv);
+
+	PFunction ** fn = (PFunction**)(addr);
+
+	if(fpv)
+	{
+		auto cls = PClass::FindClass(val.ClassName);
+		if(!cls)
+		{
+			*fn = nullptr;
+			Printf(TEXTCOLOR_RED "Function Pointer ('%s::%s'): '%s' is not a valid class\n",
+				val.ClassName.GetChars(),
+				val.FunctionName.GetChars(),
+				val.ClassName.GetChars()
+			);
+			ar.mErrors++;
+			return false;
+		}
+		auto sym = cls->FindSymbol(FName(val.FunctionName), true);
+		if(!sym)
+		{
+			*fn = nullptr;
+			Printf(TEXTCOLOR_RED "Function Pointer ('%s::%s'): symbol '%s' does not exist in class '%s'\n",
+				val.ClassName.GetChars(),
+				val.FunctionName.GetChars(),
+				val.FunctionName.GetChars(),
+				val.ClassName.GetChars()
+			);
+			ar.mErrors++;
+			return false;
+		}
+		PFunction* p = dyn_cast<PFunction>(sym);
+		if(!p)
+		{
+			*fn = nullptr;
+			Printf(TEXTCOLOR_RED "Function Pointer (%s::%s): '%s' in class '%s' is a variable, not a function\n",
+				val.ClassName.GetChars(),
+				val.FunctionName.GetChars(),
+				val.FunctionName.GetChars(),
+				val.ClassName.GetChars()
+			);
+			ar.mErrors++;
+			return false;
+		}
+		*fn = NativeFunctionPointerCast(p, this);
+		if(!*fn)
+		{
+			if((p->Variants[0].Flags & (VARF_Action | VARF_Virtual)) != 0)
+			{
+				*fn = nullptr;
+				Printf(TEXTCOLOR_RED "Function Pointer (%s::%s): function '%s' in class '%s' is %s, not a static function\n",
+					val.ClassName.GetChars(),
+					val.FunctionName.GetChars(),
+					val.FunctionName.GetChars(),
+					val.ClassName.GetChars(),
+					(p->GetImplicitArgs() == 1 ? "a virtual function" : "an action function")
+				);
+			}
+			else
+			{
+				FString fn_name = MakeFunctionPointerDescriptiveName(p->Variants[0].Proto,p->Variants[0].ArgFlags, FScopeBarrier::SideFromFlags(p->Variants[0].Flags));
+				Printf(TEXTCOLOR_RED "Function Pointer (%s::%s) has incompatible type (Pointer is '%s', Function is '%s')\n",
+							val.ClassName.GetChars(),
+							val.FunctionName.GetChars(),
+							fn_name.GetChars(),
+							mDescriptiveName.GetChars()
+				);
+			}
+			ar.mErrors++;
+			return false;
+		}
+		return true;
+	}
+	else
+	{
+		*fn = nullptr;
+	}
+	return true;
+}
+
+bool PFunctionPointer::IsMatch(intptr_t id1, intptr_t id2) const
+{
+	const PPrototype * proto = (const PPrototype*) id1;
+	const PFunctionPointer::FlagsAndScope * flags_and_scope = (const PFunctionPointer::FlagsAndScope *) id2;
+	return (proto == (PointedType == TypeVoid ? nullptr : PointedType))
+		&& (Scope == flags_and_scope->Scope)
+		&& (ArgFlags == *flags_and_scope->ArgFlags);
+}
+
+void PFunctionPointer::GetTypeIDs(intptr_t &id1, intptr_t &id2) const
+{	//NOT SUPPORTED
+	assert(0 && "GetTypeIDs not supported for PFunctionPointer");
+}
+
+PFunctionPointer * NewFunctionPointer(PPrototype * proto, TArray<uint32_t> && argflags, int scope)
+{
+	size_t bucket;
+
+	PFunctionPointer::FlagsAndScope flags_and_scope { &argflags, scope };
+
+	PType *fn = TypeTable.FindType(NAME_Function, (intptr_t)proto, (intptr_t)&flags_and_scope, &bucket);
+	if (fn == nullptr)
+	{
+		fn = new PFunctionPointer(proto, std::move(argflags), scope);
+		flags_and_scope.ArgFlags = &static_cast<PFunctionPointer *>(fn)->ArgFlags;
+		TypeTable.AddType(fn, NAME_Function, (intptr_t)proto, (intptr_t)&flags_and_scope, bucket);
+	}
+	return (PFunctionPointer *)fn;
 }
 
 /* PStruct ****************************************************************/
@@ -2209,12 +3254,13 @@ PMap *NewMap(PType *keytype, PType *valuetype)
 //
 //==========================================================================
 
-PStruct::PStruct(FName name, PTypeBase *outer, bool isnative)
+PStruct::PStruct(FName name, PTypeBase *outer, bool isnative, int fileno)
 : PContainerType(name, outer)
 {
 	mDescriptiveName.Format("%sStruct<%s>", isnative? "Native" : "", name.GetChars());
 	Size = 0;
 	isNative = isnative;
+	mDefFileNo = fileno;
 }
 
 //==========================================================================
@@ -2243,7 +3289,7 @@ void PStruct::SetDefaultValue(void *base, unsigned offset, TArray<FTypeAndOffset
 //
 //==========================================================================
 
-void PStruct::SetPointer(void *base, unsigned offset, TArray<size_t> *special)
+void PStruct::SetPointer(void *base, unsigned offset, TArray<std::pair<size_t, PObjectPointer *>> *special)
 {
 	auto it = Symbols.GetIterator();
 	PSymbolTable::MapType::Pair *pair;
@@ -2263,7 +3309,7 @@ void PStruct::SetPointer(void *base, unsigned offset, TArray<size_t> *special)
 //
 //==========================================================================
 
-void PStruct::SetPointerArray(void *base, unsigned offset, TArray<size_t> *special)
+void PStruct::SetPointerArray(void *base, unsigned offset, TArray<std::pair<size_t, PDynArray *>> *special)
 {
 	auto it = Symbols.GetIterator();
 	PSymbolTable::MapType::Pair *pair;
@@ -2273,6 +3319,26 @@ void PStruct::SetPointerArray(void *base, unsigned offset, TArray<size_t> *speci
 		if (field && !(field->Flags & VARF_Transient))
 		{
 			field->Type->SetPointerArray(base, unsigned(offset + field->Offset), special);
+		}
+	}
+}
+
+//==========================================================================
+//
+// PStruct :: SetPointerMap
+//
+//==========================================================================
+
+void PStruct::SetPointerMap(void *base, unsigned offset, TArray<std::pair<size_t, PMap *>> *special)
+{
+	auto it = Symbols.GetIterator();
+	PSymbolTable::MapType::Pair *pair;
+	while (it.NextPair(pair))
+	{
+		auto field = dyn_cast<PField>(pair->Value);
+		if (field && !(field->Flags & VARF_Transient))
+		{
+			field->Type->SetPointerMap(base, unsigned(offset + field->Offset), special);
 		}
 	}
 }
@@ -2321,7 +3387,7 @@ bool PStruct::ReadValue(FSerializer &ar, const char *key, void *addr) const
 PField *PStruct::AddField(FName name, PType *type, uint32_t flags)
 {
 	assert(type->Size > 0);
-	return Symbols.AddField(name, type, flags, Size, &Align);
+	return Symbols.AddField(name, type, flags, Size, &Align, mDefFileNo);
 }
 
 //==========================================================================
@@ -2335,7 +3401,7 @@ PField *PStruct::AddField(FName name, PType *type, uint32_t flags)
 
 PField *PStruct::AddNativeField(FName name, PType *type, size_t address, uint32_t flags, int bitvalue)
 {
-	return Symbols.AddNativeField(name, type, address, flags, bitvalue);
+	return Symbols.AddNativeField(name, type, address, flags, bitvalue, mDefFileNo);
 }
 
 //==========================================================================
@@ -2346,14 +3412,14 @@ PField *PStruct::AddNativeField(FName name, PType *type, size_t address, uint32_
 //
 //==========================================================================
 
-PStruct *NewStruct(FName name, PTypeBase *outer, bool native)
+PStruct *NewStruct(FName name, PTypeBase *outer, bool native, int fileno)
 {
 	size_t bucket;
 	if (outer == nullptr) outer = Namespaces.GlobalNamespace;
 	PType *stype = TypeTable.FindType(NAME_Struct, (intptr_t)outer, name.GetIndex(), &bucket);
 	if (stype == nullptr)
 	{
-		stype = new PStruct(name, outer, native);
+		stype = new PStruct(name, outer, native, fileno);
 		TypeTable.AddType(stype, NAME_Struct, (intptr_t)outer, name.GetIndex(), bucket);
 	}
 	return static_cast<PStruct *>(stype);
@@ -2451,7 +3517,7 @@ PPrototype *NewPrototype(const TArray<PType *> &rettypes, const TArray<PType *> 
 //
 //==========================================================================
 
-PClassType::PClassType(PClass *cls)
+PClassType::PClassType(PClass *cls, int fileno)
 {
 	assert(cls->VMType == nullptr);
 	Descriptor = cls;
@@ -2464,6 +3530,7 @@ PClassType::PClassType(PClass *cls)
 		ScopeFlags = ParentType->ScopeFlags;
 	}
 	cls->VMType = this;
+	mDefFileNo = fileno;
 	mDescriptiveName.Format("Class<%s>", cls->TypeName.GetChars());
 }
 
@@ -2475,7 +3542,7 @@ PClassType::PClassType(PClass *cls)
 
 PField *PClassType::AddField(FName name, PType *type, uint32_t flags)
 {
-	return Descriptor->AddField(name, type, flags);
+	return Descriptor->AddField(name, type, flags, mDefFileNo);
 }
 
 //==========================================================================
@@ -2486,7 +3553,7 @@ PField *PClassType::AddField(FName name, PType *type, uint32_t flags)
 
 PField *PClassType::AddNativeField(FName name, PType *type, size_t address, uint32_t flags, int bitvalue)
 {
-	auto field = Symbols.AddNativeField(name, type, address, flags, bitvalue);
+	auto field = Symbols.AddNativeField(name, type, address, flags, bitvalue, mDefFileNo);
 	if (field != nullptr) Descriptor->Fields.Push(field);
 	return field;
 }
@@ -2497,13 +3564,13 @@ PField *PClassType::AddNativeField(FName name, PType *type, size_t address, uint
 //
 //==========================================================================
 
-PClassType *NewClassType(PClass *cls)
+PClassType *NewClassType(PClass *cls, int fileno)
 {
 	size_t bucket;
 	PType *ptype = TypeTable.FindType(NAME_Object, 0, cls->TypeName.GetIndex(), &bucket);
 	if (ptype == nullptr)
 	{
-		ptype = new PClassType(cls);
+		ptype = new PClassType(cls, fileno);
 		TypeTable.AddType(ptype, NAME_Object, 0, cls->TypeName.GetIndex(), bucket);
 	}
 	return static_cast<PClassType *>(ptype);
@@ -2588,13 +3655,13 @@ size_t FTypeTable::Hash(FName p1, intptr_t p2, intptr_t p3)
 	// to transform this into a ROR or ROL.
 	i1 = (i1 >> (sizeof(size_t)*4)) | (i1 << (sizeof(size_t)*4));
 
-	if (p1 != NAME_Prototype)
+	if (p1 != NAME_Prototype && p1 != NAME_Function)
 	{
 		size_t i2 = (size_t)p2;
 		size_t i3 = (size_t)p3;
 		return (~i1 ^ i2) + i3 * 961748927;	// i3 is multiplied by a prime
 	}
-	else
+	else if(p1 == NAME_Prototype)
 	{ // Prototypes need to hash the TArrays at p2 and p3
 		const TArray<PType *> *a2 = (const TArray<PType *> *)p2;
 		const TArray<PType *> *a3 = (const TArray<PType *> *)p3;
@@ -2607,6 +3674,18 @@ size_t FTypeTable::Hash(FName p1, intptr_t p2, intptr_t p3)
 			i1 = (i1 * 961748927) + (size_t)((*a3)[i]);
 		}
 		return i1;
+	}
+	else // if(p1 == NAME_Function)
+	{ // functions need custom hashing as well
+		size_t i2 = (size_t)p2;
+		const PFunctionPointer::FlagsAndScope * flags_and_scope = (const PFunctionPointer::FlagsAndScope *) p3;
+		const TArray<uint32_t> * a3 = flags_and_scope->ArgFlags;
+		i1 = (~i1 ^ i2);
+		for (unsigned i = 0; i < a3->Size(); ++i)
+		{
+			i1 = (i1 * 961748927) + (size_t)((*a3)[i]);
+		}
+		return (i1 * 961748927) + (size_t)flags_and_scope->Scope;
 	}
 }
 

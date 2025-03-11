@@ -470,7 +470,7 @@ void DPSprite::NewTick()
 
 				// @Cockatrice - Add the current visible frame to the frame list, so the renderer can look backwards
 				// while waiting for frames to load in the background
-				FTextureID lump = sprites[pspr->GetSprite()].GetSpriteFrame(pspr->GetFrame(), 0, 0., nullptr);
+				FTextureID lump = sprites[pspr->GetSprite()].GetSpriteFrame(pspr->GetFrame(), 0, nullAngle, nullptr);
 				if(lump.isValid() && lump.GetIndex() != 0 && (pspr->LastPatches.pos < 0 || lump.GetIndex() != pspr->LastPatches[0])) pspr->LastPatches.add(lump.GetIndex());
 
 				pspr = pspr->Next;
@@ -645,7 +645,7 @@ void P_GetCameraOffsets(player_t *player, DVector3 &angleOffsets, DVector3 &posO
 
 		// Add level tilt to the offsets
 		if (worldTilt && g_leveltilting) {
-			auto wyaw = player->mo->Angles.Yaw + level.tiltAngle;
+			auto wyaw = player->mo->Angles.Yaw + DAngle::fromDeg(level.tiltAngle);
 			angleOffsets.Z += wyaw.Cos() * level.tilt;
 			angleOffsets.Y += -wyaw.Sin() * level.tilt;
 		}

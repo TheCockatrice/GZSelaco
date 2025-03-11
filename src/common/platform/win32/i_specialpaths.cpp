@@ -37,30 +37,17 @@
 #include <lmcons.h>
 #include <shlobj.h>
 #include <Shlwapi.h>
+#include <VersionHelpers.h>
 
 #include "i_specialpaths.h"
 #include "printf.h"
 #include "cmdlib.h"
 #include "findfile.h"
 #include "version.h"	// for GAMENAME
+#include "gstrings.h"
+#include "i_mainwindow.h"
+#include "engineerrors.h"
 
-// Vanilla MinGW does not have folder ids
-#if defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR)
-static const GUID FOLDERID_LocalAppData = { 0xf1b32785, 0x6fba, 0x4fcf, 0x9d, 0x55, 0x7b, 0x8e, 0x7f, 0x15, 0x70, 0x91 };
-static const GUID FOLDERID_RoamingAppData = { 0x3eb685db, 0x65f9, 0x4cf6, 0xa0, 0x3a, 0xe3, 0xef, 0x65, 0x72, 0x9f, 0x3d };
-static const GUID FOLDERID_SavedGames = { 0x4c5c32ff, 0xbb9d, 0x43b0, 0xb5, 0xb4, 0x2d, 0x72, 0xe5, 0x4e, 0xaa, 0xa4 };
-static const GUID FOLDERID_Documents = { 0xfdd39ad0, 0x238f, 0x46af, 0xad, 0xb4, 0x6c, 0x85, 0x48, 0x03, 0x69, 0xc7 };
-static const GUID FOLDERID_Pictures = { 0x33e28130, 0x4e1e, 0x4676, 0x83, 0x5a, 0x98, 0x39, 0x5c, 0x3b, 0xc3, 0xbb };
-#endif
-
-//===========================================================================
-//
-// IsProgramDirectoryWritable
-//
-// If the program directory is writable, then dump everything in there for
-// historical reasons. Otherwise, known folders get used instead.
-//
-//===========================================================================
 
 bool UseKnownFolders()
 {
@@ -131,35 +118,107 @@ bool UseKnownFoldersIncludingProgramFiles()
 	if (file != INVALID_HANDLE_VALUE)
 	{
 		CloseHandle(file);
-		if (!batchrun) Printf("Using program directory for savegame storage\n");
+		Printf("Using program directory for savegame storage\n");
 		iswritable = true;
 		return false;
 	}
 
-	if (!batchrun) Printf("Using known folders for savegame storage\n");
+	Printf("Using known folders for savegame storage\n");
 	iswritable = false;
 	return true;
 }
+
+
+
+static int isportable = -1;
+
+//===========================================================================
+//
+// IsProgramDirectoryWritable
+//
+// If the program directory is writable, then dump everything in there for
+// historical reasons. Otherwise, known folders get used instead.
+//
+//===========================================================================
+
+bool IsPortable()
+{
+	// @Cockatrice - Commenting this out for now, since we need to be comaptible with older Selaco storage setups
+	/*
+	// Cache this value so the semantics don't change during a single run
+	// of the program. (e.g. Somebody could add write access while the
+	// program is running.)
+	HANDLE file;
+
+	if (isportable >= 0)
+	{
+		return !!isportable;
+	}
+
+	// Consider 'Program Files' read only without actually checking.
+	bool found = false;
+	for (auto p : { L"ProgramFiles", L"ProgramFiles(x86)" })
+	{
+		wchar_t buffer1[256];
+		if (GetEnvironmentVariable(p, buffer1, 256))
+		{
+			FString envpath(buffer1);
+			FixPathSeperator(envpath);
+			if (progdir.MakeLower().IndexOf(envpath.MakeLower()) == 0)
+			{
+				isportable = false;
+				return false;
+			}
+		}
+	}
+
+	// A portable INI means that this storage location should also be portable if the file can be written to.
+	FStringf path("%s" GAMENAMELOWERCASE "_portable.ini", progdir.GetChars());
+	if (FileExists(path))
+	{
+		file = CreateFile(path.WideString().c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL,
+			OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+		if (file != INVALID_HANDLE_VALUE)
+		{
+			CloseHandle(file);
+			if (!batchrun) Printf("Using portable configuration\n");
+			isportable = true;
+			return true;
+		}
+	}
+
+	isportable = false;
+	return false;
+	*/
+
+	return !UseKnownFoldersIncludingProgramFiles();
+}
+
 
 //===========================================================================
 //
 // GetKnownFolder
 //
-// Returns the known_folder if SHGetKnownFolderPath is available, otherwise
-// returns the shell_folder using SHGetFolderPath.
+// Returns the known_folder from SHGetKnownFolderPath
 //
 //===========================================================================
 
-bool GetKnownFolder(int shell_folder, REFKNOWNFOLDERID known_folder, bool create, FString &path)
+FString GetKnownFolder(int shell_folder, REFKNOWNFOLDERID known_folder, bool create)
 {
 	PWSTR wpath;
 	if (FAILED(SHGetKnownFolderPath(known_folder, create ? KF_FLAG_CREATE : 0, NULL, &wpath)))
 	{
-		return false;
+		// This should never be triggered unless the OS was compromised
+		I_FatalError("Unable to retrieve or create known folder: {%08lX-%04hX-%04hX-%02hhX%02hhX-%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX} Create: %d", 
+			known_folder.Data1, known_folder.Data2, known_folder.Data3,
+			known_folder.Data4[0], known_folder.Data4[1], known_folder.Data4[2], known_folder.Data4[3],
+			known_folder.Data4[4], known_folder.Data4[5], known_folder.Data4[6], known_folder.Data4[7],
+			create);
 	}
-	path = wpath;
+	FString path = FString(wpath);
+	FixPathSeperator(path);
 	CoTaskMemFree(wpath);
-	return true;
+	return path;
 }
 
 //===========================================================================
@@ -172,17 +231,12 @@ bool GetKnownFolder(int shell_folder, REFKNOWNFOLDERID known_folder, bool create
 
 FString M_GetAppDataPath(bool create)
 {
-	FString path;
+	FString path = GetKnownFolder(CSIDL_LOCAL_APPDATA, FOLDERID_LocalAppData, create);
 
-	if (!GetKnownFolder(CSIDL_LOCAL_APPDATA, FOLDERID_LocalAppData, create, path))
-	{ // Failed (e.g. On Win9x): use program directory
-		path = progdir;
-	}
 	path += "/" GAMENAMELOWERCASE;
-	path.Substitute("//", "/");	// needed because progdir ends with a slash.
 	if (create)
 	{
-		CreatePath(path);
+		CreatePath(path.GetChars());
 	}
 	return path;
 }
@@ -197,19 +251,14 @@ FString M_GetAppDataPath(bool create)
 
 FString M_GetCachePath(bool create)
 {
-	FString path;
+	FString path = GetKnownFolder(CSIDL_LOCAL_APPDATA, FOLDERID_LocalAppData, create);
 
-	if (!GetKnownFolder(CSIDL_LOCAL_APPDATA, FOLDERID_LocalAppData, create, path))
-	{ // Failed (e.g. On Win9x): use program directory
-		path = progdir;
-	}
 	// Don't use GAME_DIR and such so that ZDoom and its child ports can
 	// share the node cache.
 	path += "/zdoom/cache";
-	path.Substitute("//", "/");	// needed because progdir ends with a slash.
 	if (create)
 	{
-		CreatePath(path);
+		CreatePath(path.GetChars());
 	}
 	return path;
 }
@@ -225,6 +274,84 @@ FString M_GetCachePath(bool create)
 FString M_GetAutoexecPath()
 {
 	return "$PROGDIR/autoexec.cfg";
+}
+
+//===========================================================================
+//
+// M_GetOldConfigPath
+//
+// Check if we have a config in a place that's no longer used.
+// 
+//===========================================================================
+
+FString M_GetOldConfigPath(int& type)
+{
+	FString path;
+	HRESULT hr;
+
+	// construct "$PROGDIR/-$USER.ini"
+	WCHAR uname[UNLEN + 1];
+	DWORD unamelen = UNLEN;
+
+	path = progdir;
+	hr = GetUserNameW(uname, &unamelen);
+	if (SUCCEEDED(hr) && uname[0] != 0)
+	{
+		// Is it valid for a user name to have slashes?
+		// Check for them and substitute just in case.
+		auto probe = uname;
+		while (*probe != 0)
+		{
+			if (*probe == '\\' || *probe == '/')
+				*probe = '_';
+			++probe;
+		}
+		path << GAMENAMELOWERCASE "-" << FString(uname) << ".ini";
+		type = 0;
+		if (FileExists(path))
+			return path;
+	}
+
+	// Check in app data where this was previously stored.
+	// We actually prefer to store the config in a more visible place so this is no longer used.
+	path = GetKnownFolder(CSIDL_APPDATA, FOLDERID_RoamingAppData, true);
+	path += "/" GAME_DIR "/" GAMENAMELOWERCASE ".ini";
+	type = 1;
+	if (FileExists(path))
+		return path;
+
+	return "";
+}
+
+//===========================================================================
+//
+// M_MigrateOldConfig
+//
+// Ask the user what to do with their old config.
+// 
+//===========================================================================
+
+int M_MigrateOldConfig()
+{
+	int selection = IDCANCEL;
+	auto globalstr = L"Move to Users/ folder";
+	auto portablestr = L"Convert to portable installation";
+	auto cancelstr = L"Cancel";
+	auto titlestr = L"Migrate existing configuration";
+	auto infostr = L"" GAMENAME " found a user specific config in the game folder";
+	const TASKDIALOG_BUTTON buttons[] = { {IDYES, globalstr}, {IDNO, portablestr}, {IDCANCEL, cancelstr} };
+	TASKDIALOGCONFIG taskDialogConfig = {};
+	taskDialogConfig.cbSize = sizeof(TASKDIALOGCONFIG);
+	taskDialogConfig.pszMainIcon = TD_WARNING_ICON;
+	taskDialogConfig.pButtons = buttons;
+	taskDialogConfig.cButtons = countof(buttons);
+	taskDialogConfig.pszWindowTitle = titlestr;
+	taskDialogConfig.pszContent = infostr;
+	taskDialogConfig.hwndParent = mainwindow.GetHandle();
+	taskDialogConfig.dwFlags = TDF_USE_COMMAND_LINKS;
+	TaskDialogIndirect(&taskDialogConfig, &selection, NULL, NULL);
+	if (selection == IDYES || selection == IDNO) return selection;
+	throw CExitEvent(3);
 }
 
 //===========================================================================
@@ -250,15 +377,16 @@ FString M_GetConfigPath(bool for_reading)
 	path = "";
 
 	// Construct a user-specific config name
-	if (UseKnownFolders() && GetKnownFolder(CSIDL_APPDATA, FOLDERID_RoamingAppData, true, path))
+	if (UseKnownFolders())
 	{
+		path = GetKnownFolder(CSIDL_APPDATA, FOLDERID_RoamingAppData, true);
 		path += "/" GAME_DIR;
-		CreatePath(path);
+		CreatePath(path.GetChars());
 		path += "/" GAMENAMELOWERCASE ".ini";
 	}
 	else
 	{ // construct "$PROGDIR/-$USER.ini"
-		WCHAR uname[UNLEN+1];
+		WCHAR uname[UNLEN + 1];
 		DWORD unamelen = UNLEN;
 
 		path = progdir;
@@ -304,31 +432,26 @@ FString M_GetConfigPath(bool for_reading)
 //
 //===========================================================================
 
-// I'm not sure when FOLDERID_Screenshots was added, but it was probably
-// for Windows 8, since it's not in the v7.0 Windows SDK.
-static const GUID MyFOLDERID_Screenshots = { 0xb7bede81, 0xdf94, 0x4682, 0xa7, 0xd8, 0x57, 0xa5, 0x26, 0x20, 0xb8, 0x6f };
-
 FString M_GetScreenshotsPath()
 {
 	FString path;
 
-	if (!UseKnownFolders())
+	if (IsPortable())
 	{
-		path << progdir << "/Screenshots/";
+		path << progdir << "Screenshots/";
 	}
-	else if (GetKnownFolder(-1, MyFOLDERID_Screenshots, true, path))
+	else if (IsWindows8OrGreater())
 	{
+		path = GetKnownFolder(-1, FOLDERID_Screenshots, true);
+
 		path << "/" GAMENAME "/";
 	}
-	else if (GetKnownFolder(CSIDL_MYPICTURES, FOLDERID_Pictures, true, path))
+	else 
 	{
+		path = GetKnownFolder(CSIDL_MYPICTURES, FOLDERID_Pictures, true);
 		path << "/Screenshots/" GAMENAME "/";
 	}
-	else
-	{
-		path << progdir << "/Screenshots/";
-	}
-	CreatePath(path);
+	CreatePath(path.GetChars());
 	return path;
 }
 
@@ -344,27 +467,16 @@ FString M_GetSavegamesPath()
 {
 	FString path;
 
-	if (!UseKnownFoldersIncludingProgramFiles())
+	if (IsPortable())
 	{
 		path << progdir << "Save/";
 	}
 	// Try standard Saved Games folder
-	else if (GetKnownFolder(-1, FOLDERID_SavedGames, true, path))
-	{
-		path << "/" GAMENAME "/";
-	}
-	// Try defacto My Documents/My Games folder
-	else if (GetKnownFolder(CSIDL_PERSONAL, FOLDERID_Documents, true, path))
-	{
-		// I assume since this isn't a standard folder, it doesn't have
-		// a localized name either.
-		path << "/My Games/" GAMENAME "/";
-	}
 	else
 	{
-		path << progdir << "Save/";
+		path = GetKnownFolder(-1, FOLDERID_SavedGames, true);
+		path << "/" GAMENAME "/";
 	}
-
 	return path;
 }
 
@@ -388,7 +500,7 @@ int M_GetSavegamesPaths(TArray<FString>& outputAr) {
 	path = "";
 
 	// Try Saved Games
-	if (GetKnownFolder(-1, FOLDERID_SavedGames, true, path))
+	path = GetKnownFolder(-1, FOLDERID_SavedGames, true);
 	{
 		path << "/" GAMENAME "/";
 		outputAr.Push(path);
@@ -397,7 +509,7 @@ int M_GetSavegamesPaths(TArray<FString>& outputAr) {
 	path = "";
 
 	// Try Documents/My Games/ Folder
-	if (GetKnownFolder(CSIDL_PERSONAL, FOLDERID_Documents, true, path))
+	path = GetKnownFolder(CSIDL_PERSONAL, FOLDERID_Documents, true);
 	{
 		path << "/My Games/" GAMENAME "/";
 		outputAr.Push(path);
@@ -419,28 +531,17 @@ FString M_GetDocumentsPath()
 {
 	FString path;
 
-	// A portable INI means that this storage location should also be portable.
-	path.Format("%s" GAMENAME "_portable.ini", progdir.GetChars());
-	if (FileExists(path))
-	{
-		return progdir;
-	}
-
-	if (!UseKnownFolders())
+	if (IsPortable())
 	{
 		return progdir;
 	}
 	// Try defacto My Documents/My Games folder
-	else if (GetKnownFolder(CSIDL_PERSONAL, FOLDERID_Documents, true, path))
+	else 
 	{
-		// I assume since this isn't a standard folder, it doesn't have
-		// a localized name either.
+		// I assume since this isn't a standard folder, it doesn't have a localized name either.
+		path = GetKnownFolder(CSIDL_PERSONAL, FOLDERID_Documents, true);
 		path << "/My Games/" GAMENAME "/";
-		CreatePath(path);
-	}
-	else
-	{
-		path = progdir;
+		CreatePath(path.GetChars());
 	}
 	return path;
 }
@@ -458,22 +559,16 @@ FString M_GetDemoPath()
 	FString path;
 
 	// A portable INI means that this storage location should also be portable.
-	FStringf inipath("%s" GAMENAME "_portable.ini", progdir.GetChars());
-	if (FileExists(inipath) || !UseKnownFolders())
+	if (IsPortable())
 	{
 		path << progdir << "Demos/";
 	}
 	else
 	// Try defacto My Documents/My Games folder
-	 if (GetKnownFolder(CSIDL_PERSONAL, FOLDERID_Documents, true, path))
 	{
-		// I assume since this isn't a standard folder, it doesn't have
-		// a localized name either.
+		// I assume since this isn't a standard folder, it doesn't have a localized name either.
+		path = GetKnownFolder(CSIDL_PERSONAL, FOLDERID_Documents, true);
 		path << "/My Games/" GAMENAME "/";
-	}
-	else
-	{
-		path << progdir << "Demos/";
 	}
 
 	return path;

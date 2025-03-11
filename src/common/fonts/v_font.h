@@ -37,6 +37,7 @@
 #include "vectors.h"
 #include "palentry.h"
 #include "name.h"
+#include "palettecontainer.h"
 
 class FGameTexture;
 struct FRemapTable;
@@ -113,7 +114,7 @@ public:
 	virtual CharData GetChar(int code, int translation) const;
 
 	virtual int GetCharWidth (int code) const;
-	int GetColorTranslation (EColorRange range, PalEntry *color = nullptr) const;
+	FTranslationID GetColorTranslation (EColorRange range, PalEntry *color = nullptr) const;
 	int GetLump() const { return Lump; }
 	int GetSpaceWidth () const { return SpaceWidth; }
 	int GetHeight () const { return FontHeight; }
@@ -176,6 +177,7 @@ public:
 		forceremap = other.forceremap;
 		Chars = other.Chars;
 		Translations = other.Translations;
+		lowercaselatinonly = other.lowercaselatinonly;
 		Lump = other.Lump;
 	}
 
@@ -183,7 +185,7 @@ protected:
 
 	void FixXMoves();
 
-	void ReadSheetFont(TArray<FolderEntry> &folderdata, int width, int height, const DVector2 &Scale, TMap<int, int> &explicitWidths);
+	void ReadSheetFont(std::vector<FileSys::FolderEntry> &folderdata, int width, int height, const DVector2 &Scale, TMap<int, int> &explicitWidths);
 
 	EFontType Type = EFontType::Unknown;
 	FName AltFontName = NAME_None;
@@ -200,9 +202,10 @@ protected:
 	bool MixedCase = false;
 	bool forceremap = false;
 	bool supportsChardata = false;
-	
+	bool lowercaselatinonly = false;
+
 	TArray<CharData> Chars;
-	TArray<int> Translations;
+	TArray<FTranslationID> Translations;
 
 	int Lump;
 	FName FontName = NAME_None;
@@ -215,7 +218,6 @@ protected:
 	friend void V_InitFonts();
 };
 
-
 extern FFont *SmallFont, *SmallFont2, *BigFont, *BigUpper, *ConFont, *IntermissionFont, *NewConsoleFont, *NewSmallFont, *CurrentConsoleFont, *OriginalSmallFont, *AlternativeSmallFont, *OriginalBigFont, *AlternativeBigFont;
 
 void V_InitFonts();
@@ -225,7 +227,7 @@ PalEntry V_LogColorFromColorRange (EColorRange range);
 EColorRange V_ParseFontColor (const uint8_t *&color_value, int normalcolor, int boldcolor);
 void V_InitFontColors();
 char* CleanseString(char* str);
-void V_ApplyLuminosityTranslation(int translation, uint8_t* pixel, int size);
+void V_ApplyLuminosityTranslation(const LuminosityTranslationDesc& lum, uint8_t* pixel, int size);
 void V_LoadTranslations();
 class FBitmap;
 

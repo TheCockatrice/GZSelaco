@@ -533,7 +533,7 @@ void FRawMouse::Grab()
 
 		rid.usUsagePage = HID_GENERIC_DESKTOP_PAGE;
 		rid.usUsage = HID_GDP_MOUSE;
-		rid.dwFlags = RIDEV_CAPTUREMOUSE | RIDEV_NOLEGACY;
+		rid.dwFlags = RIDEV_NOLEGACY;
 		rid.hwndTarget = mainwindow.GetHandle();
 		if (RegisterRawInputDevices(&rid, 1, sizeof(rid)))
 		{

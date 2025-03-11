@@ -25,7 +25,7 @@ class FGameTexture;
 class VkHardwareTexture : public IHardwareTexture
 {
 	friend class VkMaterial;
-	friend class VulkanFrameBuffer;	// TODO: Fix this, this is lazy
+	friend class VulkanRenderDevice;	// TODO: Fix this, this is lazy
 
 public:
 	VkHardwareTexture(VulkanRenderDevice* fb, int numchannels);

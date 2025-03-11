@@ -425,7 +425,7 @@ void FMultiPatchTexture::CollectForPrecache(PrecacheInfo &info, bool requiretrue
 // Special version of this must provide a reader for every patch in the texture
 FImageLoadParams *FMultiPatchTexture::NewLoaderParams(int conversion, int translation, FRemapTable *remap) {
 	FMultiPatchParams *il = new FMultiPatchParams();
-	il->reader = nullptr;
+	il->lump = SourceLump;
 	il->conversion = conversion;
 	il->translation = translation;
 	il->remap = remap;

@@ -115,7 +115,7 @@ void AttachLight(AActor *self)
 	light->pPitch = &self->Angles.Pitch;
 	light->pLightFlags = (LightFlags*)&self->IntVar(NAME_lightflags);
 	light->pArgs = self->args;
-	light->specialf1 = self->FloatVar(NAME_Flicker) <= 0 ? DAngle(double(self->SpawnAngle)).Normalized360().Degrees : self->FloatVar(NAME_Flicker);
+	light->specialf1 = self->FloatVar(NAME_Flicker) <= 0 ? DAngle::fromDeg(double(self->SpawnAngle)).Normalized360().Degrees() : self->FloatVar(NAME_Flicker);
 	light->Sector = light->LastSector = self->Sector;
 	light->target = self;
 	light->mShadowmapIndex = 1024;
@@ -274,7 +274,7 @@ void FDynamicLight::Tick()
 
 	if (owned)
 	{
-		if (!target->state)
+		if (!target->state || !target->ShouldRenderLocally())
 		{
 			Deactivate();
 			return;

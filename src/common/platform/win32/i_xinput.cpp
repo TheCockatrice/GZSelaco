@@ -96,6 +96,8 @@ CUSTOM_CVAR(Int, joy_xinput_squarelook, 1, CVAR_ARCHIVE | CVAR_GLOBALCONFIG) {
 	if (self < 0) self = 0;
 }
 
+extern bool AppActive;
+
 // TYPES -------------------------------------------------------------------
 
 typedef DWORD (WINAPI *XInputGetStateType)(DWORD index, XINPUT_STATE *state);
@@ -140,6 +142,13 @@ public:
 	bool IsAxisMapDefault(int axis);
 	bool IsAxisScaleDefault(int axis);
 	bool IsAxisAccelerationDefault(int axis) override;
+
+	bool GetEnabled();
+	void SetEnabled(bool enabled);
+
+	bool AllowsEnabledInBackground() { return true; }
+	bool GetEnabledInBackground() { return EnabledInBackground; }
+	void SetEnabledInBackground(bool enabled) { EnabledInBackground = enabled; }
 
 	void SetDefaultConfig();
 	FString GetIdentifier();
@@ -186,6 +195,8 @@ protected:
 	DWORD LastPacketNumber;
 	int LastButtons;
 	bool Connected;
+	bool Enabled;
+	bool EnabledInBackground;
 
 	void Attached();
 	void Detached();
@@ -271,6 +282,7 @@ FXInputController::FXInputController(int index)
 {
 	Index = index;
 	Connected = false;
+	Enabled = true;
 	M_LoadJoystickConfig(this);
 }
 
@@ -404,7 +416,7 @@ void FXInputController::ProcessInput()
 	}
 	
 
-	if (state.dwPacketNumber == LastPacketNumber)
+	if (state.dwPacketNumber == LastPacketNumber || !Enabled)
 	{ // Nothing has changed since last time.
 		return;
 	}
@@ -889,6 +901,31 @@ bool FXInputController::IsAxisAccelerationDefault(int axis)
 	return true;
 }
 
+
+//===========================================================================
+//
+
+// FXInputController :: GetEnabled
+//
+//===========================================================================
+
+bool FXInputController::GetEnabled()
+{
+	return Enabled;
+}
+
+//===========================================================================
+//
+// FXInputController :: SetEnabled
+//
+//===========================================================================
+
+void FXInputController::SetEnabled(bool enabled)
+{
+	Enabled = enabled;
+}
+
+
 //===========================================================================
 //
 // FXInputController :: IsAxisMapDefault
@@ -987,7 +1024,10 @@ void FXInputManager::ProcessInput()
 {
 	for (int i = 0; i < XUSER_MAX_COUNT; ++i)
 	{
-		Devices[i]->ProcessInput();
+		if(AppActive || Devices[i]->GetEnabledInBackground())
+		{
+			Devices[i]->ProcessInput();
+		}
 	}
 }
 

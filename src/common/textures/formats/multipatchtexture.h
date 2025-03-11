@@ -47,7 +47,7 @@ public:
 	int numPatches = 0;
 	FImageLoadParams **params = nullptr;
 
-	virtual ~FMultiPatchParams() {
+	~FMultiPatchParams() {
 		if (params) {
 			for (int x = 0; x < numPatches; x++) delete params[x];
 			delete params;
@@ -91,9 +91,9 @@ protected:
 	TexPart *Parts;
 
 	// The getters must optionally redirect if it's a simple one-patch texture.
-	int CopyPixels(FBitmap *bmp, int conversion) override;
+	int CopyPixels(FBitmap *bmp, int conversion, int frame = 0) override;
+	PalettedPixels CreatePalettedPixels(int conversion, int frame = 0) override;
 	int ReadPixels(FImageLoadParams *params, FBitmap *bmp) override;
-	TArray<uint8_t> CreatePalettedPixels(int conversion) override;
 	void CopyToBlock(uint8_t *dest, int dwidth, int dheight, FImageSource *source, int xpos, int ypos, int rotate, const uint8_t *translation, int style);
 	void CollectForPrecache(PrecacheInfo &info, bool requiretruecolor) override;
 

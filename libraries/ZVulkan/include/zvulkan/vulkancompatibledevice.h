@@ -11,6 +11,8 @@ public:
 
 	int GraphicsFamily = -1;
 	int PresentFamily = -1;
+	int UploadFamily = -1;
+	bool UploadFamilySupportsGraphics = false;
 
 	bool GraphicsTimeQueries = false;
 

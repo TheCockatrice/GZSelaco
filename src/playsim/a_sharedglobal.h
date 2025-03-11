@@ -31,7 +31,11 @@ public:
 	double GetRealZ (const side_t *wall) const;
 	void SetShade (uint32_t rgb);
 	void SetShade (int r, int g, int b);
-	void SetTranslation(uint32_t trans);
+	void SetTranslation(FTranslationID trans)
+	{
+		Translation = trans;
+	}
+
 	void Spread (const FDecalTemplate *tpl, side_t *wall, double x, double y, double z, F3DFloor * ffloor);
 	void GetXY (side_t *side, double &x, double &y) const;
 
@@ -42,7 +46,7 @@ public:
 	double ScaleX = 1, ScaleY = 1;
 	double Alpha = 1;
 	uint32_t AlphaColor = 0;
-	int Translation = 0;
+	FTranslationID Translation = NO_TRANSLATION;
 	FTextureID PicNum, LastPatch;
 	uint32_t RenderFlags = 0;
 	FRenderStyle RenderStyle;
@@ -69,8 +73,8 @@ public:
 	}
 	void Construct(side_t *wall, const FDecalTemplate *templ);
 
-	static DBaseDecal *StaticCreate(FLevelLocals *Level, const char *name, const DVector3 &pos, side_t *wall, F3DFloor * ffloor, PalEntry color = 0, uint32_t bloodTranslation = 0);
-	static DBaseDecal *StaticCreate(FLevelLocals *Level, const FDecalTemplate *tpl, const DVector3 &pos, side_t *wall, F3DFloor * ffloor, PalEntry color = 0, uint32_t bloodTranslation = 0, bool permanent = false);
+	static DBaseDecal *StaticCreate(FLevelLocals *Level, const char *name, const DVector3 &pos, side_t *wall, F3DFloor * ffloor, PalEntry color = 0, FTranslationID bloodTranslation = NO_TRANSLATION);
+	static DBaseDecal *StaticCreate(FLevelLocals *Level, const FDecalTemplate *tpl, const DVector3 &pos, side_t *wall, F3DFloor * ffloor, PalEntry color = 0, FTranslationID bloodTranslation = NO_TRANSLATION, bool permanent = false);
 
 	void BeginPlay ();
 	void Expired() override;
@@ -113,15 +117,19 @@ enum
 	QF_FULLINTENSITY =	1 << 4,
 	QF_WAVE =			1 << 5,
 	QF_3D =				1 << 6,
+	QF_GROUNDONLY =		1 << 7,
+	QF_AFFECTACTORS =	1 << 8,
+	QF_SHAKEONLY =		1 << 9,
+	QF_DAMAGEFALLOFF =	1 << 10,
 };
 
 struct FQuakeJiggers
 {
-	DVector3 Intensity;
-	DVector3 RelIntensity;
-	DVector3 Offset;
-	DVector3 RelOffset;
-	double RollIntensity, RollWave;
+	DVector3 Intensity = {};
+	DVector3 RelIntensity = {};
+	DVector3 Offset = {};
+	DVector3 RelOffset = {};
+	double RollIntensity = 0.0, RollWave = 0.0;
 };
 
 class DEarthquake : public DThinker
@@ -130,9 +138,9 @@ class DEarthquake : public DThinker
 	HAS_OBJECT_POINTERS
 public:
 	static const int DEFAULT_STAT = STAT_EARTHQUAKE;
-	void Construct(AActor *center, int intensityX, int intensityY, int intensityZ, int duration,
-		int damrad, int tremrad, FSoundID quakesfx, int flags, 
-		double waveSpeedX, double waveSpeedY, double waveSpeedZ, int falloff, int highpoint, double rollIntensity, double rollWave);
+	void Construct(AActor *center, double intensityX, double intensityY, double intensityZ, int duration,
+		double damrad, double tremrad, FSoundID quakesfx, int flags, 
+		double waveSpeedX, double waveSpeedY, double waveSpeedZ, double falloff, int highpoint, double rollIntensity, double rollWave, double damageMultiplier, double thrustMultiplier, int damage);
 
 	void Serialize(FSerializer &arc);
 	void Tick ();
@@ -147,11 +155,14 @@ public:
 	double m_Falloff;
 	int m_Highpoint, m_MiniCount;
 	double m_RollIntensity, m_RollWave;
+	double m_DamageMultiplier, m_ThrustMultiplier;
+	int m_Damage;
 	bool hasPlayedSound;
 
 	double GetModIntensity(double intensity, bool fake = false) const;
 	double GetModWave(double ticFrac, double waveMultiplier) const;
-	double GetFalloff(double dist) const;
+	double GetFalloff(double dist, double radius) const;
+	void DoQuakeDamage(DEarthquake *quake, AActor *victim, bool falloff) const;
 
 	static int StaticGetQuakeIntensities(double ticFrac, AActor *viewer, FQuakeJiggers &jiggers);
 };

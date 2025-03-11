@@ -150,10 +150,47 @@ DEFINE_ACTION_FUNCTION(IJoystickConfig, GetNumAxes)
 	ACTION_RETURN_INT(self->GetNumAxes());
 }
 
+DEFINE_ACTION_FUNCTION(IJoystickConfig, GetEnabled)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(IJoystickConfig);
+	ACTION_RETURN_BOOL(self->GetEnabled());
+}
+
+DEFINE_ACTION_FUNCTION(IJoystickConfig, SetEnabled)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(IJoystickConfig);
+	PARAM_BOOL(enabled);
+	self->SetEnabled(enabled);
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(IJoystickConfig, AllowsEnabledInBackground)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(IJoystickConfig);
+	ACTION_RETURN_BOOL(self->AllowsEnabledInBackground());
+}
+
+DEFINE_ACTION_FUNCTION(IJoystickConfig, GetEnabledInBackground)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(IJoystickConfig);
+	ACTION_RETURN_BOOL(self->GetEnabledInBackground());
+}
+
+DEFINE_ACTION_FUNCTION(IJoystickConfig, SetEnabledInBackground)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(IJoystickConfig);
+	PARAM_BOOL(enabled);
+	self->SetEnabledInBackground(enabled);
+	return 0;
+}
+
+
 DEFINE_ACTION_FUNCTION(IJoystickConfig, NumJoysticks)
 {
 	ACTION_RETURN_INT(Joysticks.Size());
 }
+
+
 
 DEFINE_ACTION_FUNCTION(IJoystickConfig, GetJoystick)
 {
@@ -184,10 +221,6 @@ DEFINE_ACTION_FUNCTION(IJoystickConfig, SetVibration)
 	PARAM_FLOAT(r);
 	ACTION_RETURN_BOOL(self->SetVibration((float)l, (float)r));
 }
-
-
-
-
 
 void UpdateJoystickMenu(IJoystickConfig *selected)
 {
@@ -231,7 +264,7 @@ void UpdateJoystickMenu(IJoystickConfig *selected)
 
 		for (int ii = 0; ii < (int)Joysticks.Size(); ++ii)
 		{
-			it = CreateOptionMenuItemJoyConfigMenu(Joysticks[ii]->GetName(), Joysticks[ii]);
+			it = CreateOptionMenuItemJoyConfigMenu(Joysticks[ii]->GetName().GetChars(), Joysticks[ii]);
 			GC::WriteBarrier(opt, it);
 			opt->mItems.Push(it);
 			if (ii == itemnum) opt->mSelectedItem = opt->mItems.Size();

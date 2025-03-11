@@ -142,16 +142,16 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck, int forceVersion)
 			// Force a specific version and error out if it doesn't exist
 			FString nMapName;
 			nMapName.Format("V%d%s", forceVersion, fMapname.GetChars());
-			if (nMapName.Len() <= 8) lump_name = fileSystem.CheckNumForName(nMapName);
+			if (nMapName.Len() <= 8) lump_name = fileSystem.CheckNumForName(nMapName.GetChars());
 			fmt.Format("maps/%s.wad", nMapName.GetChars());
-			lump_wad = fileSystem.CheckNumForFullName(fmt);
+			lump_wad = fileSystem.CheckNumForFullName(fmt.GetChars());
 			fMapname = nMapName;
 			map->version = forceVersion;
 		}
 		else if (forceVersion < 0) {
 			if (strlen(mapname) <= 8) lump_name = fileSystem.CheckNumForName(mapname);
 			fmt.Format("maps/%s.wad", mapname);
-			lump_wad = fileSystem.CheckNumForFullName(fmt);
+			lump_wad = fileSystem.CheckNumForFullName(fmt.GetChars());
 			map->version = 0;
 
 			int lwad = -1, lname = -1;
@@ -162,9 +162,9 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck, int forceVersion)
 			for (int x = 1; x < 50; x++) {
 				FString nMapName;
 				nMapName.Format("V%d%s", x, fMapname.GetChars());
-				if (nMapName.Len() <= 8) lname = fileSystem.CheckNumForName(nMapName);
+				if (nMapName.Len() <= 8) lname = fileSystem.CheckNumForName(nMapName.GetChars());
 				fmt.Format("maps/%s.wad", nMapName.GetChars());
-				lwad = fileSystem.CheckNumForFullName(fmt);
+				lwad = fileSystem.CheckNumForFullName(fmt.GetChars());
 
 				if (lname >= 0 || lwad >= 0) {
 					lmapname = nMapName;
@@ -187,7 +187,7 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck, int forceVersion)
 			// Names with more than 8 characters will only be checked as .wad and .map.
 			if (strlen(mapname) <= 8) lump_name = fileSystem.CheckNumForName(mapname);
 			fmt.Format("maps/%s.wad", mapname);
-			lump_wad = fileSystem.CheckNumForFullName(fmt);
+			lump_wad = fileSystem.CheckNumForFullName(fmt.GetChars());
 			/*fmt.Format("maps/%s.map", mapname);
 			lump_map = fileSystem.CheckNumForFullName(fmt);*/
 		}

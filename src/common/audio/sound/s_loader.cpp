@@ -5,12 +5,12 @@
 #include "actor.h"
 #include "stats.h"
 #include "i_time.h"
-#include "file_directory.h"
+#include "fs_swap.h"
 
 AudioLoaderQueue *AudioLoaderQueue::Instance = new AudioLoaderQueue();
 const int AudioLoaderQueue::MAX_THREADS;
 
-CVAR(Int, audio_loader_threads, 2, CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
+CVAR(Int, audio_loader_threads, 1, CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
 
 static void AppendAudioThreadStats(int q, int l, double tt, FString &out)
 {
@@ -62,43 +62,36 @@ ADD_STAT(audiothread)
 
 // TODO: Store the sound length in the output to be added to the resource
 bool AudioLoadThread::loadResource(AudioQInput &input, AudioQOutput &output) {
-	currentSoundID.store(input.soundID);
+	currentSoundID.store(input.soundID.index());
 	
-	auto rl = fileSystem.GetFileAt(input.sfx->lumpnum);		// These values do not change at runtime until after teardown
-	int size = rl->LumpSize;
+	//auto rl = fileSystem.GetFileAt(input.sfx->lumpnum);		// These values do not change at runtime until after teardown
+	int size = fileSystem.FileLength(input.lump);
 
-	assert(input.readerCopy);
+	assert(size >= 0);
 
 	char *data;
 
-	if (!rl->Cache) {	// TODO: We need to synchronize access to the cache!
-		// This resource hasn't been cached yet, we need to read it manually
-		if (!input.readerCopy) {
-			return false;
-		}
+	output.createdNewData = true;
+	data = new char[size];
 
-		// ReadData is designed to be thread safe so we should be okay here
-		data = new char[rl->LumpSize];
-		size = rl->ReadData(*input.readerCopy, data);
-		output.createdNewData = true;
-
-		// TODO: This is currently a memory leak situation because the data created here will never be released
-		// TODO: Find out how lump data is eventually freed and use the native process for that
-
-		delete input.readerCopy;
+	try {
+		FileReader reader = fileSystem.OpenFileReader(input.lump, FileSys::EReaderType::READER_NEW, 0);
+		reader.Read(data, size);
+		reader.Close();
+		output.data = data;
 	}
-	else {
-		data = rl->Cache;
+	catch (std::exception& e) {
+		output.data = nullptr;
 	}
 
-	output.data = data;
+	
 	output.sfx = input.sfx;
 	output.soundID = input.soundID;
 
 	// Try to interpret the data
-	if (size > 8)
+	if (size > 8 && output.data != nullptr)
 	{
-		int32_t dmxlen = LittleLong(((int32_t *)data)[1]);
+		int32_t dmxlen = FileSys::byteswap::LittleLong(((int32_t *)data)[1]);
 
 		// If the sound is voc, use the custom loader.
 		if (strncmp(data, "Creative Voice File", 19) == 0)
@@ -113,23 +106,24 @@ bool AudioLoadThread::loadResource(AudioQInput &input, AudioQOutput &output) {
 		// Otherwise, try the sound as DMX format.
 		else if (((uint8_t *)data)[0] == 3 && ((uint8_t *)data)[1] == 0 && dmxlen <= size - 8)
 		{
-			int frequency = LittleShort(((uint16_t *)data)[1]);
+			int frequency = FileSys::byteswap::LittleShort(((uint16_t *)data)[1]);
 			if (frequency == 0) frequency = 11025;
 			output.loadedSnd = GSnd->LoadSoundRaw((uint8_t *)data + 8, dmxlen, frequency, 1, 8, input.sfx->LoopStart);
 		}
 		// If that fails, let the sound system try and figure it out.
 		else
 		{
-			output.loadedSnd = GSnd->LoadSound((uint8_t *)data, size);
+			output.loadedSnd = GSnd->LoadSound((uint8_t *)data, size, input.sfx->LoopStart, input.sfx->LoopEnd);
 		}
-	}
 
-	if (output.loadedSnd.isValid()) {
-		return true;
+		if (output.loadedSnd.isValid()) {
+			return true;
+		}
 	}
 
 	// If we created any data, free it now
 	if (output.createdNewData) {
+		output.createdNewData = false;
 		delete [] data;
 	}
 
@@ -179,14 +173,14 @@ void AudioLoaderQueue::queue(sfxinfo_t *sfx, FSoundID soundID, const AudioQueueP
 		// If we find an entry for this soundID, we assume that it's already loading and skip the load part
 		AudioQueuePlayInfo pli = *playInfo;
 		
-		auto search = mPlayQueue.find((int)soundID);
+		auto search = mPlayQueue.find(soundID.index());
 		if (search != mPlayQueue.end()) {
 			search->second.Push(std::move(pli));
 			alreadyLoading = true;
 		} else {
 			TArray<AudioQueuePlayInfo> pl;
 			pl.Push(std::move(pli));
-			mPlayQueue[soundID] = std::move(pl);
+			mPlayQueue[soundID.index()] = std::move(pl);
 		}
 	}
 
@@ -222,48 +216,18 @@ void AudioLoaderQueue::queue(sfxinfo_t *sfx, FSoundID soundID, const AudioQueueP
 			AudioQInput qInput;
 			qInput.sfx = sfx;
 			qInput.soundID = soundID;
-			
-			// Generate a copy of the reader. Some readers (ZIP/PK3) are not at all thread safe
-			auto rl = fileSystem.GetFileAt(sfx->lumpnum);
-			auto reader = rl->Owner->GetReader();
-
-			if (!reader) {
-				FDirectory *fdir = dynamic_cast<FDirectory*>(rl->Owner);
-				if (!fdir || !dynamic_cast<FDirectoryLump*>(rl)) {
-					Printf(TEXTCOLOR_RED"AudioLoaderThread::No valid reader on owner for sfx : %s\n", sfx->name.GetChars());
-					return;
-				}
-
-				// Should be a valid file reader now
-				qInput.readerCopy = rl->NewReader().CopyNew();
-			} else { 
-				qInput.readerCopy = reader->CopyNew();
-			}
+			qInput.lump = sfx->lumpnum;
 
 			th->queue(qInput);
 		}
 	}
-
-
-	/*AActor *a = playInfo && playInfo->type == SOURCE_Actor ? (AActor *)playInfo->source : NULL;
-
-
-	if (mQueue.Size() == 0 && (int)mRunning.Size() < audio_max_threads) {
-		start(m);
-		return;
-	}
-
-	mQueue.Push(m);*/
-
-	
-	//Printf(TEXTCOLOR_YELLOW"Queued %d : %s : %s\n", soundID, sfx->name.GetChars(), a ? a->GetCharacterName() : "<None>");
 }
 
 
 void AudioLoaderQueue::relinkSound(int sourcetype, const void *from, const void *to, const FVector3 *optpos) {
 	for (auto &pair : mPlayQueue) {
 		for(unsigned int x = 0; x < pair.second.Size(); x++) {
-			if (!relinkSound(pair.second[x], pair.first, sourcetype, from, to, optpos)) {
+			if (!relinkSound(pair.second[x], FSoundID::fromInt(pair.first), sourcetype, from, to, optpos)) {
 				pair.second.Delete(x);
 				x--;
 			}
@@ -295,23 +259,7 @@ bool AudioLoaderQueue::relinkSound(AudioQueuePlayInfo &item, FSoundID sndID, int
 
 
 void AudioLoaderQueue::stopSound(FSoundID soundID) {
-	/*for (AudioQItem &mm : mQueue) {
-		if (mm.soundID == soundID) {
-			Printf("Stopping play of sound in queue by request: %s\n", mm.sfx->name.GetChars());
-			mm.playInfo.Clear();	// Remove all play instances of this sound
-		}
-	}
-
-	// This should be safe, the threads never actually write to qItem or use playInfo, it's just along for the ride
-	// TODO: Synchronize access to the qItem just in case changes are made and I forget 
-	for (AudioLoaderThread *tt : mRunning) {
-		if (tt->qItem.soundID == soundID) {
-			Printf("Stopping play of sound currently being loaded by request: %s\n", tt->qItem.sfx->name.GetChars());
-			tt->qItem.playInfo.Clear();
-		}
-	}*/
-
-	auto search = mPlayQueue.find((int)soundID);
+	auto search = mPlayQueue.find(soundID.index());
 	if (search != mPlayQueue.end()) {
 		//Printf("Stopping play of sound in queue by request: %s\n", soundEngine->GetSfx(soundID)->name.GetChars());	// TODO: Remove debug
 		search->second.Clear();
@@ -325,7 +273,7 @@ void AudioLoaderQueue::stopSound(int channel, FSoundID soundID) {
 			AudioQueuePlayInfo &info = pair.second[x];
 
 			if (info.type == SOURCE_None &&
-				(pair.first == soundID || soundID == -1) &&
+				(pair.first == soundID.index() || !soundID.isvalid()) &&
 				(channel == CHAN_AUTO || channel == info.channel)) {
 				//Printf("Stopping play of sound in queue by chan request: %s\n", soundEngine->GetSfx(pair.first)->name.GetChars());
 				pair.second.Delete(x);
@@ -336,14 +284,14 @@ void AudioLoaderQueue::stopSound(int channel, FSoundID soundID) {
 }
 
 
-void AudioLoaderQueue::stopSound(int sourcetype, const void* actor, int channel, int soundID) {
+void AudioLoaderQueue::stopSound(int sourcetype, const void* actor, int channel, FSoundID soundID) {
 	for (auto &pair : mPlayQueue) {
 		for (unsigned int x = 0; x < pair.second.Size(); x++) {
 			AudioQueuePlayInfo &info = pair.second[x];
 
 			if (info.source == actor &&
 				info.type == sourcetype &&
-				(soundID == -1 ? (info.channel == channel || channel < 0) : (pair.first == soundID))) {
+				(!soundID.isvalid() ? (info.channel == channel || channel < 0) : (pair.first == soundID.index()))) {
 				//AActor *a = sourcetype == SOURCE_Actor ? (AActor *)actor : NULL;
 				//Printf(TEXTCOLOR_RED"Stopping play of sound in queue by actor:chan request: %s (%s)\n", soundEngine->GetSfx(pair.first)->name.GetChars(), a ? a->GetCharacterName() : "<None>");
 				pair.second.Delete(x);
@@ -387,14 +335,14 @@ void AudioLoaderQueue::stopActorSounds(int sourcetype, const void* actor, int ch
 	}
 }
 
-int AudioLoaderQueue::getSoundPlayingInfo(int sourcetype, const void *source, int sound_id, int chann) {
+int AudioLoaderQueue::getSoundPlayingInfo(int sourcetype, const void *source, FSoundID sound_id, int chann) {
 	int count = 0;
 
 	for (auto &pair : mPlayQueue) {
 		for (const auto& playInfo : pair.second) {
 			if (chann != -1 && chann != playInfo.channel) continue;
 
-			if (sound_id > 0) {
+			if (sound_id.isvalid()) {
 				if (playInfo.orgSoundID == sound_id && (sourcetype == SOURCE_Any ||
 					(playInfo.source == source)))
 				{
@@ -452,6 +400,10 @@ void AudioLoaderQueue::update() {
 				}
 			}
 
+			if (loaded.data != nullptr && loaded.createdNewData) {
+				delete [] loaded.data;
+			}
+
 			totalLoaded++;
 
 			// TODO: Set the cache pointer if there is data loaded and there is not already a cache
@@ -460,7 +412,7 @@ void AudioLoaderQueue::update() {
 
 			// Find associated audio and play
 			if (loaded.sfx->data.isValid()) {
-				auto search = mPlayQueue.find((int)loaded.soundID);
+				auto search = mPlayQueue.find((int)loaded.soundID.index());
 				if (search != mPlayQueue.end()) {
 					auto& playlist = search->second;
 
@@ -479,7 +431,7 @@ void AudioLoaderQueue::update() {
 				}
 
 				// Delete the playlist
-				mPlayQueue.erase((int)loaded.soundID);
+				mPlayQueue.erase(loaded.soundID.index());
 			}
 
 			//mRunning[x]->totalTime.Unclock();

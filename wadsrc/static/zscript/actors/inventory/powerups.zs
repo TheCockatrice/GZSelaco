@@ -1884,8 +1884,8 @@ class PowerMorph : Powerup
 	Default
 	{
 		Powerup.Duration -40;
-		PowerMorph.MorphFlash "TeleportFog";
-		PowerMorph.UnmorphFlash "TeleportFog";
+		//PowerMorph.MorphFlash "TeleportFog";
+		//PowerMorph.UnmorphFlash "TeleportFog";
 	}
 	
 	//===========================================================================

@@ -29,6 +29,7 @@ public:
 	virtual const char *GetBuffer() const override { return bufptr; }
 };
 
+
 class BufferingReader : public MemoryReader
 {
 	FileData buf;

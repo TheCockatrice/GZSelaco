@@ -1,14 +1,15 @@
 #pragma once
 
-#include "vk_device.h"
-#include "vk_objects.h"
+#include <zvulkan/vulkandevice.h>
+#include <zvulkan/vulkanobjects.h>
+#include "zstring.h"
 
-class VulkanFrameBuffer;
+class VulkanRenderDevice;
 
 class VkCommandBufferManager
 {
 public:
-	VkCommandBufferManager(VulkanFrameBuffer* fb, VkQueue* queue, int queueFamily, bool uploadOnly = false);
+	VkCommandBufferManager(VulkanRenderDevice* fb, VkQueue* queue, int queueFamily, bool uploadOnly = false);
 	~VkCommandBufferManager();
 
 	void BeginFrame();
@@ -26,7 +27,7 @@ public:
 	void PopGroup();
 	void UpdateGpuStats();
 
-	VulkanFrameBuffer *GetFrameBuffer() { return fb; }
+	VulkanRenderDevice *GetRenderDevice() { return fb; }
 
 	class DeleteList
 	{
@@ -60,13 +61,10 @@ public:
 
 	void DeleteFrameObjects(bool uploadOnly = false);
 
-	std::unique_ptr<VulkanSwapChain> swapChain;
-	uint32_t presentImageIndex = 0xffffffff;
-
 private:
 	void FlushCommands(VulkanCommandBuffer** commands, size_t count, VkQueue *queue, bool finish, bool lastsubmit);
 
-	VulkanFrameBuffer* fb = nullptr;
+	VulkanRenderDevice* fb = nullptr;
 	VkQueue* fbQueue = nullptr;
 	bool mIsUploadOnly;
 
@@ -79,9 +77,6 @@ private:
 	std::unique_ptr<VulkanFence> mSubmitFence[maxConcurrentSubmitCount];
 	VkFence mSubmitWaitFences[maxConcurrentSubmitCount];
 	int mNextSubmit = 0;
-
-	std::unique_ptr<VulkanSemaphore> mSwapChainImageAvailableSemaphore;
-	std::unique_ptr<VulkanSemaphore> mRenderFinishedSemaphore;
 
 	struct TimestampQuery
 	{

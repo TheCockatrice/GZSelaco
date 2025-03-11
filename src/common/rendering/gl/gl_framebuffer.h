@@ -17,7 +17,7 @@ class FHardwareTexture;
 class FGLDebug;
 
 
-/* Background loader classes: TODO: Move into own files. */
+/* Background loader classes: TODO: Split GPU and File loading. */
 struct GlTexLoadSpiFull {
 	bool generateSpi, shouldExpand, notrimming;
 	SpritePositioningInfo info[2];
@@ -45,7 +45,24 @@ struct GlTexLoadOut {
 	int conversion, translation, texUnit;
 	bool isTranslucent;
 	FImageSource* imgSource;
+	unsigned char* pixels = nullptr;		// Returned when we can't upload in the backghround thread
+	size_t pixelsSize = 0, totalDataSize = 0;
+	int pixelW = 0, pixelH = 0, mipLevels = -1;
+	bool createMipmaps = false;
 };
+
+struct GLModelLoadIn {
+	int lump = -1;
+	FModel* model = nullptr;
+};
+
+struct GLModelLoadOut {
+	int lump = -1;
+	FileSys::FileData data;
+	FModel* model = nullptr;
+};
+
+
 
 
 class OpenGLFrameBuffer;
@@ -61,6 +78,8 @@ public:
 
 	~GlTexLoadThread() override {};
 
+	bool uploadPossible() const { return auxContext >= 0; }
+
 protected:
 	OpenGLFrameBuffer* cmd;
 
@@ -74,6 +93,19 @@ protected:
 	void prepareLoad() override;
 
 	void bgproc() override;
+};
+
+
+class GLModelLoadThread : public ResourceLoader2<GLModelLoadIn, GLModelLoadOut> {
+public:
+	GLModelLoadThread(TSQueue<GLModelLoadIn>* inQueue, TSQueue<GLModelLoadOut>* outQueue) : ResourceLoader2(inQueue, nullptr, outQueue) {
+
+	}
+
+protected:
+	std::atomic<int> maxQueue;
+
+	bool loadResource(GLModelLoadIn& input, GLModelLoadOut& output) override;
 };
 
 
@@ -110,8 +142,9 @@ public:
 	IHardwareTexture *CreateHardwareTexture(int numchannels) override;
 	void PrecacheMaterial(FMaterial *mat, int translation) override;
 	void PrequeueMaterial(FMaterial* mat, int translation) override;
-	bool BackgroundCacheMaterial(FMaterial* mat, int translation, bool makeSPI = false, bool secondary = false) override;
-	bool BackgroundCacheTextureMaterial(FGameTexture* tex, int translation, int scaleFlags, bool makeSPI = false) override;
+	bool BackgroundLoadModel(FModel* model) override;
+	bool BackgroundCacheMaterial(FMaterial* mat, FTranslationID translation, bool makeSPI = false, bool secondary = false) override;
+	bool BackgroundCacheTextureMaterial(FGameTexture* tex, FTranslationID translation, int scaleFlags, bool makeSPI = false) override;
 	bool CachingActive() override { return secondaryTexQueue.size() > 0; }
 	bool SupportsBackgroundCache() override { return bgTransferThreads.size() > 0; }
 	void StopBackgroundCache() override;
@@ -149,8 +182,9 @@ public:
 
 	// Cache stats helpers
 	
-	void GetBGQueueSize(int& current, int& currentSec, int& collisions, int& max, int& maxSec, int& total);
+	void GetBGQueueSize(int& current, int& currentSec, int& collisions, int& max, int& maxSec, int& total, int &outSize, int &models);
 	void GetBGStats(double& min, double& max, double& avg);
+	void GetBGStats2(double& min, double& max, double& avg);
 	int GetNumThreads() { return (int)bgTransferThreads.size(); }
 	void ResetBGStats();
 
@@ -159,15 +193,21 @@ public:
 private:
 	struct QueuedPatch {
 		FGameTexture* tex;
-		int translation, scaleFlags;
+		FTranslationID translation;
+		int scaleFlags;
 		bool generateSPI;
 	};
 
-	int statMaxQueued = 0, statMaxQueuedSecondary = 0, statCollisions = 0;
+	int statMaxQueued = 0, statMaxQueuedSecondary = 0, statCollisions = 0, statModelsLoaded = 0;
 	TSQueue<GlTexLoadIn> primaryTexQueue, secondaryTexQueue;
 	TSQueue<GlTexLoadOut> outputTexQueue;
+	TSQueue<GLModelLoadIn> modelInQueue;
+	TSQueue<GLModelLoadOut> modelOutQueue;
 	TSQueue<QueuedPatch> patchQueue;									// @Cockatrice - Thread safe queue of textures to create materials for and submit to the bg thread
 	std::vector<std::unique_ptr<GlTexLoadThread>> bgTransferThreads;	// @Cockatrice - Threads that handle the background transfers
+	std::unique_ptr<GLModelLoadThread> modelThread;						// Loads models, always 1 thread
+
+	double fgTotalTime = 0, fgTotalCount = 0, fgMin = 0, fgMax = 0;		// Foreground integration time stats
 };
 
 }

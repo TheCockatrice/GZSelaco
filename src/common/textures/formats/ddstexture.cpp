@@ -54,6 +54,7 @@
 #include "bitmap.h"
 #include "imagehelpers.h"
 #include "image.h"
+#include "m_swap.h"
 #include "engineerrors.h"
 #include "texturemanager.h"
 #include "printf.h"
@@ -317,7 +318,7 @@ public:
 	FDDSTexture (FileReader &lump, int lumpnum, void *surfdesc, void *dx10header);
 	FDDSTexture (int lumpnum);
 
-	TArray<uint8_t> CreatePalettedPixels(int conversion) override;
+	PalettedPixels CreatePalettedPixels(int conversion, int frame = 0) override;
 	int ReadCompressedPixels(FileReader* reader, unsigned char** data, size_t& size, size_t& unitSize, int& mipLevels) override;
 
 	bool IsGPUOnly() override { return true; }
@@ -402,7 +403,7 @@ protected:
 	void DecompressDXT3 (FileReader &lump, bool premultiplied, uint8_t *buffer, int pixelmode);
 	void DecompressDXT5 (FileReader &lump, bool premultiplied, uint8_t *buffer, int pixelmode);
 
-	int CopyPixels(FBitmap *bmp, int conversion) override;
+	int CopyPixels(FBitmap *bmp, int conversion, int frame = 0) override;
 
 	friend class FTexture;
 };
@@ -610,15 +611,15 @@ int FDDSTexture::ReadCompressedPixels(FileReader* reader, unsigned char** data, 
 	const size_t headerSize = sizeof(DDSURFACEDESC2) + sizeof(DDHEADERDX10) + 4;
 	
 	// TODO: Read remapped/translated version here when necessary!
-	auto rl = fileSystem.GetFileAt(SourceLump);		// These values do not change at runtime until after teardown
-	if (!rl || rl->LumpSize <= 0) {
+	int lumpSize = fileSystem.FileLength(SourceLump);
+	if (lumpSize <= 0) {
 		return 0;
 	}
 
-	size_t pixelDataSize = rl->LumpSize - headerSize;
+	size_t pixelDataSize = lumpSize - headerSize;
 
-	unsigned char* cacheData = new unsigned char[rl->LumpSize];
-	rl->ReadData(*reader, (char*)cacheData);
+	unsigned char* cacheData = new unsigned char[lumpSize];
+	reader->Read(cacheData, lumpSize);
 	
 	*data = (unsigned char *)malloc(pixelDataSize);
 	unitSize = LinearSize;
@@ -691,11 +692,11 @@ void FDDSTexture::CalcBitShift (uint32_t mask, uint8_t *lshiftp, uint8_t *rshift
 //
 //==========================================================================
 
-TArray<uint8_t> FDDSTexture::CreatePalettedPixels(int conversion)
+PalettedPixels FDDSTexture::CreatePalettedPixels(int conversion, int frame)
 {
 	auto lump = fileSystem.OpenFileReader (SourceLump);
 
-	TArray<uint8_t> Pixels(Width*Height, true);
+	PalettedPixels Pixels(Width*Height);
 
 	lump.Seek (sizeof(DDSURFACEDESC2) + 4, FileReader::SeekSet);
 
@@ -984,7 +985,7 @@ void FDDSTexture::DecompressDXT3 (FileReader &lump, bool premultiplied, uint8_t 
 
 void FDDSTexture::DecompressDXT5 (FileReader &lump, bool premultiplied, uint8_t *buffer, int pixelmode)
 {
-	const long blocklinelen = ((Width + 3) >> 2) << 4;
+	const size_t blocklinelen = ((Width + 3) >> 2) << 4;
 	uint8_t *blockbuff = new uint8_t[blocklinelen];
 	uint8_t *block;
 	PalEntry color[4];
@@ -1100,7 +1101,7 @@ void FDDSTexture::DecompressDXT5 (FileReader &lump, bool premultiplied, uint8_t 
 //
 //===========================================================================
 
-int FDDSTexture::CopyPixels(FBitmap *bmp, int conversion)
+int FDDSTexture::CopyPixels(FBitmap *bmp, int conversion, int frame)
 {
 	auto lump = fileSystem.OpenFileReader (SourceLump);
 

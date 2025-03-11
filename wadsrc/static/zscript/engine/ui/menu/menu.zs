@@ -36,7 +36,7 @@
 struct KeyBindings native version("2.4")
 {
 	native static String NameKeys(int k1, int k2);
-	native static String NameAllKeys(array<int> list);
+	native static String NameAllKeys(array<int> list, bool colors = true);
 
 	native int, int GetKeysForCommand(String cmd);
 	native void GetAllKeysForCommand(out array<int> list, String cmd);
@@ -87,6 +87,13 @@ struct JoystickConfig native version("2.4")
 	native int GetNumAxes();
 	native String GetAxisName(int axis);
 
+	native bool GetEnabled();
+	native void SetEnabled(bool enabled);
+
+	native bool AllowsEnabledInBackground();
+	native bool GetEnabledInBackground();
+	native void SetEnabledInBackground(bool enabled);
+
 	native float GetAxis(int axis);		// @Cockatrice - Get current value of axis
 	native float GetRawAxis(int axis);	// Get axis value that has not been squared or processed with deadzone
 
@@ -107,8 +114,7 @@ struct JoystickConfig native version("2.4")
 		for(int x = 0; x < NumJoysticks(); x++) {
 			GetJoystick(x).SetVibration(l, r);
 		}
-	}
-}
+	}}
 
 class Menu : Object native ui version("2.4")
 {
@@ -374,16 +380,16 @@ class Menu : Object native ui version("2.4")
 		return OptionFont().GetHeight();
 	}
 
-	static int OptionWidth(String s)
+	static int OptionWidth(String s, bool localize = true)
 	{
-		return OptionFont().StringWidth(s);
+		return OptionFont().StringWidth(s, localize);
 	}
 
-	static void DrawOptionText(int x, int y, int color, String text, bool grayed = false)
+	static void DrawOptionText(int x, int y, int color, String text, bool grayed = false, bool localize = true)
 	{
-		String label = Stringtable.Localize(text);
+		String label = localize ? Stringtable.Localize(text) : text;
 		int overlay = grayed? Color(96,48,0,0) : 0;
-		screen.DrawText (OptionFont(), color, x, y, text, DTA_CleanNoMove_1, true, DTA_ColorOverlay, overlay);
+		screen.DrawText (OptionFont(), color, x, y, text, DTA_CleanNoMove_1, true, DTA_ColorOverlay, overlay, DTA_Localize, localize);
 	}
 
 

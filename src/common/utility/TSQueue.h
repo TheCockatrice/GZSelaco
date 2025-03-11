@@ -405,7 +405,7 @@ protected:
 
 			// Process the queue
 			while (true) {
-				if (mInputQ->size() > 0 || mInputQSecondary->size() > 0) {
+				if (mInputQ->size() > 0 || (mInputQSecondary != nullptr && mInputQSecondary->size() > 0)) {
 					mRunning.store(true);
 
 					cycle_t lTime;

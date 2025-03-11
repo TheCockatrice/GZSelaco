@@ -53,6 +53,9 @@ CUSTOM_CVAR(Int, gl_fogmode, 2, CVAR_ARCHIVE | CVAR_NOINITCALL)
 // @Cockatrice - Toggle background texture fetching when supported
 CVAR(Bool, gl_texture_thread, true, CVAR_GLOBALCONFIG | CVAR_ARCHIVE)
 
+// @Cockatrice - Enable upload inside the texture thread (when available), or force upload to happen in main thread (debugging, old hardware etc)
+CVAR(Bool, gl_texture_thread_upload, true, CVAR_GLOBALCONFIG | CVAR_ARCHIVE)
+
 // @Cockatrice - Controls how many background loaded textures are re-integrated every tick
 // Especially on cards that have to create mipmaps in the main thread, this number can't be too high
 // or we get choppy when too many things are loading at once

@@ -50,6 +50,8 @@
 #include "flatvertices.h"
 #include "version.h"
 #include "hw_material.h"
+#include "a_sharedglobal.h"
+#include "menustate.h"
 
 #include <chrono>
 #include <thread>
@@ -255,10 +257,23 @@ void DFrameBuffer::FPSLimit()
 	using namespace std::chrono;
 	using namespace std::this_thread;
 
-	if (vid_maxfps <= 0 || cl_capfps)
+	// @Cockatrice - Limit menu FPS to 200 regardless of setting
+	// Otherwise we can go NUTS on animated menus for no reason
+	bool isMenu = menuactive == MENU_On;
+
+	if (!isMenu && (vid_maxfps <= 0 || cl_capfps))
 		return;
 
-	uint64_t targetWakeTime = fpsLimitTime + 1'000'000 / vid_maxfps;
+	int maxfps = vid_maxfps;
+	
+	if(isMenu) {
+		if(maxfps == 0) maxfps = 200;
+		else maxfps = std::min(maxfps, 200);
+	} else if(maxfps == 0) {
+		return;
+	}
+
+	uint64_t targetWakeTime = fpsLimitTime + 1'000'000 / maxfps;
 
 	while (true)
 	{

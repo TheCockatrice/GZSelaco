@@ -44,6 +44,7 @@
 #include "c_functions.h"
 #include "gstrings.h"
 #include "texturemanager.h"
+#include "d_main.h"
 
 //==========================================================================
 //
@@ -74,7 +75,7 @@ CCMD(listlights)
 			
 			if (dl->target)
 			{
-				FTextureID spr = sprites[dl->target->sprite].GetSpriteFrame(dl->target->frame, 0, 0., nullptr);
+				FTextureID spr = sprites[dl->target->sprite].GetSpriteFrame(dl->target->frame, 0, nullAngle, nullptr);
 				Printf(", frame = %s ", TexMan.GetGameTexture(spr)->GetName().GetChars());
 			}
 			
@@ -128,7 +129,7 @@ CCMD (spray)
 		return;
 	}
 	
-	Net_WriteByte (DEM_SPRAY);
+	Net_WriteInt8 (DEM_SPRAY);
 	Net_WriteString (argv[1]);
 }
 
@@ -360,35 +361,43 @@ CCMD(targetinv)
 
 CCMD(listmaps)
 {
+	int iwadNum = fileSystem.GetIwadNum();
 	bool all = argv.argc() > 1 && strcmp(argv[1], "all") == 0;
 
 	for (unsigned i = 0; i < wadlevelinfos.Size(); i++)
 	{
 		level_info_t *info = &wadlevelinfos[i];
-		MapData *map = P_OpenMapData(info->MapName, true);
+		MapData *map = P_OpenMapData(info->MapName.GetChars(), true);
 
 		if (map != NULL)
 		{
+			int mapWadNum = fileSystem.GetFileContainer(map->lumpnum);
+
 			if (argv.argc() == 1 || all
 			    || CheckWildcards(argv[1], info->MapName.GetChars()) 
 			    || CheckWildcards(argv[1], info->LookupLevelName().GetChars())
-			    || CheckWildcards(argv[1], fileSystem.GetResourceFileName(fileSystem.GetFileContainer(map->lumpnum))))
+			    || CheckWildcards(argv[1], fileSystem.GetResourceFileName(mapWadNum)))
 			{
+				bool isFromPwad = mapWadNum != iwadNum;
+				const char* lineColor = isFromPwad ? TEXTCOLOR_LIGHTBLUE : "";
+
 				if (all) {
-					Printf("\n%s: '%s' (%s)\n\tLevelNum: %d\n\tAreaNum: %d\n\tCluster: %d\n",
+					Printf("\n%s%s: '%s' (%s)\n\tLevelNum: %d\n\tAreaNum: %d\n\tCluster: %d\n",
+						lineColor,
 						info->MapName.GetChars(),
 						info->LookupLevelName().GetChars(),
-						fileSystem.GetResourceFileName(fileSystem.GetFileContainer(map->lumpnum)),
+						fileSystem.GetResourceFileName(mapWadNum),
 						info->levelnum,
 						info->areaNum,
 						info->cluster
 					);
 				}
 				else {
-					Printf("%s: '%s' (%s)\n",
+					Printf("%s%s: '%s' (%s)\n",
+						lineColor,
 						info->MapName.GetChars(),
 						info->LookupLevelName().GetChars(),
-						fileSystem.GetResourceFileName(fileSystem.GetFileContainer(map->lumpnum))
+						fileSystem.GetResourceFileName(mapWadNum)
 					);
 				}
 			}

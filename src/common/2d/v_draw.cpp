@@ -198,12 +198,12 @@ int CleanXfac_1, CleanYfac_1, CleanWidth_1, CleanHeight_1;
 //
 //==========================================================================
 
-static void DoDrawTexture(F2DDrawer *drawer, FGameTexture* img, double x, double y, int tags_first, Va_List& tags)
+void DoDrawTexture(F2DDrawer *drawer, FGameTexture* img, double x, double y, int tags_first, Va_List& tags)
 {
 	DrawParms parms;
 
 	if (!img || !img->isValid()) return;
-	bool res = ParseDrawTextureTags(drawer, img, x, y, tags_first, tags, &parms, false);
+	bool res = ParseDrawTextureTags(drawer, img, x, y, tags_first, tags, &parms, DrawTexture_Normal);
 	va_end(tags.list);
 	if (!res)
 	{
@@ -237,12 +237,12 @@ void DrawTexture(F2DDrawer *drawer, FTextureID texid, bool animate, double x, do
 
 int ListGetInt(VMVa_List &tags);
 
-static void DoDrawTexture(F2DDrawer *drawer, FGameTexture *img, double x, double y, VMVa_List &args)
+void DoDrawTexture(F2DDrawer *drawer, FGameTexture *img, double x, double y, VMVa_List &args)
 {
 	DrawParms parms;
 	uint32_t tag = ListGetInt(args);
 	if (!img || !img->isValid()) return;
-	bool res = ParseDrawTextureTags(drawer, img, x, y, tag, args, &parms, false);
+	bool res = ParseDrawTextureTags(drawer, img, x, y, tag, args, &parms, DrawTexture_Normal);
 	if (!res) return;
 	drawer->AddTexture(img, parms);
 }
@@ -265,6 +265,23 @@ DEFINE_ACTION_FUNCTION(_Screen, DrawTexture)
 	return 0;
 }
 
+DEFINE_ACTION_FUNCTION(FCanvas, DrawTexture)
+{
+	PARAM_SELF_PROLOGUE(FCanvas);
+	PARAM_INT(texid);
+	PARAM_BOOL(animate);
+	PARAM_FLOAT(x);
+	PARAM_FLOAT(y);
+
+	PARAM_VA_POINTER(va_reginfo)	// Get the hidden type information array
+
+	auto tex = TexMan.GameByIndex(texid, animate);
+	VMVa_List args = { param + 5, 0, numparam - 6, va_reginfo + 5 };
+	DoDrawTexture(&self->Drawer, tex, x, y, args);
+	self->Tex->NeedUpdate();
+	return 0;
+}
+
 //==========================================================================
 //
 // ZScript arbitrary textured shape drawing functions
@@ -277,7 +294,7 @@ void DrawShape(F2DDrawer *drawer, FGameTexture *img, DShape2D *shape, int tags_f
 	va_start(tags.list, tags_first);
 	DrawParms parms;
 
-	bool res = ParseDrawTextureTags(drawer, img, 0, 0, tags_first, tags, &parms, false);
+	bool res = ParseDrawTextureTags(drawer, img, 0, 0, tags_first, tags, &parms, DrawTexture_Normal);
 	va_end(tags.list);
 	if (!res) return;
 	drawer->AddShape(img, shape, parms);
@@ -288,9 +305,20 @@ void DrawShape(F2DDrawer *drawer, FGameTexture *img, DShape2D *shape, VMVa_List 
 	DrawParms parms;
 	uint32_t tag = ListGetInt(args);
 
-	bool res = ParseDrawTextureTags(drawer, img, 0, 0, tag, args, &parms, false);
+	bool res = ParseDrawTextureTags(drawer, img, 0, 0, tag, args, &parms, DrawTexture_Normal);
 	if (!res) return;
 	drawer->AddShape(img, shape, parms);
+}
+
+void DrawShapeFill(F2DDrawer *drawer, PalEntry color, double amount, DShape2D *shape, VMVa_List &args)
+{
+	DrawParms parms;
+	uint32_t tag = ListGetInt(args);
+
+	bool res = ParseDrawTextureTags(drawer, nullptr, 0, 0, tag, args, &parms, DrawTexture_Fill, color, amount);
+	if (!res) return;
+
+	drawer->AddShape(nullptr, shape, parms);
 }
 
 DEFINE_ACTION_FUNCTION(_Screen, DrawShape)
@@ -311,6 +339,56 @@ DEFINE_ACTION_FUNCTION(_Screen, DrawShape)
 	return 0;
 }
 
+DEFINE_ACTION_FUNCTION(FCanvas, DrawShape)
+{
+	PARAM_SELF_PROLOGUE(FCanvas);
+	PARAM_INT(texid);
+	PARAM_BOOL(animate);
+	PARAM_POINTER(shape, DShape2D);
+
+	PARAM_VA_POINTER(va_reginfo)	// Get the hidden type information array
+
+	auto tex = TexMan.GameByIndex(texid, animate);
+	VMVa_List args = { param + 4, 0, numparam - 5, va_reginfo + 4 };
+
+	DrawShape(&self->Drawer, tex, shape, args);
+	self->Tex->NeedUpdate();
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(_Screen, DrawShapeFill)
+{
+	PARAM_PROLOGUE;
+	PARAM_COLOR(color);
+	PARAM_FLOAT(amount);
+	PARAM_POINTER(shape, DShape2D);
+
+	PARAM_VA_POINTER(va_reginfo)	// Get the hidden type information array
+
+	if (!twod->HasBegun2D()) ThrowAbortException(X_OTHER, "Attempt to draw to screen outside a draw function");
+
+	VMVa_List args = { param + 3, 0, numparam - 4, va_reginfo + 3 };
+
+	DrawShapeFill(twod, color, amount, shape, args);
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(FCanvas, DrawShapeFill)
+{
+	PARAM_SELF_PROLOGUE(FCanvas);
+	PARAM_COLOR(color);
+	PARAM_FLOAT(amount);
+	PARAM_POINTER(shape, DShape2D);
+
+	PARAM_VA_POINTER(va_reginfo)	// Get the hidden type information array
+
+	VMVa_List args = { param + 4, 0, numparam - 5, va_reginfo + 4 };
+
+	DrawShapeFill(&self->Drawer, color, amount, shape, args);
+	self->Tex->NeedUpdate();
+	return 0;
+}
+
 //==========================================================================
 //
 // Clipping rect
@@ -319,10 +397,14 @@ DEFINE_ACTION_FUNCTION(_Screen, DrawShape)
 
 void F2DDrawer::SetClipRect(int x, int y, int w, int h)
 {
-	clipleft = clamp(x, 0, GetWidth());
-	clipwidth = clamp(w, -1, GetWidth() - x);
-	cliptop = clamp(y, 0, GetHeight());
-	clipheight = clamp(h, -1, GetHeight() - y);
+	if (x < 0) { w += x; x = 0; }
+	if (y < 0) { h += y; y = 0; }
+	if (x >= GetWidth()) { x = GetWidth(); w = 0; }
+	if (y >= GetHeight()) { x = GetHeight(); h = 0; }
+	clipleft = x;
+	clipwidth = w;
+	cliptop = y;
+	clipheight = h;
 }
 
 DEFINE_ACTION_FUNCTION(_Screen, SetClipRect)
@@ -336,6 +418,18 @@ DEFINE_ACTION_FUNCTION(_Screen, SetClipRect)
 	return 0;
 }
 
+DEFINE_ACTION_FUNCTION(FCanvas, SetClipRect)
+{
+	PARAM_SELF_PROLOGUE(FCanvas);
+	PARAM_INT(x);
+	PARAM_INT(y);
+	PARAM_INT(w);
+	PARAM_INT(h);
+	self->Drawer.SetClipRect(x, y, w, h);
+	self->Tex->NeedUpdate();
+	return 0;
+}
+
 DEFINE_ACTION_FUNCTION(_Screen, ClearClipRect)
 {
 	PARAM_PROLOGUE;
@@ -343,10 +437,26 @@ DEFINE_ACTION_FUNCTION(_Screen, ClearClipRect)
 	return 0;
 }
 
+DEFINE_ACTION_FUNCTION(FCanvas, ClearClipRect)
+{
+	PARAM_SELF_PROLOGUE(FCanvas);
+	self->Drawer.ClearClipRect();
+	self->Tex->NeedUpdate();
+	return 0;
+}
+
 DEFINE_ACTION_FUNCTION(_Screen, ClearScreen)
 {
 	PARAM_PROLOGUE;
 	twod->ClearScreen();
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(FCanvas, ClearScreen)
+{
+	PARAM_SELF_PROLOGUE(FCanvas);
+	self->Drawer.ClearScreen();
+	self->Tex->NeedUpdate();
 	return 0;
 }
 
@@ -358,6 +468,16 @@ DEFINE_ACTION_FUNCTION(_Screen, SetScreenFade)
 	return 0;
 }
 
+DEFINE_ACTION_FUNCTION(FCanvas, SetScreenFade)
+{
+	PARAM_SELF_PROLOGUE(FCanvas);
+	PARAM_FLOAT(x);
+	self->Drawer.SetScreenFade(float(x));
+	self->Tex->NeedUpdate();
+	return 0;
+}
+
+
 // Wasn't sure where to put this, setting cursor manually here
 DEFINE_ACTION_FUNCTION(_Screen, SetCursor)
 {
@@ -365,13 +485,13 @@ DEFINE_ACTION_FUNCTION(_Screen, SetCursor)
 	PARAM_PROLOGUE;
 	PARAM_STRING(texName);
 
-	if (!stricmp(texName, "None") && gameinfo.CursorPic.IsNotEmpty())
+	if (!stricmp(texName.GetChars(), "None") && gameinfo.CursorPic.IsNotEmpty())
 	{
-		res = I_SetCursor(TexMan.GetGameTextureByName(gameinfo.CursorPic));
+		res = I_SetCursor(TexMan.GetGameTextureByName(gameinfo.CursorPic.GetChars()));
 	}
 	else
 	{
-		res = I_SetCursor(TexMan.GetGameTextureByName(texName));
+		res = I_SetCursor(TexMan.GetGameTextureByName(texName.GetChars()));
 	}
 	if (!res)
 	{
@@ -379,7 +499,6 @@ DEFINE_ACTION_FUNCTION(_Screen, SetCursor)
 	}
 	return 0;
 }
-
 
 
 void F2DDrawer::GetClipRect(int *x, int *y, int *w, int *h)
@@ -395,6 +514,18 @@ DEFINE_ACTION_FUNCTION(_Screen, GetClipRect)
 	PARAM_PROLOGUE;
 	int x, y, w, h;
 	twod->GetClipRect(&x, &y, &w, &h);
+	if (numret > 0) ret[0].SetInt(x);
+	if (numret > 1) ret[1].SetInt(y);
+	if (numret > 2) ret[2].SetInt(w);
+	if (numret > 3) ret[3].SetInt(h);
+	return min(numret, 4);
+}
+
+DEFINE_ACTION_FUNCTION(FCanvas, GetClipRect)
+{
+	PARAM_SELF_PROLOGUE(FCanvas);
+	int x, y, w, h;
+	self->Drawer.GetClipRect(&x, &y, &w, &h);
 	if (numret > 0) ret[0].SetInt(x);
 	if (numret > 1) ret[1].SetInt(y);
 	if (numret > 2) ret[2].SetInt(w);
@@ -426,7 +557,7 @@ void CalcFullscreenScale(DrawParms *parms, double srcwidth, double srcheight, in
 	if (autoaspect == FSMode_ScaleToFit43 || autoaspect == FSMode_ScaleToFit43Top || autoaspect == FSMode_ScaleToFit43Bottom)
 	{
 		// screen is wider than the image -> pillarbox it. 4:3 images must also be pillarboxed if the screen is taller than the image
-		if (screenratio >= aspect || aspect < 1.4) autoaspect = FSMode_ScaleToFit; 
+		if (screenratio >= aspect || aspect < 1.4) autoaspect = FSMode_ScaleToFit;
 		else if (screenratio > 1.32) autoaspect = FSMode_ScaleToFill;				// on anything 4:3 and wider crop the sides of the image.
 		else
 		{
@@ -505,6 +636,24 @@ DEFINE_ACTION_FUNCTION(_Screen, GetFullscreenRect)
 	return min(numret, 4);
 }
 
+DEFINE_ACTION_FUNCTION(FCanvas, GetFullscreenRect)
+{
+	PARAM_SELF_PROLOGUE(FCanvas);
+	PARAM_FLOAT(virtw);
+	PARAM_FLOAT(virth);
+	PARAM_INT(fsmode);
+
+	DrawParms parms;
+	DoubleRect rect;
+	parms.viewport.width = self->Drawer.GetWidth();
+	parms.viewport.height = self->Drawer.GetHeight();
+	CalcFullscreenScale(&parms, virtw, virth, fsmode, rect);
+	if (numret >= 1) ret[0].SetFloat(rect.left);
+	if (numret >= 2) ret[1].SetFloat(rect.top);
+	if (numret >= 3) ret[2].SetFloat(rect.width);
+	if (numret >= 4) ret[3].SetFloat(rect.height);
+	return min(numret, 4);
+}
 
 
 //==========================================================================
@@ -709,13 +858,13 @@ static inline FSpecialColormap * ListGetSpecialColormap(VMVa_List &tags)
 //==========================================================================
 
 template<class T>
-bool ParseDrawTextureTags(F2DDrawer *drawer, FGameTexture *img, double x, double y, uint32_t tag, T& tags, DrawParms *parms, bool fortext)
+bool ParseDrawTextureTags(F2DDrawer *drawer, FGameTexture *img, double x, double y, uint32_t tag, T& tags, DrawParms *parms, int type, PalEntry fill, double fillalpha, bool scriptDifferences)
 {
 	INTBOOL boolval;
 	int intval;
-	bool fillcolorset = false;
+	bool fillcolorset = type == DrawTexture_Fill;
 
-	if (!fortext)
+	if (type == DrawTexture_Normal)
 	{
 		if (img == NULL || !img->isValid())
 		{
@@ -731,7 +880,7 @@ bool ParseDrawTextureTags(F2DDrawer *drawer, FGameTexture *img, double x, double
 		return false;
 	}
 
-	parms->fortext = fortext;
+	parms->fortext = type == DrawTexture_Text;
 	parms->windowleft = 0;
 	parms->windowright = INT_MAX;
 	parms->dclip = drawer->GetHeight();
@@ -742,9 +891,9 @@ bool ParseDrawTextureTags(F2DDrawer *drawer, FGameTexture *img, double x, double
 	parms->top = INT_MAX;
 	parms->destwidth = INT_MAX;
 	parms->destheight = INT_MAX;
-	parms->Alpha = 1.f;
-	parms->fillcolor = -1;
-	parms->TranslationId = -1;
+	parms->Alpha = type == DrawTexture_Fill ? (float)fillalpha : 1.f;
+	parms->fillcolor = type == DrawTexture_Fill ? fill : PalEntry(~0u);
+	parms->TranslationId = INVALID_TRANSLATION;
 	parms->colorOverlay = 0;
 	parms->alphaChannel = false;
 	parms->flipX = false;
@@ -764,6 +913,7 @@ bool ParseDrawTextureTags(F2DDrawer *drawer, FGameTexture *img, double x, double
 	parms->scalex = parms->scaley = 1;
 	parms->cellx = parms->celly = 0;
 	parms->maxstrlen = INT_MAX;
+	parms->localize = scriptDifferences;
 	parms->virtBottom = false;
 	parms->srcx = 0.;
 	parms->srcy = 0.;
@@ -792,29 +942,29 @@ bool ParseDrawTextureTags(F2DDrawer *drawer, FGameTexture *img, double x, double
 			break;
 
 		case DTA_DestWidth:
-			assert(fortext == false);
-			if (fortext) return false;
+			assert(type != DrawTexture_Text);
+			if (type == DrawTexture_Text) return false;
 			parms->cleanmode = DTA_Base;
 			parms->destwidth = ListGetInt(tags);
 			break;
 
 		case DTA_DestWidthF:
-			assert(fortext == false);
-			if (fortext) return false;
+			assert(type != DrawTexture_Text);
+			if (type == DrawTexture_Text) return false;
 			parms->cleanmode = DTA_Base;
 			parms->destwidth = ListGetDouble(tags);
 			break;
 
 		case DTA_DestHeight:
-			assert(fortext == false);
-			if (fortext) return false;
+			assert(type != DrawTexture_Text);
+			if (type == DrawTexture_Text) return false;
 			parms->cleanmode = DTA_Base;
 			parms->destheight = ListGetInt(tags);
 			break;
 
 		case DTA_DestHeightF:
-			assert(fortext == false);
-			if (fortext) return false;
+			assert(type != DrawTexture_Text);
+			if (type == DrawTexture_Text) return false;
 			parms->cleanmode = DTA_Base;
 			parms->destheight = ListGetDouble(tags);
 			break;
@@ -922,7 +1072,7 @@ bool ParseDrawTextureTags(F2DDrawer *drawer, FGameTexture *img, double x, double
 			boolval = ListGetInt(tags);
 			if (boolval)
 			{
-				assert(fortext == false);
+				assert(type != DrawTexture_Text);
 				if (img == NULL) return false;
 				parms->cleanmode = DTA_Fullscreen;
 				parms->fsscalemode = (uint8_t)twod->fullscreenautoaspect;
@@ -936,7 +1086,7 @@ bool ParseDrawTextureTags(F2DDrawer *drawer, FGameTexture *img, double x, double
 			intval = ListGetInt(tags);
 			if (intval >= 0 && intval <= 3)
 			{
-				assert(fortext == false);
+				assert(type != DrawTexture_Text);
 				if (img == NULL) return false;
 				parms->cleanmode = DTA_Fullscreen;
 				parms->fsscalemode = (uint8_t)intval;
@@ -967,7 +1117,7 @@ bool ParseDrawTextureTags(F2DDrawer *drawer, FGameTexture *img, double x, double
 			break;
 
 		case DTA_TranslationIndex:
-			parms->TranslationId = ListGetInt(tags);
+			parms->TranslationId = FTranslationID::fromInt(ListGetInt(tags));
 			break;
 
 		case DTA_ColorOverlay:
@@ -1011,32 +1161,32 @@ bool ParseDrawTextureTags(F2DDrawer *drawer, FGameTexture *img, double x, double
 			break;
 
 		case DTA_TopOffset:
-			assert(fortext == false);
-			if (fortext) return false;
+			assert(type != DrawTexture_Text);
+			if (type == DrawTexture_Text) return false;
 			parms->top = ListGetInt(tags);
 			break;
 
 		case DTA_TopOffsetF:
-			assert(fortext == false);
-			if (fortext) return false;
+			assert(type != DrawTexture_Text);
+			if (type == DrawTexture_Text) return false;
 			parms->top = ListGetDouble(tags);
 			break;
 
 		case DTA_LeftOffset:
-			assert(fortext == false);
-			if (fortext) return false;
+			assert(type != DrawTexture_Text);
+			if (type == DrawTexture_Text) return false;
 			parms->left = ListGetInt(tags);
 			break;
 
 		case DTA_LeftOffsetF:
-			assert(fortext == false);
-			if (fortext) return false;
+			assert(type != DrawTexture_Text);
+			if (type == DrawTexture_Text) return false;
 			parms->left = ListGetDouble(tags);
 			break;
 
 		case DTA_TopLeft:
-			assert(fortext == false);
-			if (fortext) return false;
+			assert(type != DrawTexture_Text);
+			if (type == DrawTexture_Text) return false;
 			if (ListGetInt(tags))
 			{
 				parms->left = 0;
@@ -1045,8 +1195,8 @@ bool ParseDrawTextureTags(F2DDrawer *drawer, FGameTexture *img, double x, double
 			break;
 
 		case DTA_CenterOffset:
-			assert(fortext == false);
-			if (fortext) return false;
+			assert(type != DrawTexture_Text);
+			if (type == DrawTexture_Text) return false;
 			if (ListGetInt(tags))
 			{
 				parms->left = img->GetDisplayWidth() * 0.5;
@@ -1055,8 +1205,8 @@ bool ParseDrawTextureTags(F2DDrawer *drawer, FGameTexture *img, double x, double
 			break;
 
 		case DTA_CenterOffsetRel:
-			assert(fortext == false);
-			if (fortext) return false;
+			assert(type != DrawTexture_Text);
+			if (type == DrawTexture_Text) return false;
 			intval = ListGetInt(tags);
 			if (intval == 1)
 			{
@@ -1071,8 +1221,8 @@ bool ParseDrawTextureTags(F2DDrawer *drawer, FGameTexture *img, double x, double
 			break;
 
 		case DTA_CenterBottomOffset:
-			assert(fortext == false);
-			if (fortext) return false;
+			assert(type != DrawTexture_Text);
+			if (type == DrawTexture_Text) return false;
 			if (ListGetInt(tags))
 			{
 				parms->left = img->GetDisplayWidth() * 0.5;
@@ -1081,26 +1231,26 @@ bool ParseDrawTextureTags(F2DDrawer *drawer, FGameTexture *img, double x, double
 			break;
 
 		case DTA_WindowLeft:
-			assert(fortext == false);
-			if (fortext) return false;
+			assert(type != DrawTexture_Text);
+			if (type == DrawTexture_Text) return false;
 			parms->windowleft = ListGetInt(tags);
 			break;
 
 		case DTA_WindowLeftF:
-			assert(fortext == false);
-			if (fortext) return false;
+			assert(type != DrawTexture_Text);
+			if (type == DrawTexture_Text) return false;
 			parms->windowleft = ListGetDouble(tags);
 			break;
 
 		case DTA_WindowRight:
-			assert(fortext == false);
-			if (fortext) return false;
+			assert(type != DrawTexture_Text);
+			if (type == DrawTexture_Text) return false;
 			parms->windowright = ListGetInt(tags);
 			break;
 
 		case DTA_WindowRightF:
-			assert(fortext == false);
-			if (fortext) return false;
+			assert(type != DrawTexture_Text);
+			if (type == DrawTexture_Text) return false;
 			parms->windowright = ListGetDouble(tags);
 			break;
 
@@ -1201,6 +1351,10 @@ bool ParseDrawTextureTags(F2DDrawer *drawer, FGameTexture *img, double x, double
 			parms->maxstrlen = ListGetInt(tags);
 			break;
 
+		case DTA_Localize:
+			parms->localize = ListGetInt(tags);
+			break;
+
 		case DTA_CellX:
 			parms->cellx = ListGetInt(tags);
 			break;
@@ -1238,8 +1392,8 @@ bool ParseDrawTextureTags(F2DDrawer *drawer, FGameTexture *img, double x, double
 			break;
 
 		case DTA_Rotate:
-			assert(fortext == false);
-			if (fortext) return false;
+			assert(type != DrawTexture_Text);
+			if (type == DrawTexture_Text) return false;
 			parms->rotateangle = ListGetDouble(tags);
 			break;
 
@@ -1312,8 +1466,8 @@ bool ParseDrawTextureTags(F2DDrawer *drawer, FGameTexture *img, double x, double
 }
 // explicitly instantiate both versions for v_text.cpp.
 
-template bool ParseDrawTextureTags<Va_List>(F2DDrawer* drawer, FGameTexture *img, double x, double y, uint32_t tag, Va_List& tags, DrawParms *parms, bool fortext);
-template bool ParseDrawTextureTags<VMVa_List>(F2DDrawer* drawer, FGameTexture *img, double x, double y, uint32_t tag, VMVa_List& tags, DrawParms *parms, bool fortext);
+template bool ParseDrawTextureTags<Va_List>(F2DDrawer* drawer, FGameTexture *img, double x, double y, uint32_t tag, Va_List& tags, DrawParms *parms, int type, PalEntry fill, double fillalpha, bool scriptDifferences);
+template bool ParseDrawTextureTags<VMVa_List>(F2DDrawer* drawer, FGameTexture *img, double x, double y, uint32_t tag, VMVa_List& tags, DrawParms *parms, int type, PalEntry fill, double fillalpha, bool scriptDifferences);
 
 //==========================================================================
 //
@@ -1322,7 +1476,7 @@ template bool ParseDrawTextureTags<VMVa_List>(F2DDrawer* drawer, FGameTexture *i
 //==========================================================================
 
 static void VirtualToRealCoords(F2DDrawer *drawer, double Width, double Height, double &x, double &y, double &w, double &h,
-	double vwidth, double vheight, bool vbottom, bool handleaspect) 
+	double vwidth, double vheight, bool vbottom, bool handleaspect)
 {
 	float myratio = float(handleaspect ? ActiveRatio (Width, Height) : (4.0 / 3.0));
 
@@ -1398,6 +1552,23 @@ DEFINE_ACTION_FUNCTION(_Screen, VirtualToRealCoords)
 	return min(numret, 2);
 }
 
+DEFINE_ACTION_FUNCTION(FCanvas, VirtualToRealCoords)
+{
+	PARAM_SELF_PROLOGUE(FCanvas);
+	PARAM_FLOAT(x);
+	PARAM_FLOAT(y);
+	PARAM_FLOAT(w);
+	PARAM_FLOAT(h);
+	PARAM_FLOAT(vw);
+	PARAM_FLOAT(vh);
+	PARAM_BOOL(vbottom);
+	PARAM_BOOL(handleaspect);
+	VirtualToRealCoords(&self->Drawer, x, y, w, h, vw, vh, vbottom, handleaspect);
+	if (numret >= 1) ret[0].SetVector2(DVector2(x, y));
+	if (numret >= 2) ret[1].SetVector2(DVector2(w, h));
+	return min(numret, 2);
+}
+
 void VirtualToRealCoordsInt(F2DDrawer *drawer, int &x, int &y, int &w, int &h,
 	int vwidth, int vheight, bool vbottom, bool handleaspect)
 {
@@ -1420,42 +1591,71 @@ void VirtualToRealCoordsInt(F2DDrawer *drawer, int &x, int &y, int &w, int &h,
 //
 //==========================================================================
 
-static void DrawLine(int x0, int y0, int x1, int y1, uint32_t realcolor, int alpha)
+static void DrawLine(double x1, double y1, double x2, double y2, uint32_t realcolor, int alpha)
 {
 	if (!twod->HasBegun2D()) ThrowAbortException(X_OTHER, "Attempt to draw to screen outside a draw function");
-	twod->AddLine((float)x0, (float)y0, (float)x1, (float)y1, -1, -1, INT_MAX, INT_MAX, realcolor | MAKEARGB(255, 0, 0, 0), alpha);
+	twod->AddLine(DVector2(x1, y1), DVector2(x2, y2), nullptr, realcolor | MAKEARGB(255, 0, 0, 0), alpha);
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(_Screen, DrawLine, DrawLine)
 {
 	PARAM_PROLOGUE;
-	PARAM_INT(x0);
-	PARAM_INT(y0);
-	PARAM_INT(x1);
-	PARAM_INT(y1);
+	PARAM_FLOAT(x0);
+	PARAM_FLOAT(y0);
+	PARAM_FLOAT(x1);
+	PARAM_FLOAT(y1);
 	PARAM_INT(color);
 	PARAM_INT(alpha);
 	DrawLine(x0, y0, x1, y1, color, alpha);
 	return 0;
 }
 
-static void DrawThickLine(int x0, int y0, int x1, int y1, double thickness, uint32_t realcolor, int alpha) 
+DEFINE_ACTION_FUNCTION(FCanvas, DrawLine)
+{
+	PARAM_SELF_PROLOGUE(FCanvas);
+	PARAM_FLOAT(x0);
+	PARAM_FLOAT(y0);
+	PARAM_FLOAT(x1);
+	PARAM_FLOAT(y1);
+	PARAM_INT(color);
+	PARAM_INT(alpha);
+	self->Drawer.AddLine(DVector2(x0, y0), DVector2(x1, y1), nullptr, color | MAKEARGB(255, 0, 0, 0), alpha);
+	self->Tex->NeedUpdate();
+	return 0;
+}
+
+static void DrawThickLine(double x1, double y1, double x2, double y2, double thickness, uint32_t realcolor, int alpha)
 {
 	if (!twod->HasBegun2D()) ThrowAbortException(X_OTHER, "Attempt to draw to screen outside a draw function");
-	twod->AddThickLine(x0, y0, x1, y1, thickness, realcolor, alpha);
+	twod->AddThickLine(DVector2(x1, y1), DVector2(x2, y2), thickness, realcolor, alpha);
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(_Screen, DrawThickLine, DrawThickLine)
 {
 	PARAM_PROLOGUE;
-	PARAM_INT(x0);
-	PARAM_INT(y0);
-	PARAM_INT(x1);
-	PARAM_INT(y1);
+	PARAM_FLOAT(x0);
+	PARAM_FLOAT(y0);
+	PARAM_FLOAT(x1);
+	PARAM_FLOAT(y1);
 	PARAM_FLOAT(thickness);
 	PARAM_INT(color);
 	PARAM_INT(alpha);
 	DrawThickLine(x0, y0, x1, y1, thickness, color, alpha);
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(FCanvas, DrawThickLine)
+{
+	PARAM_SELF_PROLOGUE(FCanvas);
+	PARAM_FLOAT(x0);
+	PARAM_FLOAT(y0);
+	PARAM_FLOAT(x1);
+	PARAM_FLOAT(y1);
+	PARAM_FLOAT(thickness);
+	PARAM_INT(color);
+	PARAM_INT(alpha);
+	self->Drawer.AddThickLine(DVector2(x0, y0), DVector2(x1, y1), thickness, color, alpha);
+	self->Tex->NeedUpdate();
 	return 0;
 }
 
@@ -1515,6 +1715,20 @@ DEFINE_ACTION_FUNCTION(_Screen, Clear)
 	PARAM_INT(palcol);
 	if (!twod->HasBegun2D()) ThrowAbortException(X_OTHER, "Attempt to draw to screen outside a draw function");
 	ClearRect(twod, x1, y1, x2, y2, palcol, color);
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(FCanvas, Clear)
+{
+	PARAM_SELF_PROLOGUE(FCanvas);
+	PARAM_INT(x1);
+	PARAM_INT(y1);
+	PARAM_INT(x2);
+	PARAM_INT(y2);
+	PARAM_INT(color);
+	PARAM_INT(palcol);
+	ClearRect(&self->Drawer, x1, y1, x2, y2, palcol, color);
+	self->Tex->NeedUpdate();
 	return 0;
 }
 
@@ -1582,6 +1796,21 @@ DEFINE_ACTION_FUNCTION(_Screen, Dim)
 	return 0;
 }
 
+DEFINE_ACTION_FUNCTION(FCanvas, Dim)
+{
+	PARAM_SELF_PROLOGUE(FCanvas);
+	PARAM_INT(color);
+	PARAM_FLOAT(amount);
+	PARAM_INT(x1);
+	PARAM_INT(y1);
+	PARAM_INT(w);
+	PARAM_INT(h);
+	PARAM_INT(style);
+	Dim(&self->Drawer, color, float(amount), x1, y1, w, h, &LegacyRenderStyles[style]);
+	self->Tex->NeedUpdate();
+	return 0;
+}
+
 
 //==========================================================================
 //
@@ -1589,12 +1818,12 @@ DEFINE_ACTION_FUNCTION(_Screen, Dim)
 //
 //==========================================================================
 
-void DrawBorder (F2DDrawer *drawer, FTextureID picnum, int x1, int y1, int x2, int y2)
+void DrawBorder (F2DDrawer *drawer, FTextureID texid, int x1, int y1, int x2, int y2)
 {
 	int filltype = (ui_screenborder_classic_scaling) ? -1 : 0;
-	if (picnum.isValid())
+	if (texid.isValid())
 	{
-		drawer->AddFlatFill (x1, y1, x2, y2, TexMan.GetGameTexture(picnum, false), filltype);
+		drawer->AddFlatFill (x1, y1, x2, y2, TexMan.GetGameTexture(texid, false), filltype);
 	}
 	else
 	{
@@ -1638,6 +1867,20 @@ DEFINE_ACTION_FUNCTION(_Screen, DrawLineFrame)
 	return 0;
 }
 
+DEFINE_ACTION_FUNCTION(FCanvas, DrawLineFrame)
+{
+	PARAM_SELF_PROLOGUE(FCanvas);
+	PARAM_COLOR(color);
+	PARAM_INT(left);
+	PARAM_INT(top);
+	PARAM_INT(width);
+	PARAM_INT(height);
+	PARAM_INT(thickness);
+	DrawFrame(&self->Drawer, color, left, top, width, height, thickness);
+	self->Tex->NeedUpdate();
+	return 0;
+}
+
 void V_CalcCleanFacs(int designwidth, int designheight, int realwidth, int realheight, int* cleanx, int* cleany, int* _cx1, int* _cx2)
 {
 	if (designheight < 240 && realheight >= 480) designheight = 240;
@@ -1651,4 +1894,119 @@ DEFINE_ACTION_FUNCTION(_Screen, SetOffset)
 	PARAM_FLOAT(x);
 	PARAM_FLOAT(y);
 	ACTION_RETURN_VEC2(twod->SetOffset(DVector2(x, y)));
+}
+
+DEFINE_ACTION_FUNCTION(FCanvas, SetOffset)
+{
+	PARAM_SELF_PROLOGUE(FCanvas);
+	PARAM_FLOAT(x);
+	PARAM_FLOAT(y);
+	ACTION_RETURN_VEC2(self->Drawer.SetOffset(DVector2(x, y)));
+}
+
+DEFINE_ACTION_FUNCTION(_Screen, EnableStencil)
+{
+	PARAM_PROLOGUE;
+	PARAM_BOOL(on);
+
+	if (!twod->HasBegun2D()) ThrowAbortException(X_OTHER, "Attempt to draw to screen outside a draw function");
+
+	twod->AddEnableStencil(on);
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(FCanvas, EnableStencil)
+{
+	PARAM_SELF_PROLOGUE(FCanvas);
+	PARAM_BOOL(on);
+
+	self->Drawer.AddEnableStencil(on);
+	self->Tex->NeedUpdate();
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(_Screen, SetStencil)
+{
+	PARAM_PROLOGUE;
+	PARAM_INT(offs);
+	PARAM_INT(op);
+	PARAM_INT(flags);
+
+	if (!twod->HasBegun2D()) ThrowAbortException(X_OTHER, "Attempt to draw to screen outside a draw function");
+
+	twod->AddSetStencil(offs, op, flags);
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(FCanvas, SetStencil)
+{
+	PARAM_SELF_PROLOGUE(FCanvas);
+	PARAM_INT(offs);
+	PARAM_INT(op);
+	PARAM_INT(flags);
+
+	self->Drawer.AddSetStencil(offs, op, flags);
+	self->Tex->NeedUpdate();
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(_Screen, ClearStencil)
+{
+	PARAM_PROLOGUE;
+
+	if (!twod->HasBegun2D()) ThrowAbortException(X_OTHER, "Attempt to draw to screen outside a draw function");
+
+	twod->AddClearStencil();
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(FCanvas, ClearStencil)
+{
+	PARAM_SELF_PROLOGUE(FCanvas);
+
+	self->Drawer.AddClearStencil();
+	self->Tex->NeedUpdate();
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(_Screen, SetTransform)
+{
+	PARAM_PROLOGUE;
+	PARAM_OBJECT_NOT_NULL(transform, DShape2DTransform);
+
+	if (!twod->HasBegun2D()) ThrowAbortException(X_OTHER, "Attempt to draw to screen outside a draw function");
+
+	twod->SetTransform(*transform);
+
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(FCanvas, SetTransform)
+{
+	PARAM_SELF_PROLOGUE(FCanvas);
+	PARAM_OBJECT_NOT_NULL(transform, DShape2DTransform);
+
+	self->Drawer.SetTransform(*transform);
+	self->Tex->NeedUpdate();
+
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(_Screen, ClearTransform)
+{
+	PARAM_PROLOGUE;
+
+	if (!twod->HasBegun2D()) ThrowAbortException(X_OTHER, "Attempt to draw to screen outside a draw function");
+
+	twod->ClearTransform();
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(FCanvas, ClearTransform)
+{
+	PARAM_SELF_PROLOGUE(FCanvas);
+
+	self->Drawer.ClearTransform();
+	self->Tex->NeedUpdate();
+	return 0;
 }

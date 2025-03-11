@@ -45,7 +45,7 @@ extend class PlayerPawn
 	
 	private bool CheckArtifact(class<Actor> type)
 	{
-		return !(type is "PuzzleItem") && !(type is "Powerup") && !(type is "Ammo") &&	!(type is "Armor") && !(type is "Key") && !(type is "Weapon");
+		return !(type is "PuzzleItem") && !(type is "Powerup") && !(type is "Ammo") &&	!(type is "Armor") && !(type is "Key") && !(type is "WeaponBase");
 	}
 
 	virtual void CheatGive (String name, int amount)

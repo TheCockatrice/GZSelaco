@@ -78,6 +78,11 @@ void FModel::DestroyVertexBuffer()
 		delete mVBuf[i];
 		mVBuf[i] = nullptr;
 	}
+	loadState = NONE;
+}
+
+void FModel::LoadGeometry(FileSys::FileData* lumpData) {
+	I_FatalError("LoadGeometry(FileData) is not implemented for: %s\n", mFileName.GetChars());
 }
 
 //===========================================================================

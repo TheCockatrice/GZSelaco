@@ -43,6 +43,7 @@
 #include "printf.h"
 #include "texturemanager.h"
 #include "filesystem.h"
+#include "m_swap.h"
 
 //==========================================================================
 //
@@ -56,12 +57,12 @@ public:
 	FPNGTexture (FileReader &lump, int lumpnum, int width, int height, uint8_t bitdepth, uint8_t colortype, uint8_t interlace);
 	FPNGTexture(int lumpnum);
 
-	int CopyPixels(FBitmap *bmp, int conversion) override;
+	int CopyPixels(FBitmap *bmp, int conversion, int frame = 0) override;
 	int ReadPixels(FImageLoadParams *params, FBitmap *bmp) override;
 	int ReadPixels(FileReader *reader, FBitmap *bmp, int conversion);
 	int ReadTranslatedPixels(FileReader *reader, FBitmap *bmp, const PalEntry *remap, int conversion) override;
 
-	TArray<uint8_t> CreatePalettedPixels(int conversion) override;
+	PalettedPixels CreatePalettedPixels(int conversion, int frame = 0) override;
 	TArray<uint8_t> ReadPalettedPixels(FileReader *lump, int conversion);
 
 	bool SerializeForTextureDef(FILE *fp, FString &name, int useType, FGameTexture *gameTex)  override {
@@ -639,7 +640,7 @@ void FPNGTexture::ReadAlphaRemap(FileReader *lump, uint8_t *alpharemap)
 //
 //==========================================================================
 
-TArray<uint8_t> FPNGTexture::CreatePalettedPixels(int conversion)
+PalettedPixels FPNGTexture::CreatePalettedPixels(int conversion, int frame)
 {
 	FileReader *lump;
 	FileReader lfr;
@@ -647,7 +648,7 @@ TArray<uint8_t> FPNGTexture::CreatePalettedPixels(int conversion)
 	lfr = fileSystem.OpenFileReader(SourceLump);
 	lump = &lfr;
 
-	TArray<uint8_t> Pixels(Width*Height, true);
+	PalettedPixels Pixels(Width*Height);
 	if (StartOfIDAT == 0)
 	{
 		memset (Pixels.Data(), 0x99, Width*Height);
@@ -684,7 +685,7 @@ TArray<uint8_t> FPNGTexture::CreatePalettedPixels(int conversion)
 			}
 			else
 			{
-				TArray<uint8_t> newpix(Width*Height, true);
+				PalettedPixels newpix(Width*Height);
 				if (conversion != luminance)
 				{
 					if (!PaletteMap) SetupPalette(lfr);
@@ -921,7 +922,7 @@ TArray<uint8_t> FPNGTexture::ReadPalettedPixels(FileReader *lump, int conversion
 //
 //===========================================================================
 
-int FPNGTexture::CopyPixels(FBitmap *bmp, int conversion)
+int FPNGTexture::CopyPixels(FBitmap *bmp, int conversion, int frame)
 {
 	FileReader lfr = fileSystem.OpenFileReader(SourceLump);
 	return ReadPixels(&lfr, bmp, conversion);
@@ -1045,29 +1046,18 @@ int FPNGTexture::CopyPixels(FBitmap *bmp, int conversion)
 
 int FPNGTexture::ReadPixels(FImageLoadParams *params, FBitmap *bmp) {
 	// TODO: Read remapped/translated version here when necessary!
-	if (params->reader) {
-		// Create a memory reader with the contents of the file
-		auto rl = fileSystem.GetFileAt(SourceLump);		// These values do not change at runtime until after teardown
+	if (true) {
+		FileReader reader = fileSystem.OpenFileReader(SourceLump, FileSys::EReaderType::READER_NEW, FileSys::EReaderType::READERFLAG_SEEKABLE);
 
-		if (!rl || rl->LumpSize <= 0) {
-			return 0;
-		}
-
-		char *data = new char[rl->LumpSize];
-		rl->ReadData(*params->reader, data);
-
-		// Create a file wrapper for the data
-		FileReader memReader(new MemoryReader(data, rl->LumpSize));
 		int trans = 0;
 
 		if (params->remap != nullptr) {
-			trans = ReadTranslatedPixels(&memReader, bmp, params->remap->Palette, params->conversion);
+			trans = ReadTranslatedPixels(&reader, bmp, params->remap->Palette, params->conversion);
 		}
 		else {
-			trans = ReadPixels(&memReader, bmp, params->conversion);
+			trans = ReadPixels(&reader, bmp, params->conversion);
 		}
 		
-		delete []data;
 		return trans;
 	}
 	return 0;
