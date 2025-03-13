@@ -203,18 +203,30 @@ bool IsPortable()
 //
 //===========================================================================
 
-FString GetKnownFolder(int shell_folder, REFKNOWNFOLDERID known_folder, bool create)
+FString GetKnownFolder(int shell_folder, REFKNOWNFOLDERID known_folder, bool create, bool isFatal = true)
 {
 	PWSTR wpath;
 	if (FAILED(SHGetKnownFolderPath(known_folder, create ? KF_FLAG_CREATE : 0, NULL, &wpath)))
 	{
 		// This should never be triggered unless the OS was compromised
-		I_FatalError("Unable to retrieve or create known folder: {%08lX-%04hX-%04hX-%02hhX%02hhX-%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX} Create: %d", 
-			known_folder.Data1, known_folder.Data2, known_folder.Data3,
-			known_folder.Data4[0], known_folder.Data4[1], known_folder.Data4[2], known_folder.Data4[3],
-			known_folder.Data4[4], known_folder.Data4[5], known_folder.Data4[6], known_folder.Data4[7],
-			create);
+		if (isFatal) {
+			I_FatalError(TEXTCOLOR_YELLOW "Unable to retrieve or create known folder: {%08lX-%04hX-%04hX-%02hhX%02hhX-%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX} Create: %d",
+				known_folder.Data1, known_folder.Data2, known_folder.Data3,
+				known_folder.Data4[0], known_folder.Data4[1], known_folder.Data4[2], known_folder.Data4[3],
+				known_folder.Data4[4], known_folder.Data4[5], known_folder.Data4[6], known_folder.Data4[7],
+				create);
+		}
+		else {
+			Printf(TEXTCOLOR_YELLOW "Warning: Unable to retrieve or create known folder: {%08lX-%04hX-%04hX-%02hhX%02hhX-%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX} Create: %d",
+				known_folder.Data1, known_folder.Data2, known_folder.Data3,
+				known_folder.Data4[0], known_folder.Data4[1], known_folder.Data4[2], known_folder.Data4[3],
+				known_folder.Data4[4], known_folder.Data4[5], known_folder.Data4[6], known_folder.Data4[7],
+				create);
+		}
+		
+		return "";
 	}
+
 	FString path = FString(wpath);
 	FixPathSeperator(path);
 	CoTaskMemFree(wpath);
@@ -474,8 +486,16 @@ FString M_GetSavegamesPath()
 	// Try standard Saved Games folder
 	else
 	{
-		path = GetKnownFolder(-1, FOLDERID_SavedGames, true);
-		path << "/" GAMENAME "/";
+		// On some Win11 systems, this call fails so use Documents as a backup
+		path = GetKnownFolder(-1, FOLDERID_SavedGames, true, false);
+
+		if (path.IsEmpty()) {
+			path = GetKnownFolder(CSIDL_PERSONAL, FOLDERID_Documents, true);
+			path << "/My Games/" GAMENAME "/";
+		}
+		else {
+			path << "/" GAMENAME "/";
+		}
 	}
 	return path;
 }
@@ -500,8 +520,8 @@ int M_GetSavegamesPaths(TArray<FString>& outputAr) {
 	path = "";
 
 	// Try Saved Games
-	path = GetKnownFolder(-1, FOLDERID_SavedGames, true);
-	{
+	path = GetKnownFolder(-1, FOLDERID_SavedGames, false);
+	if(!path.IsEmpty()) {
 		path << "/" GAMENAME "/";
 		outputAr.Push(path);
 		cnt++;
@@ -509,8 +529,8 @@ int M_GetSavegamesPaths(TArray<FString>& outputAr) {
 	path = "";
 
 	// Try Documents/My Games/ Folder
-	path = GetKnownFolder(CSIDL_PERSONAL, FOLDERID_Documents, true);
-	{
+	path = GetKnownFolder(CSIDL_PERSONAL, FOLDERID_Documents, false);
+	if(!path.IsEmpty()) {
 		path << "/My Games/" GAMENAME "/";
 		outputAr.Push(path);
 		cnt++;

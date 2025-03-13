@@ -65,7 +65,6 @@ static TMap<FState *, FScriptPosition> StateSourceLines;
 static FScriptPosition unknownstatesource("unknown file", 0);
 
 EXTERN_CVAR(Bool, strictdecorate);
-EXTERN_CVAR(Bool, warningstoerrors);
 
 //==========================================================================
 //
@@ -465,27 +464,23 @@ void LoadActors()
 
 	if (FScriptPosition::ErrorCounter > 0)
 	{
-		if (FScriptPosition::WarnCounter > 0)
-		{
-			I_Error("%d errors, %d warnings while parsing scripts", FScriptPosition::ErrorCounter, FScriptPosition::WarnCounter);
+		// Check for mod files
+		int wi2 = fileSystem.GetFileContainer(370);
+		FString wadNames = "";
+		int wadCount = 0;
+		for (int x = wi2 + 2; x < fileSystem.GetNumWads(); x++) {
+			wadNames.AppendFormat("\t%s\n", fileSystem.GetWadName(x));
+			wadCount++;
 		}
-		else
-		{
-			I_Error("%d errors while parsing scripts", FScriptPosition::ErrorCounter);
-		}
-	}
-	else if (FScriptPosition::WarnCounter > 0)
-	{
-		if(warningstoerrors)
-		{
-			I_Error("%d warnings while parsing scripts\n", FScriptPosition::WarnCounter);
-		}
-		else
-		{
-			Printf(TEXTCOLOR_ORANGE "%d warnings while parsing scripts\n", FScriptPosition::WarnCounter);
-		}
-	}
 
+		if (wadNames.IsEmpty()) {
+			I_Error("%d errors while parsing DECORATE scripts", FScriptPosition::ErrorCounter);
+		}
+		else {
+			I_Error("%d errors while parsing DECORATE scripts\n\nCheck %d mods for updates, or try disabling mods by launching the game with -NOMODS\n\nMods: \n%s", FScriptPosition::ErrorCounter, wadCount, wadNames.GetChars());
+		}
+		
+	}
 	FScriptPosition::ResetErrorCounter();
 	// AllActorClasses hasn'T been set up yet.
 	for (int i = PClass::AllClasses.Size() - 1; i >= 0; i--)

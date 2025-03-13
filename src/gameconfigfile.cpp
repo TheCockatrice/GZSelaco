@@ -276,9 +276,11 @@ void FGameConfigFile::DoGlobalSetup ()
 
 		if (last < target) {
 			
-			bRequiresReset = true;
+			if (last < 224) {
+				bRequiresReset = true;
+			}
 			
-			if (last < 224)
+			if (last < 225)
 			{
 				if (const auto var = FindCVar("m_sensitivity_x", NULL))
 				{
@@ -286,9 +288,7 @@ void FGameConfigFile::DoGlobalSetup ()
 					v.Float *= 0.5f;
 					var->SetGenericRep(v, CVAR_Float);
 				}
-			}
-			if (last < 225)
-			{
+
 				if (const auto var = FindCVar("gl_lightmode", NULL))
 				{
 					UCVarValue v = var->GetGenericRep(CVAR_Int);

@@ -58,6 +58,8 @@
 #include "maps.h"
 #include "types.h"
 
+#include "version.h"
+
 static ZSMap<FName, DObject*> AllServices;
 
 static void MarkServices()

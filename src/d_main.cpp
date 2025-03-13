@@ -137,6 +137,17 @@ EXTERN_CVAR(Bool, log_vgafont)
 EXTERN_CVAR(Bool, dlg_vgafont)
 CVAR(Int, vid_renderer, 1, 0)	// for some stupid mods which threw caution out of the window...
 
+// Provide engine version to ZScript in a portable way
+CUSTOM_CVAR(Int, engine_major, ENG_MAJOR, CVAR_NOSAVE | CVAR_NOSET | CVAR_IGNORE | CVAR_CONFIG_ONLY | CVAR_VIRTUAL)
+{
+	self = (int)(ENG_MAJOR);
+}
+
+CUSTOM_CVAR(Int, engine_minor, ENG_MINOR, CVAR_NOSAVE | CVAR_NOSET | CVAR_IGNORE | CVAR_CONFIG_ONLY | CVAR_VIRTUAL)
+{
+	self = (int)(ENG_MINOR);
+}
+
 void DrawHUD();
 void D_DoAnonStats();
 void I_DetectOS();
@@ -2137,7 +2148,12 @@ static void AddModFilesFrom(FString path, std::vector<std::string>& allwads) {
 
 
 static void AddModFiles(std::vector<std::string>& allwads) {
-	if (!(gameinfo.flags & GI_SHAREWARE) && !Args->CheckParm("-noautoload") && !disableautoload) {
+	if (Args->CheckParm("-nomods")) {
+		Printf("Skipping Mod Loading\n");
+		return;
+	}
+
+	if (!(gameinfo.flags & GI_SHAREWARE) && !Args->CheckParm("-noautoload") && !disableautoload && !Args->CheckParm("-nomods")) {
 		Printf("Finding Mods...\n");
 
 		const char* modFolder = "Mods";

@@ -2470,6 +2470,18 @@ static void PutSaveWads (FSerializer &arc)
 	name = fileSystem.GetResourceFileName (fileSystem.GetFileContainer (primaryLevel->lumpnum));
 	arc.AddString("Map WAD", name);
 
+	// Add a list of mod files for reference
+	bool foundmods = false;
+
+	int wi = primaryLevel->lumpnum > 0 ? fileSystem.GetFileContainer(primaryLevel->lumpnum) : -1;
+	int wi2 = fileSystem.GetFileContainer(370);
+	TArray<FString> wadNames;
+	for (int x = wi2 + 2; x < fileSystem.GetNumWads(); x++) {
+		wadNames.Push(fileSystem.GetWadName(x));
+	}
+
+	if(wadNames.size()) arc.Array("Mod Files", wadNames.data(), wadNames.size());
+
 	arc("Map Version", primaryLevel->mapVersion);
 }
 

@@ -970,7 +970,7 @@ void FLevelLocals::Serialize(FSerializer &arc, bool hubload)
 			arc.GetSize("polyobjs") != Polyobjects.Size() ||
 			memcmp(chk, md5, 16))
 		{
-			I_Error("This Savegame is incompatible with your game version.");
+			I_Error2(5, "This Savegame is incompatible with your game version. ");
 		}
 	}
 	arc("saveversion", SaveVersion);
