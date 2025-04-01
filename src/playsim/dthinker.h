@@ -119,6 +119,7 @@ public:
 	virtual void PostBeginPlay ();	// Called just before the first tick
 	virtual void CallPostBeginPlay(); // different in actor.
 	virtual void PostSerialize();
+	void CallPostSerialize();
 
 	virtual bool ShouldWake();		// Should wake from sleep
 	virtual void Wake();
