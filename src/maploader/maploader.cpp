@@ -3359,8 +3359,8 @@ void MapLoader::LoadLightmap(MapData *map)
 	Level->LPWidth = 0;
 	Level->LPHeight = 0;
 
-	if (!Args->CheckParm("-enablelightmaps"))
-		return;		// this feature is still too early WIP to allow general access
+	if (Args->CheckParm("-disablelightmaps"))
+		return;
 
 	if (!map->Size(ML_LIGHTMAP))
 		return;
@@ -3381,7 +3381,7 @@ void MapLoader::LoadLightmap(MapData *map)
 	uint16_t numTextures = fr.ReadUInt16();
 	uint32_t numSurfaces = fr.ReadUInt32();
 	uint32_t numTexCoords = fr.ReadUInt32();
-	uint32_t numLightProbes = fr.ReadUInt32();
+	int32_t numLightProbes = fr.ReadUInt32();
 	uint32_t numSubsectors = fr.ReadUInt32();
 	uint32_t numTexBytes = numTextures * textureSize * textureSize * 3 * 2;
 
@@ -3390,10 +3390,10 @@ void MapLoader::LoadLightmap(MapData *map)
 
 	Printf(PRINT_HIGH, "WARNING! Lightmaps are an experimental feature and are subject to change before being finalized. Do not expect this to work as-is in future releases of %s!\n", GAMENAME);
 
-	/*if (numSubsectors != Level->subsectors.Size())
+	if (numSubsectors != Level->subsectors.Size())
 	{
 		Printf(PRINT_HIGH, "LoadLightmap: subsector count for level doesn't match (%d in wad vs %d in engine)\n", (int)numSubsectors, (int)Level->subsectors.Size());
-	}*/
+	}
 
 	if (numLightProbes > 0)
 	{
@@ -3452,6 +3452,12 @@ void MapLoader::LoadLightmap(MapData *map)
 				cell.NumProbes++;
 			}
 		}
+	}
+
+	for (unsigned int i = 0; i < numSubsectors; i++)
+	{
+		// [NL] HACK: I don't know where we should actually store the subsector counts for the light probes, just trying to get it working
+		fr.ReadInt32();
 	}
 
 	Level->LMTexCoords.Resize(numTexCoords * 2);
