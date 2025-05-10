@@ -5400,7 +5400,9 @@ FModel * SetGetBoneShared(AActor * self, int model_index)
 		ThrowAbortException(X_OTHER, isSet ? "Cannot set bone offset for non-decoupled actors" : (isOffset ? "Cannot get bone for non-decoupled actors" : "Cannot get bone offset for non-decoupled actors"));
 	}
 	
-	if(!BaseSpriteModelFrames.CheckKey(self->GetClass()))
+	auto smf_class = (self->modelData && self->modelData->modelDef) ? self->modelData->modelDef : self->GetClass();
+
+	if(!BaseSpriteModelFrames.CheckKey(smf_class))
 	{
 		ThrowAbortException(X_OTHER, "Actor class is missing a MODELDEF definition or a MODELDEF BaseFrame");
 	}
@@ -5411,9 +5413,9 @@ FModel * SetGetBoneShared(AActor * self, int model_index)
 	{
 		return Models[self->modelData->models[model_index].modelID];
 	}
-	else if(BaseSpriteModelFrames[self->GetClass()].modelIDs.SSize() > model_index)
+	else if(BaseSpriteModelFrames[smf_class].modelIDs.SSize() > model_index)
 	{
-		return Models[BaseSpriteModelFrames[self->GetClass()].modelIDs[model_index]];
+		return Models[BaseSpriteModelFrames[smf_class].modelIDs[model_index]];
 	}
 	else
 	{
@@ -6460,7 +6462,9 @@ void SetAnimationInternal(AActor * self, FName animName, double framerate, int s
 		ThrowAbortException(X_OTHER, "Cannot set animation for non-decoupled actors");
 	}
 
-	if(!BaseSpriteModelFrames.CheckKey(self->GetClass()))
+	auto smf_class = (self->modelData && self->modelData->modelDef) ? self->modelData->modelDef : self->GetClass();
+
+	if(!BaseSpriteModelFrames.CheckKey(smf_class))
 	{
 		ThrowAbortException(X_OTHER, "Actor class is missing a MODELDEF definition or a MODELDEF BaseFrame");
 	}
@@ -6494,7 +6498,7 @@ void SetAnimationInternal(AActor * self, FName animName, double framerate, int s
 	}
 	else
 	{
-		animID = BaseSpriteModelFrames[self->GetClass()].animationIDs[0];
+		animID = BaseSpriteModelFrames[smf_class].animationIDs[0];
 	}
 
 	FModel * animation = nullptr;
@@ -6508,7 +6512,7 @@ void SetAnimationInternal(AActor * self, FName animName, double framerate, int s
 	}
 	else
 	{
-		animation = Models[BaseSpriteModelFrames[self->GetClass()].modelIDs[0]];
+		animation = Models[BaseSpriteModelFrames[smf_class].modelIDs[0]];
 	}
 
 	int animStart = animation->FindFirstFrame(animName);
