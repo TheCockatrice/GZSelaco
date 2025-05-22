@@ -311,6 +311,7 @@ public:
 	void SetSubsectorLightmap(const LightmapSurface &surface);
 	void SetSideLightmap(const LightmapSurface &surface);
 	void LoadLightmap(MapData *map);
+	void LoadLightGroups(MapData* map);
 
 	void LoadLevel(MapData *map, const char *lumpname, int position);
 

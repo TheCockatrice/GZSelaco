@@ -289,6 +289,10 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck, int forceVersion)
 					{
 						index = ML_LIGHTMAP;
 					}
+					else if (!stricmp(lumpname, "LIGHTGRP"))
+					{
+						index = ML_LIGHTGRP;
+					}
 					else if (!stricmp(lumpname, "ENDMAP"))
 					{
 						break;
@@ -369,6 +373,10 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck, int forceVersion)
 					else if (!strnicmp(lumpname, "LIGHTMAP", 8))
 					{
 						index = ML_LIGHTMAP;
+					}
+					else if (!stricmp(lumpname, "LIGHTGRP"))
+					{
+						index = ML_LIGHTGRP;
 					}
 					else if (!strnicmp(lumpname, "ENDMAP",8))
 					{

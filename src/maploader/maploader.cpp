@@ -3209,6 +3209,7 @@ void MapLoader::LoadLevel(MapData *map, const char *lumpname, int position)
 	if (!ForceNodeBuild)
 	{
 		LoadLightmap(map);
+		LoadLightGroups(map);
 	}
 
 	for (int i = 0; i < MAXPLAYERS; ++i)
@@ -3534,4 +3535,71 @@ void MapLoader::LoadLightmap(MapData *map)
 	for (uint32_t i = 1; i < numTexBytes; i++)
 		data[i] += data[i - 1];
 #endif
+}
+
+void MapLoader::LoadLightGroups(MapData* map)
+{
+	if (!map->Size(ML_LIGHTGRP))
+		return;
+
+	FileReader& fr = map->Reader(ML_LIGHTGRP);
+
+	uint32_t version = fr.ReadUInt32();
+	if (version != 0)
+	{
+		Printf(PRINT_HIGH, "LoadLightmap: unsupported lightgroup lump version\n");
+		return;
+	}
+
+	struct Vertex
+	{
+		FVector2 pos;
+		FVector2 uvs;
+	};
+
+	struct Mesh
+	{
+		TArray<Vertex> verts;
+		TArray<uint16_t> indices;
+	};
+
+	struct LightGroupData
+	{
+		uint16_t thingid;
+		FVector3 boundsMin;
+		FVector3 boundsMax;
+
+		TArray<Mesh> meshes;
+	};
+
+	TArray<LightGroupData> lightGroups;
+
+	uint32_t numLightGroups = fr.ReadUInt32();
+	for (uint32_t i = 0; i < numLightGroups; i++)
+	{
+		LightGroupData data = {};
+		
+		data.thingid = fr.ReadUInt16();
+		fr.Read(&data.boundsMin, sizeof(FVector3));
+		fr.Read(&data.boundsMax, sizeof(FVector3));
+
+		uint32_t numMeshes = fr.ReadUInt32();
+
+		for (uint32_t i = 0; i < numMeshes; i++)
+		{
+			Mesh mesh = {};
+			
+			uint32_t numVerts = fr.ReadUInt32();
+			mesh.verts.Resize(numVerts);
+			fr.Read(mesh.verts.Data(), numVerts * sizeof(Vertex));
+
+			uint32_t numIndices = fr.ReadUInt32();
+			mesh.indices.Resize(numIndices);
+			fr.Read(mesh.indices.Data(), numIndices * sizeof(uint16_t));
+
+			data.meshes.Push(mesh);
+		}
+		
+		lightGroups.Push(data);
+	}
 }
