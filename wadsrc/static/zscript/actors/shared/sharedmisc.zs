@@ -302,3 +302,18 @@ class ArmorBonus : BasicArmorBonus
 		loop;
 	}
 }
+
+class LightGroup : Actor
+{
+	override void Tick() 
+	{
+		Super.Tick();
+
+		//Console.Printf("Ticking LightGroup %d!", special);
+
+		// Mark this LightGroup to render this frame
+		//TickLightGroup(special);
+	}
+
+	//private native TickLightGroup(int lightGroupIndex);
+}
