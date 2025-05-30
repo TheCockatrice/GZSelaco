@@ -134,8 +134,8 @@ DoomEdNums
   9872 = SpotLightFlickerAttenuated
   9873 = SectorSpotLightAttenuated
   9874 = SpotLightFlickerRandomAttenuated
-  9876 = None	// ZDRay static point light
-  9881 = None	// ZDRay static spotlight
+  9876 = MapSpot	// ZDRay static point light
+  9881 = MapSpot	// ZDRay static spotlight
   9890 = None	// ZDRayInfo
   9899 = LightGroup
   9982 = SecActEyesAboveC
