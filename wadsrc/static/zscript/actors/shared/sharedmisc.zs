@@ -305,15 +305,28 @@ class ArmorBonus : BasicArmorBonus
 
 class LightGroup : Actor
 {
+	override void Activate (Actor activator)
+	{
+		ActivateLightGroup();
+	}
+
+	override void Deactivate (Actor activator)
+	{
+		DeactivateLightGroup();
+	}
+
 	override void Tick() 
 	{
 		Super.Tick();
 
-		//Console.Printf("Ticking LightGroup %d!", special);
-
 		// Mark this LightGroup to render this frame
-		//TickLightGroup(special);
+		if (!bDormant)
+		{
+			MarkForRender();
+		}
 	}
 
-	//private native TickLightGroup(int lightGroupIndex);
+	private native void MarkForRender();
+	private native void ActivateLightGroup();
+	private native void DeactivateLightGroup();
 }

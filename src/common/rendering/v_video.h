@@ -248,7 +248,8 @@ public:
 	virtual int GetClientHeight() = 0;
 	virtual void BlurScene(float amount, bool force = false) {}
 
-	virtual void InitLightmap(int LMTextureSize, int LMTextureCount, TArray<uint16_t>& LMTextureData) {}
+	virtual void InitLightmap(int LMTextureSize, int LMTextureCount, TArray<uint8_t>& LMTextureData) {}
+	virtual void BlitLightmap(IHardwareTexture* lightmap, int lightmapIndex) {}
 
     // Interface to hardware rendering resources
 	virtual IVertexBuffer *CreateVertexBuffer() { return nullptr; }

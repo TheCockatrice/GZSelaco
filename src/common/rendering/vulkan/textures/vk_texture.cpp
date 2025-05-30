@@ -181,33 +181,33 @@ void VkTextureManager::CreateShadowmap()
 
 void VkTextureManager::CreateLightmap()
 {
-	TArray<uint16_t> data;
+	TArray<uint8_t> data;
 	data.Push(0);
 	data.Push(0);
 	data.Push(0);
-	data.Push(0x3c00); // half-float 1.0
+	data.Push(0xFF);
 	SetLightmap(1, 1, data);
 }
 
-void VkTextureManager::SetLightmap(int LMTextureSize, int LMTextureCount, const TArray<uint16_t>& LMTextureData)
+void VkTextureManager::SetLightmap(int LMTextureSize, int LMTextureCount, const TArray<uint8_t>& LMTextureData)
 {
 	int w = LMTextureSize;
 	int h = LMTextureSize;
 	int count = LMTextureCount;
-	int pixelsize = 8;
+	int pixelsize = 4;
 
 	Lightmap.Reset(fb);
 
 	Lightmap.Image = ImageBuilder()
 		.Size(w, h, 1, count)
-		.Format(VK_FORMAT_R16G16B16A16_SFLOAT)
+		.Format(VK_FORMAT_R8G8B8A8_UNORM)
 		.Usage(VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
 		.DebugName("VkRenderBuffers.Lightmap")
 		.Create(fb->device.get());
 
 	Lightmap.View = ImageViewBuilder()
 		.Type(VK_IMAGE_VIEW_TYPE_2D_ARRAY)
-		.Image(Lightmap.Image.get(), VK_FORMAT_R16G16B16A16_SFLOAT)
+		.Image(Lightmap.Image.get(), VK_FORMAT_B8G8R8A8_UNORM) // We intentionally flip the RGB/BGR order, since canvases use the BGR format
 		.DebugName("VkRenderBuffers.LightmapView")
 		.Create(fb->device.get());
 
@@ -221,15 +221,15 @@ void VkTextureManager::SetLightmap(int LMTextureSize, int LMTextureCount, const 
 		.DebugName("VkHardwareTexture.mStagingBuffer")
 		.Create(fb->device.get());
 
-	uint16_t one = 0x3c00; // half-float 1.0
-	const uint16_t* src = LMTextureData.Data();
-	uint16_t* data = (uint16_t*)stagingBuffer->Map(0, totalSize);
+	uint8_t one = 0xFF;
+	const uint8_t* src = LMTextureData.Data();
+	uint8_t* data = (uint8_t*)stagingBuffer->Map(0, totalSize);
 	for (int i = w * h * count; i > 0; i--)
 	{
 		*(data++) = *(src++);
 		*(data++) = *(src++);
 		*(data++) = *(src++);
-		*(data++) = one;
+		*(data++) = *(src++);
 	}
 	stagingBuffer->Unmap();
 
@@ -250,4 +250,35 @@ void VkTextureManager::SetLightmap(int LMTextureSize, int LMTextureCount, const 
 		.Execute(cmdbuffer);
 
 	fb->GetCommands()->TransferDeleteList->Add(std::move(stagingBuffer));
+}
+
+void VkTextureManager::BlitLightmap(VkHardwareTexture* lightmap, int lightmapIndex)
+{
+	VkTextureImage* lightmapTexture = lightmap->GetImage(nullptr, 0, 0);
+
+	auto cmdbuffer = fb->GetCommands()->GetDrawCommands();
+
+	VkImageTransition()
+		.AddImage(lightmapTexture, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, false)
+		.AddImage(&Lightmap, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, true)
+		.Execute(fb->GetCommands()->GetDrawCommands());
+
+	VulkanImage* lightmapImage = lightmapTexture->Image.get();
+	VkImageBlit blit = {};
+	blit.srcOffsets[0] = { 0, 0, 0 };
+	blit.srcOffsets[1] = { lightmapImage->width, lightmapImage->height, 1 };
+	blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	blit.srcSubresource.mipLevel = 0;
+	blit.srcSubresource.baseArrayLayer = 0;
+	blit.srcSubresource.layerCount = 1;
+	blit.dstOffsets[0] = { 0, 0, 0 };
+	blit.dstOffsets[1] = { lightmapImage->width, lightmapImage->height, 1 };
+	blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	blit.dstSubresource.mipLevel = 0;
+	blit.dstSubresource.baseArrayLayer = lightmapIndex;
+	blit.dstSubresource.layerCount = 1;
+	cmdbuffer->blitImage(
+		lightmapImage->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+		Lightmap.Image->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		1, &blit, VK_FILTER_NEAREST);
 }

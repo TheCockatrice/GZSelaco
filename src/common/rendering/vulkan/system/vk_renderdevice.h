@@ -182,7 +182,8 @@ public:
 	void SetTextureFilterMode() override;
 	void StartPrecaching() override;
 	void BeginFrame() override;
-	void InitLightmap(int LMTextureSize, int LMTextureCount, TArray<uint16_t>& LMTextureData) override;
+	void InitLightmap(int LMTextureSize, int LMTextureCount, TArray<uint8_t>& LMTextureData) override;
+	void BlitLightmap(IHardwareTexture* lightmap, int lightmapIndex) override;
 	//void BlurScene(float amount) override;
 	void BlurScene(float amount, bool force = false) override;
 	void PostProcessScene(bool swscene, int fixedcm, float flash, const std::function<void()> &afterBloomDrawEndScene2D) override;

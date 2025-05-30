@@ -39,6 +39,7 @@
 #include "actorinlines.h"
 #include "g_game.h"
 #include "i_interface.h"
+#include "a_lightgroup.h"
 
 extern gamestate_t wipegamestate;
 extern uint8_t globalfreeze, globalchangefreeze;
@@ -154,6 +155,8 @@ void P_Ticker (void)
 		// todo: set up a sandbox for secondary levels here.
 		auto it = Level->GetThinkerIterator<AActor>();
 		AActor *ac;
+
+		P_ClearLightgroupTicks(Level);
 
 		while ((ac = it.Next()))
 		{

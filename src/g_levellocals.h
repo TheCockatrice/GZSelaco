@@ -467,12 +467,22 @@ public:
 	TArray<FLinePortal> linePortals;
 
 	// Lightmaps
+	struct MasterLightmapInfo
+	{
+		FGameTexture* base;
+		FCanvasTexture* canvas;
+		F2DVertexBuffer quadBuffer;
+	};
+
 	TArray<LightmapSurface> LMSurfaces;
 	TArray<float> LMTexCoords;
 	int LMTextureCount = 0;
 	int LMTextureSize = 0;
-	TArray<uint16_t> LMTextureData;
+	TArray<uint8_t> LMTextureData;
 	TArray<LightProbe> LightProbes;
+	TArray<FGameTexture*> Lightmaps;
+	TArray<MasterLightmapInfo> MasterLightmaps;
+	TArray<LightGroupData> LightGroups;
 	int LPMinX = 0;
 	int LPMinY = 0;
 	int LPWidth = 0;

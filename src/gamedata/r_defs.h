@@ -42,6 +42,7 @@
 #include "p_effect.h"
 
 #include "hwrenderer/data/buffers.h"
+#include "common/2d/v_2ddrawer.h"
 
 // Some more or less basic data types
 // we depend on.
@@ -1746,6 +1747,27 @@ struct LightProbeCell
 {
 	LightProbe* FirstProbe = nullptr;
 	int NumProbes = 0;
+};
+
+struct LightGroupData
+{
+	uint32_t GroupID;
+	uint16_t ThingID;
+	FVector3 BoundsMin;
+	FVector3 BoundsMax;
+
+	struct Mesh
+	{
+		uint32_t sourceLightmapIndex;
+		uint32_t targetLightmapIndex;
+
+		int indexCount;
+		F2DVertexBuffer buffers;
+	};
+
+	TArray<Mesh> Meshes;
+
+	bool TickedThisFrame;
 };
 
 //

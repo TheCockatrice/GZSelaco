@@ -1351,13 +1351,18 @@ void VulkanRenderDevice::BeginFrame()
 	UploadLoadedTextures();
 }
 
-void VulkanRenderDevice::InitLightmap(int LMTextureSize, int LMTextureCount, TArray<uint16_t>& LMTextureData)
+void VulkanRenderDevice::InitLightmap(int LMTextureSize, int LMTextureCount, TArray<uint8_t>& LMTextureData)
 {
 	if (LMTextureData.Size() > 0)
 	{
 		GetTextureManager()->SetLightmap(LMTextureSize, LMTextureCount, LMTextureData);
 		LMTextureData.Reset(); // We no longer need this, release the memory
 	}
+}
+
+void VulkanRenderDevice::BlitLightmap(IHardwareTexture* lightmap, int lightmapIndex)
+{
+	GetTextureManager()->BlitLightmap(dynamic_cast<VkHardwareTexture*>(lightmap), lightmapIndex);
 }
 
 void VulkanRenderDevice::Draw2D()

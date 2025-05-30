@@ -3384,7 +3384,7 @@ void MapLoader::LoadLightmap(MapData *map)
 	uint32_t numTexCoords = fr.ReadUInt32();
 	int32_t numLightProbes = fr.ReadUInt32();
 	uint32_t numSubsectors = fr.ReadUInt32();
-	uint32_t numTexBytes = numTextures * textureSize * textureSize * 3 * 2;
+	uint32_t numTexBytes = numTextures * textureSize * textureSize * 4;
 
 	if (numSurfaces == 0 || numTexCoords == 0 || numTexBytes == 0)
 		return;
@@ -3527,7 +3527,7 @@ void MapLoader::LoadLightmap(MapData *map)
 
 	Level->LMTextureCount = numTextures;
 	Level->LMTextureSize = textureSize;
-	Level->LMTextureData.Resize((numTexBytes + 1) / 2);
+	Level->LMTextureData.Resize((numTexBytes + 1));
 	uint8_t* data = (uint8_t*)&Level->LMTextureData[0];
 	fr.Read(data, numTexBytes);
 #if 0
@@ -3535,6 +3535,42 @@ void MapLoader::LoadLightmap(MapData *map)
 	for (uint32_t i = 1; i < numTexBytes; i++)
 		data[i] += data[i - 1];
 #endif
+
+	Level->Lightmaps.Resize(numTextures);
+	Level->MasterLightmaps.Resize(numTextures);
+
+	for (int i = 0; i < numTextures; i++)
+	{
+		// TODO: Make sure all lightmap data is properly destroyed when level gets destroyed!
+
+		// Create the lightmap texture
+		FWrapperTexture* wrapper = new FWrapperTexture(textureSize, textureSize);
+		IHardwareTexture* texture = wrapper->GetHardwareTexture(0, 0);
+		texture->CreateTexture(data + i * (textureSize * textureSize), textureSize, textureSize, -1, false, "Lightmap");
+		FGameTexture* lightmap = Level->Lightmaps[i] = new FGameTexture(wrapper, "Lightmap");
+
+		// Create the Master lightmap (For rendering to)
+		Level->MasterLightmaps[i].base = lightmap;
+		Level->MasterLightmaps[i].canvas = new FCanvasTexture(textureSize, textureSize);
+
+		// Create a Quad mesh to render the base lightmap to the Master lightmap
+		FVector2 p1 = FVector2(0, 0);
+		FVector2 p2 = FVector2(textureSize, textureSize);
+		FVector2 uv1 = FVector2(0, 1);
+		FVector2 uv2 = FVector2(1, 0);
+
+		F2DDrawer::TwoDVertex quadVerts[4] =
+		{
+			F2DDrawer::TwoDVertex{p1.X, p1.Y, 0, uv1.X, uv1.Y, 0xffffffff},
+			F2DDrawer::TwoDVertex{p2.X, p1.Y, 0, uv2.X, uv1.Y, 0xffffffff},
+			F2DDrawer::TwoDVertex{p2.X, p2.Y, 0, uv2.X, uv2.Y, 0xffffffff},
+			F2DDrawer::TwoDVertex{p1.X, p2.Y, 0, uv1.X, uv2.Y, 0xffffffff},
+		};
+
+		int quadIndices[6] = { 0, 1, 2, 0, 2, 3 };
+
+		Level->MasterLightmaps[i].quadBuffer.UploadData(quadVerts, 4, quadIndices, 6);
+	}
 }
 
 void MapLoader::LoadLightGroups(MapData* map)
@@ -3551,55 +3587,33 @@ void MapLoader::LoadLightGroups(MapData* map)
 		return;
 	}
 
-	struct Vertex
-	{
-		FVector2 pos;
-		FVector2 uvs;
-	};
-
-	struct Mesh
-	{
-		TArray<Vertex> verts;
-		TArray<uint16_t> indices;
-	};
-
-	struct LightGroupData
-	{
-		uint16_t thingid;
-		FVector3 boundsMin;
-		FVector3 boundsMax;
-
-		TArray<Mesh> meshes;
-	};
-
-	TArray<LightGroupData> lightGroups;
-
 	uint32_t numLightGroups = fr.ReadUInt32();
 	for (uint32_t i = 0; i < numLightGroups; i++)
 	{
-		LightGroupData data = {};
-		
-		data.thingid = fr.ReadUInt16();
-		fr.Read(&data.boundsMin, sizeof(FVector3));
-		fr.Read(&data.boundsMax, sizeof(FVector3));
+		Level->LightGroups.Push(LightGroupData{ Level->LightGroups.Size() });
+		LightGroupData* lightGroup = &Level->LightGroups.back();
+
+		lightGroup->ThingID = fr.ReadUInt16();
+		fr.Read(&lightGroup->BoundsMin, sizeof(FVector3));
+		fr.Read(&lightGroup->BoundsMax, sizeof(FVector3));
 
 		uint32_t numMeshes = fr.ReadUInt32();
+		lightGroup->Meshes.Resize(numMeshes);
 
 		for (uint32_t i = 0; i < numMeshes; i++)
 		{
-			Mesh mesh = {};
-			
+			lightGroup->Meshes[i].sourceLightmapIndex = fr.ReadUInt32();
+			lightGroup->Meshes[i].targetLightmapIndex = fr.ReadUInt32();
+
 			uint32_t numVerts = fr.ReadUInt32();
-			mesh.verts.Resize(numVerts);
-			fr.Read(mesh.verts.Data(), numVerts * sizeof(Vertex));
+			TArray<F2DDrawer::TwoDVertex> verts(numVerts, true);
+			fr.Read(verts.Data(), numVerts * sizeof(F2DDrawer::TwoDVertex));
 
-			uint32_t numIndices = fr.ReadUInt32();
-			mesh.indices.Resize(numIndices);
-			fr.Read(mesh.indices.Data(), numIndices * sizeof(uint16_t));
+			int numIndices = lightGroup->Meshes[i].indexCount = fr.ReadInt32();
+			TArray<int> indices(numIndices, true);
+			fr.Read(indices.Data(), numIndices * sizeof(int));
 
-			data.meshes.Push(mesh);
+			lightGroup->Meshes[i].buffers.UploadData(verts.Data(), numVerts, indices.Data(), numIndices);
 		}
-		
-		lightGroups.Push(data);
 	}
 }
