@@ -25,6 +25,25 @@ DEFINE_ACTION_FUNCTION_NATIVE(ALightGroup, MarkForRender, MarkForRender)
 //
 //==========================================================================
 
+void SetIntensity(AActor* self, double intensity)
+{
+	self->Level->LightGroups[self->special].Intensity = (float)intensity;
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(ALightGroup, SetIntensity, SetIntensity)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	PARAM_FLOAT(intensity);
+	SetIntensity(self, intensity);
+	return 0;
+}
+
+//==========================================================================
+//
+//
+//
+//==========================================================================
+
 void ActivateLightGroup(AActor* self)
 {
 	self->flags2 &= ~MF2_DORMANT;
@@ -98,8 +117,12 @@ void RenderMasterLightmap(FLevelLocals* level, int index)
 					continue;
 				}
 
+				uint8_t intensity = (uint8_t)(lightGroupData.Intensity * 255);
+				int color = intensity | (intensity << 8) | (intensity << 16) | 0xff000000;
+
 				FGameTexture* lightmap = level->Lightmaps[mesh.sourceLightmapIndex];
 				state->SetMaterial(lightmap, UF_Texture, 0, CLAMP_NONE, 0, -1);
+				state->SetObjectColor(color);
 				state->SetRenderStyle(STYLE_Add);
 				state->SetVertexBuffer(&mesh.buffers);
 				state->DrawIndexed(DT_Triangles, 0, mesh.indexCount);

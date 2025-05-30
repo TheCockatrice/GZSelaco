@@ -1767,6 +1767,7 @@ struct LightGroupData
 
 	TArray<Mesh> Meshes;
 
+	float Intensity;
 	bool TickedThisFrame;
 };
 

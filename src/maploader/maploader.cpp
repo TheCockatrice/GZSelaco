@@ -3593,6 +3593,8 @@ void MapLoader::LoadLightGroups(MapData* map)
 		Level->LightGroups.Push(LightGroupData{ Level->LightGroups.Size() });
 		LightGroupData* lightGroup = &Level->LightGroups.back();
 
+		lightGroup->Intensity = 1.0f;
+
 		lightGroup->ThingID = fr.ReadUInt16();
 		fr.Read(&lightGroup->BoundsMin, sizeof(FVector3));
 		fr.Read(&lightGroup->BoundsMax, sizeof(FVector3));

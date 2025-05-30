@@ -305,12 +305,22 @@ class ArmorBonus : BasicArmorBonus
 
 class LightGroup : Actor
 {
-	override void Activate (Actor activator)
+	enum AnimationType
+	{
+		LGAT_Normal,
+		LGAT_Flicker,
+		LGAT_Pulse
+	}
+
+	int user_animationType;
+	int user_animationInterval;
+
+	override void Activate(Actor activator)
 	{
 		ActivateLightGroup();
 	}
 
-	override void Deactivate (Actor activator)
+	override void Deactivate(Actor activator)
 	{
 		DeactivateLightGroup();
 	}
@@ -324,9 +334,15 @@ class LightGroup : Actor
 		{
 			MarkForRender();
 		}
+
+		if (user_animationType == LGAT_Flicker)
+		{
+			SetIntensity(frandom(0.5, 1));
+		}
 	}
 
 	private native void MarkForRender();
+	private native void SetIntensity(float intensity);
 	private native void ActivateLightGroup();
 	private native void DeactivateLightGroup();
 }
