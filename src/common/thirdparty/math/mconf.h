@@ -142,6 +142,8 @@ typedef struct
 	} cmplxl;
 #endif
 
+/* Use native square-root function, which is faster, but may be less reproducable between different systems */
+#define NATIVE_SQRT 1
 
 /* Type of computer arithmetic */
 

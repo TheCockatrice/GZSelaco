@@ -177,6 +177,44 @@ public:
 		*this = (*this) * m1;
 	}
 
+	inline void FastRotateX(float angle)
+	{
+ 		Matrix3x4 other{};
+
+		float rads = angle * (pi::pif() / 180.0f);
+		float c = cosf(rads);
+		float s = sinf(rads);
+
+ 		other.m[0][0] = 1.0f;
+ 		
+ 		other.m[1][1] = c;
+ 		other.m[1][2] = -s;
+ 		
+ 		other.m[2][1] = s;
+ 		other.m[2][2] = c;
+
+		*this = *this * other;
+	}
+
+	inline void FastRotateY(float angle)
+	{
+ 		Matrix3x4 other{};
+
+		float rads = angle * (pi::pif() / 180.0f);
+		float c = cosf(rads);
+		float s = sinf(rads);
+
+ 		other.m[0][0] = c;
+ 		other.m[0][2] = s;
+ 		
+ 		other.m[1][1] = 1.0f;
+ 		
+ 		other.m[2][0] = -s;
+ 		other.m[2][2] = c;
+
+		*this = *this * other;
+}
+
 	Matrix3x4 operator *(const Matrix3x4 &other)
 	{
 		Matrix3x4 result;

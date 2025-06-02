@@ -36,6 +36,7 @@ class FFlatVertexBuffer;
 class IRenderQueue;
 class HWScenePortalBase;
 class FRenderState;
+struct particlelevelpool_t;
 
 //==========================================================================
 //
@@ -206,6 +207,7 @@ private:
 	public:
 	void RenderThings(subsector_t * sub, sector_t * sector);
 	void RenderParticles(subsector_t *sub, sector_t *front);
+	void RenderDefinedParticles(subsector_t* sub, sector_t* front);
 	void DoSubsector(subsector_t * sub);
 	int SetupLightsForOtherPlane(subsector_t * sub, FDynLightData &lightdata, const secplane_t *plane);
 	int CreateOtherPlaneVertices(subsector_t *sub, const secplane_t *plane);
@@ -290,7 +292,7 @@ public:
 	void AddOtherCeilingPlane(int sector, gl_subsectorrendernode * node);
 
 	void GetDynSpriteLight(AActor *self, float x, float y, float z, FLightNode *node, int portalgroup, float *out);
-	void GetDynSpriteLight(AActor *thing, particle_t *particle, float *out);
+	void GetDynSpriteLight(AActor *thing, HWSprite* particleSprite, float *out);
 
 	void PreparePlayerSprites(sector_t * viewsector, area_t in_area);
 	void PrepareTargeterSprites(double ticfrac);
