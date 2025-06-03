@@ -1808,7 +1808,10 @@ void HWSprite::ProcessDefinedParticle(HWDrawInfo* di, particledata_t* particle, 
 				gl_texture_thread &&
 				screen->SupportsBackgroundCache()) 
 			{
-				FMaterial* gltex = FMaterial::ValidateTexture(texture, 0, false);
+				int scaleflags = texture->ShouldExpandSprite() ? CTF_Expand : 0;
+				if (shouldUpscale(texture, UF_Sprite)) scaleflags |= CTF_Upscale;
+
+				FMaterial* gltex = FMaterial::ValidateTexture(texture, scaleflags, false);
 				if (!gltex || !gltex->IsHardwareCached(0))
 				{
 					if (gltex) 
@@ -1817,7 +1820,7 @@ void HWSprite::ProcessDefinedParticle(HWDrawInfo* di, particledata_t* particle, 
 					}
 					else 
 					{
-						screen->BackgroundCacheTextureMaterial(texture, translation, 0, true);
+						screen->BackgroundCacheTextureMaterial(texture, translation, scaleflags, true);
 					}
 
 					if (lastTexture.isValid())
