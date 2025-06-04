@@ -296,6 +296,7 @@ public:
 	~SDLVideo ();
 
 	void DumpAdapters();
+	void DumpAdapters(TArray<FString>& ar);
 	
 	DFrameBuffer *CreateFrameBuffer ();
 
@@ -380,6 +381,21 @@ void SDLVideo::DumpAdapters()
         Priv::displayBounds[i].y
       );
   }
+}
+
+void SDLVideo::DumpAdapters(TArray<FString>& ar) {
+	Priv::updateDisplayInfo();
+	for (int i = 0; i < Priv::numberOfDisplays; i++) {
+		FString s;
+		s.Format("%d. [%dx%d @ (%d,%d)]\n",
+			i,
+			Priv::displayBounds[i].w,
+			Priv::displayBounds[i].h,
+			Priv::displayBounds[i].x,
+			Priv::displayBounds[i].y
+		);
+		ar.Push(s);
+	}
 }
 
 
