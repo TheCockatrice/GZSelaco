@@ -131,6 +131,7 @@
 using namespace FileSys;
 
 EXTERN_CVAR(Int, gl_texture_quality)
+EXTERN_CVAR(Int, vk_max_transfer_threads)
 EXTERN_CVAR(Bool, hud_althud)
 EXTERN_CVAR(Int, vr_mode)
 EXTERN_CVAR(Bool, cl_customizeinvulmap)
@@ -3451,6 +3452,20 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 		exec = NULL;
 	}
 
+	// @Cockatrice - Hack for Steam Deck, check for existence of g_steamdeck and set graphics quality
+	auto cv = FindCVar("g_steamdeck", nullptr);
+	if (cv != nullptr && cv->ToInt() == 1)
+	{
+		Printf(TEXTCOLOR_BRICK"Steam Deck Detected\n");
+
+		// Set texture quality
+		gl_texture_quality = max((int)gl_texture_quality, 1);
+
+		// @Cockatrice - Force texture thread limit of 1, as an emergency hotfix for stutter issues on Steam Deck
+		// TODO: Remove this, it's a hack. Figure out why the stutters are happening!
+		vk_max_transfer_threads = min(1, (int)vk_max_transfer_threads);
+	}
+
 	if (!restart)
 		V_Init2();
 
@@ -3473,16 +3488,6 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 		CalculateCPUSpeed();
 		auto ci = DumpCPUInfo(&CPU);
 		Printf("%s", ci.GetChars());
-	}
-
-	// @Cockatrice - Hack for Steam Deck, check for existence of g_steamdeck and set graphics quality
-	auto cv = FindCVar("g_steamdeck", nullptr);
-	if (cv != nullptr && cv->ToInt() == 1)
-	{
-		Printf(TEXTCOLOR_BRICK"Steam Deck Detected\n");
-		
-		// Set texture quality
-		gl_texture_quality = max((int)gl_texture_quality, 1);
 	}
 
 
