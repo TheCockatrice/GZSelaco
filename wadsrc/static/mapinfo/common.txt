@@ -136,6 +136,7 @@ DoomEdNums
   9874 = SpotLightFlickerRandomAttenuated
   9876 = MapSpot	// ZDRay static point light
   9877 = MapSpot	// ZDRay static point flicker light
+  9878 = MapSpot	// ZDRay static point pulse light
   9881 = MapSpot	// ZDRay static spotlight
   9890 = None	// ZDRayInfo
   9899 = LightGroup

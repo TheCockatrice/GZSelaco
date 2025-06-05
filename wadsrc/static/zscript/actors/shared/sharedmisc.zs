@@ -314,9 +314,19 @@ class LightGroup : Actor
 
 	int user_animationType;
 	int user_animationInterval;
+	float user_secondaryIntensity;
+
+	void Init()
+	{
+		if (user_animationInterval <= 0)
+		{
+			user_animationInterval = NormalizeAngle(spawnAngle);
+		}
+	}
 
 	override void Activate(Actor activator)
 	{
+		activeTics = 0;
 		ActivateLightGroup();
 	}
 
@@ -329,20 +339,50 @@ class LightGroup : Actor
 	{
 		Super.Tick();
 
+		if (!initialized)
+		{
+			initialized = true;
+			Init();
+		}
+
 		// Mark this LightGroup to render this frame
 		if (!bDormant)
 		{
+			activeTics++;
 			MarkForRender();
-		}
 
-		if (user_animationType == LGAT_Flicker)
-		{
-			SetIntensity(frandom(0.5, 1));
+			if (user_animationType == LGAT_Flicker)
+			{
+				SetIntensity(random(0, 360) < user_animationInterval ? 1 : user_secondaryIntensity);
+			}
+			else if (user_animationType == LGAT_Pulse)
+			{
+				float time = float(activeTics) / TICRATE;
+				float pulseTime = float(user_animationInterval) / TICRATE;
+				float cycle = time / pulseTime;
+				float mult = (sin(cycle * 360) + 1) / 2;
+				float intensity = user_secondaryIntensity + (1 - user_secondaryIntensity) * mult;
+
+				SetIntensity(intensity);
+
+				Console.PrintF("Intensity is: %f", intensity);
+			}
 		}
 	}
+
+	double NormalizeAngle(double value, double start = 0, double end = 360) 
+	{
+        double width       = end - start;
+        double offsetValue = value - start;
+
+        return (offsetValue - (floor(offsetValue / width) * width)) + start;
+    }
 
 	private native void MarkForRender();
 	private native void SetIntensity(float intensity);
 	private native void ActivateLightGroup();
 	private native void DeactivateLightGroup();
+
+	bool initialized;
+	int activeTics;
 }
