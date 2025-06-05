@@ -186,6 +186,7 @@ void P_RenderLightGroups(FLevelLocals* level)
 	state.EnableMultisampling(false);
 	state.EnableFog(false);
 	state.EnableTexture(true);
+	state.SetTextureMode(TM_NORMAL);
 	state.EnableBrightmap(false);
 	state.EnableModelMatrix(false);
 	state.EnableTextureMatrix(false);
