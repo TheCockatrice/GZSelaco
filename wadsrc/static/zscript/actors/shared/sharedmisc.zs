@@ -309,12 +309,14 @@ class LightGroup : Actor
 	{
 		LGAT_Normal,
 		LGAT_Flicker,
+		LGAT_FlickerRandom,
 		LGAT_Pulse
 	}
 
 	int user_animationType;
 	int user_animationInterval;
 	float user_secondaryIntensity;
+	bool user_allowColorChange;
 
 	void Init()
 	{
@@ -348,12 +350,24 @@ class LightGroup : Actor
 		// Mark this LightGroup to render this frame
 		if (!bDormant)
 		{
-			activeTics++;
-			MarkForRender();
-
 			if (user_animationType == LGAT_Flicker)
 			{
 				SetIntensity(random(0, 360) < user_animationInterval ? 1 : user_secondaryIntensity);
+			}
+			else if (user_animationType == LGAT_FlickerRandom)
+			{
+				float flickerRange = user_secondaryIntensity - 1;
+				float amt = frandom(0, 1);
+		
+				if (activeTics > user_animationInterval)
+				{
+					activeTics = 0;
+				}
+
+				if (activeTics == 0 || user_secondaryIntensity <= 1)
+				{
+					SetIntensity(1.0 + (amt * flickerRange));
+				}
 			}
 			else if (user_animationType == LGAT_Pulse)
 			{
@@ -364,8 +378,18 @@ class LightGroup : Actor
 				float intensity = user_secondaryIntensity + (1 - user_secondaryIntensity) * mult;
 
 				SetIntensity(intensity);
+			}
 
-				Console.PrintF("Intensity is: %f", intensity);
+			activeTics++;
+
+			if (GetIntensity() > 0)
+			{
+				if (user_allowColorChange)
+				{
+					UpdateTintColor();
+				}
+
+				MarkForRender();
 			}
 		}
 	}
@@ -379,7 +403,9 @@ class LightGroup : Actor
     }
 
 	private native void MarkForRender();
+	private native void UpdateTintColor();
 	private native void SetIntensity(float intensity);
+	private native float GetIntensity();
 	private native void ActivateLightGroup();
 	private native void DeactivateLightGroup();
 

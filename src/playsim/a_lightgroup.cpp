@@ -9,7 +9,7 @@
 
 void MarkForRender(AActor* self)
 {
-	self->Level->LightGroups[self->special].TickedThisFrame = true;
+	self->Level->LightGroups[self->Score].TickedThisFrame = true;
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(ALightGroup, MarkForRender, MarkForRender)
@@ -25,9 +25,30 @@ DEFINE_ACTION_FUNCTION_NATIVE(ALightGroup, MarkForRender, MarkForRender)
 //
 //==========================================================================
 
+void UpdateTintColor(AActor* self)
+{
+	LightGroupData& lightGroupData = self->Level->LightGroups[self->Score];
+	lightGroupData.TintColor.r = self->args[0] / 255.0f;
+	lightGroupData.TintColor.g = self->args[1] / 255.0f;
+	lightGroupData.TintColor.b = self->args[2] / 255.0f;
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(ALightGroup, UpdateTintColor, UpdateTintColor)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	UpdateTintColor(self);
+	return 0;
+}
+
+//==========================================================================
+//
+//
+//
+//==========================================================================
+
 void SetIntensity(AActor* self, double intensity)
 {
-	self->Level->LightGroups[self->special].Intensity = (float)intensity;
+	self->Level->LightGroups[self->Score].Intensity = (float)intensity;
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(ALightGroup, SetIntensity, SetIntensity)
@@ -36,6 +57,24 @@ DEFINE_ACTION_FUNCTION_NATIVE(ALightGroup, SetIntensity, SetIntensity)
 	PARAM_FLOAT(intensity);
 	SetIntensity(self, intensity);
 	return 0;
+}
+
+//==========================================================================
+//
+//
+//
+//==========================================================================
+
+double GetIntensity(AActor* self)
+{
+	return self->Level->LightGroups[self->Score].Intensity;
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(ALightGroup, GetIntensity, GetIntensity)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	double intensity = GetIntensity(self);
+	ACTION_RETURN_FLOAT(intensity);
 }
 
 //==========================================================================
@@ -117,8 +156,10 @@ void RenderMasterLightmap(FLevelLocals* level, int index)
 					continue;
 				}
 
-				uint8_t intensity = (uint8_t)(lightGroupData.Intensity * 255);
-				int color = intensity | (intensity << 8) | (intensity << 16) | 0xff000000;
+				uint8_t r = (uint8_t)(lightGroupData.TintColor.r * lightGroupData.Intensity * 255);
+				uint8_t g = (uint8_t)(lightGroupData.TintColor.g * lightGroupData.Intensity * 255);
+				uint8_t b = (uint8_t)(lightGroupData.TintColor.b * lightGroupData.Intensity * 255);
+				int color = r | (g << 8) | (b << 16) | 0xff000000;
 
 				FGameTexture* lightmap = level->Lightmaps[mesh.sourceLightmapIndex];
 				state->SetMaterial(lightmap, UF_Texture, 0, CLAMP_NONE, 0, -1);

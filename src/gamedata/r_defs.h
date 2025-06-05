@@ -1765,6 +1765,15 @@ struct LightGroupData
 		F2DVertexBuffer buffers;
 	};
 
+	struct ColorRGB
+	{
+		float r;
+		float g;
+		float b;
+	};
+
+	ColorRGB TintColor = { 1, 1, 1 };
+
 	TArray<Mesh> Meshes;
 
 	float Intensity;
