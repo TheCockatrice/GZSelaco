@@ -1349,6 +1349,15 @@ void HWWall::DoMidTexture(HWWallDispatcher *di, seg_t * seg, bool drawfogboundar
 	bool mirrory = false;
 	float rowoffset = 0;
 
+	if (seg->sidedef->lightmap && type >= RENDERWALL_TOP && type <= RENDERWALL_BOTTOM)
+	{
+		lightmap = &seg->sidedef->lightmap[type - RENDERWALL_TOP];
+	}
+	else
+	{
+		lightmap = nullptr;
+	}
+
 	//
 	//
 	// Get the base coordinates for the texture
