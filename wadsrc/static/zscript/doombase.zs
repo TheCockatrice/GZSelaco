@@ -586,6 +586,9 @@ struct LevelLocals native
 	native void QuitGame();
 
 	native void SetNewSkill(int newSkill);
+
+
+	clearscope native static bool WorldPaused();
 }
 
 // a few values of this need to be readable by the play code.
