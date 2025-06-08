@@ -48,6 +48,7 @@ struct FSpriteModelFrame
 	float xrotate, yrotate, zrotate;
 	float rotationCenterX, rotationCenterY, rotationCenterZ;
 	float rotationSpeed;
+	float viewModelFOV;
 private:
 	unsigned int flags;
 public:
