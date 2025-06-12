@@ -451,7 +451,7 @@ void HWDrawList::SortWallIntoWall(HWDrawInfo *di, SortNode * head,SortNode * sor
 		w->ztop[0]=ws->ztop[1]=izt;
 		w->zbottom[0]=ws->zbottom[1]=izb;
 		w->tcs[HWWall::LOLFT].u = w->tcs[HWWall::UPLFT].u = ws->tcs[HWWall::LORGT].u = ws->tcs[HWWall::UPRGT].u = iu;
-		w->lightuv[HWWall::LOLFT].u = w->lightuv[HWWall::UPLFT].u = ws->lightuv[HWWall::LORGT].u = ws->lightuv[HWWall::UPRGT].u = iu;
+		w->lightuv[HWWall::LOLFT].u = w->lightuv[HWWall::UPLFT].u = ws->lightuv[HWWall::LORGT].u = ws->lightuv[HWWall::UPRGT].u = ilmu;
 		ws->MakeVertices(false);
 		w->MakeVertices(false);
 

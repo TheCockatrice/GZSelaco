@@ -1349,9 +1349,10 @@ void HWWall::DoMidTexture(HWWallDispatcher *di, seg_t * seg, bool drawfogboundar
 	bool mirrory = false;
 	float rowoffset = 0;
 
-	if (seg->sidedef->lightmap && type >= RENDERWALL_TOP && type <= RENDERWALL_BOTTOM)
+	if (seg->sidedef->lightmap)
 	{
-		lightmap = &seg->sidedef->lightmap[type - RENDERWALL_TOP];
+		uint8_t wallType = drawfogboundary ? RENDERWALL_M2SNF : RENDERWALL_M2S;
+		lightmap = &seg->sidedef->lightmap[wallType - RENDERWALL_TOP];
 	}
 	else
 	{
@@ -1672,6 +1673,7 @@ void HWWall::DoMidTexture(HWWallDispatcher *di, seg_t * seg, bool drawfogboundar
 	glseg=glsave;
 	flags&=~(HWF_CLAMPX|HWF_CLAMPY|HWF_NOSPLITUPPER|HWF_NOSPLITLOWER);
 	RenderStyle = STYLE_Normal;
+	lightmap = nullptr;
 }
 
 
