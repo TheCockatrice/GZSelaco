@@ -71,11 +71,13 @@ POSSIBILITY OF SUCH DAMAGE.
 
 #include "mconf.h"
 #ifdef ANSIPROT
-extern double frexp ( double, int * );
-extern double ldexp ( double, int );
+extern double frexp(double, int*);
+extern double ldexp(double, int);
+extern double sqrt(double);
 #else
-double frexp(), ldexp();
+double frexp(), ldexp(), sqrt(double);
 #endif
+
 extern double SQRT2;  /*  _sqrt2 = 1.41421356237309504880 */
 
 double c_sqrt(double x)

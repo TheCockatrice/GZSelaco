@@ -67,6 +67,7 @@
 #include "c_dispatch.h"
 #include "image.h"
 #include "model.h"
+#include "vm.h"
 
 
 FString JitCaptureStackTrace(int framesToSkip, bool includeNativeFrames, int maxFrames = -1);
@@ -111,6 +112,21 @@ CCMD(vk_listdevices)
 	{
 		Printf("#%d - %s\n", (int)i, SupportedDevices[i].Device->Properties.Properties.deviceName);
 	}
+}
+
+
+DEFINE_ACTION_FUNCTION(_Screen, GetDeviceList)
+{
+	PARAM_PROLOGUE;
+	PARAM_POINTER(lst, TArray<FString>);
+
+	lst->clear();
+
+	for (size_t i = 0; i < SupportedDevices.size(); i++) {
+		lst->Push(SupportedDevices[i].Device->Properties.Properties.deviceName);
+	}
+
+	ACTION_RETURN_INT(lst->size());
 }
 
 

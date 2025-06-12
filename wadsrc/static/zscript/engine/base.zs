@@ -601,6 +601,11 @@ struct Screen native
 	native static void SetCursor(String texName = "None");
 	native static ui void CloseAutomap();
 	native static ui void ToggleAutomap();
+
+	// @Cockatrice - Only works in Vulkan right now. 
+	// Returns number of devices found, and fills the devices array with device names in the same order as internal
+	native static ui int GetDeviceList(out Array<String> devices);
+	native static ui int GetScreenList(out Array<String> screens);
 }
 
 struct Font native

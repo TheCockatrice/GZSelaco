@@ -156,8 +156,9 @@ void Win32BaseVideo::GetDisplayDeviceName()
 
 struct DumpAdaptersState
 {
-	unsigned index;
-	char *displayDeviceName;
+	unsigned index = 0;
+	char *displayDeviceName = NULL;
+	TArray<FString>* ar = NULL;
 };
 
 static BOOL CALLBACK DumpAdaptersMonitorEnumProc(HMONITOR hMonitor, HDC, LPRECT, LPARAM dwData)
@@ -187,10 +188,17 @@ static BOOL CALLBACK DumpAdaptersMonitorEnumProc(HMONITOR hMonitor, HDC, LPRECT,
 			active = false;//this isn't the selected one
 	}
 
-	Printf("%s%u. %s\n",
-		active ? TEXTCOLOR_BOLD : "",
-		state->index,
-		moreinfo);
+	if (state->ar != nullptr) {
+		FString s;
+		s.Format("%u. %s", state->index, moreinfo);
+		state->ar->Push(s);
+	}
+	else {
+		Printf("%s%u. %s\n",
+			active ? TEXTCOLOR_BOLD : "",
+			state->index,
+			moreinfo);
+	}
 
 	++state->index;
 
@@ -209,6 +217,18 @@ void Win32BaseVideo::DumpAdapters()
 
 	das.index = 1;
 	das.displayDeviceName = m_DisplayDeviceName;
+	das.ar = NULL;
+
+	EnumDisplayMonitors(0, 0, DumpAdaptersMonitorEnumProc, LPARAM(&das));
+}
+
+void Win32BaseVideo::DumpAdapters(TArray<FString>& ar) 
+{
+	DumpAdaptersState das;
+
+	das.index = 1;
+	das.displayDeviceName = m_DisplayDeviceName;
+	das.ar = &ar;
 
 	EnumDisplayMonitors(0, 0, DumpAdaptersMonitorEnumProc, LPARAM(&das));
 }
