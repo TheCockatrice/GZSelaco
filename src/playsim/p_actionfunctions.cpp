@@ -2150,7 +2150,7 @@ enum CLOF_flags
 	CLOFF_IGNOREGHOST =			0x00008000,
 	
 	CLOFF_MUSTBESOLID =			0x00010000,
-	CLOFF_BEYONDTARGET =		0x00020000,
+	CLOFF_SKIPLOF =				0x00020000,
 
 	CLOFF_FROMBASE =			0x00040000,
 	CLOFF_MUL_HEIGHT =			0x00080000,
@@ -2163,9 +2163,11 @@ enum CLOF_flags
 	CLOFF_SETMASTER =			0x01000000,
 	CLOFF_SETTRACER =			0x02000000,
 	CLOFF_BLOCKLOF_ALWAYS =  	0x04000000,	// @Cockatrice - Always stop on BLOCKLOF flag, regardless of other flags
+	CLOFF_BLOCKLOS_ALWAYS =		0x08000000,	// @Cockatrice - Always stop on BLOCKLOS flag, regardless of other flags
 	CLOFF_JUMPMONSTER =			0x10000000, // Jump when any MONSTER is in the way
 	CLOFF_SKIPMONSTER =			0x20000000, // Skip any MONSTER 
 	CLOFF_SKIPWORLD =			0x40000000, // Skip terrain/wall/floor etc
+	CLOFF_SKIPLOS =				0x80000000,	// Skip objects tagged with BLOCKLOS
 };
 
 struct LOFData
@@ -2189,10 +2191,11 @@ ETraceStatus CheckLOFTraceFunc(FTraceResults &trace, void *userdata)
 	{
 		if (flags & CLOFF_SKIPTARGET)
 		{
-			if (flags & CLOFF_BEYONDTARGET)
+			// @Cocaktrice - Removed because I stole the slot for the bitmask
+			/*if (flags & CLOFF_BEYONDTARGET)
 			{
 				return TRACE_Skip;
-			}
+			}*/
 			return TRACE_Abort;
 		}
 		return TRACE_Stop;
@@ -2200,6 +2203,10 @@ ETraceStatus CheckLOFTraceFunc(FTraceResults &trace, void *userdata)
 
 	// @Cockatrice - CLOFF_BLOCKLOF_ALWAYS will always stop if it hits a BLOCKLOF actor
 	if ((flags & CLOFF_BLOCKLOF_ALWAYS) && (trace.Actor->flags8 & MF8_BLOCKLOF)) {
+		return TRACE_Stop;
+	}
+
+	if ((flags & CLOFF_BLOCKLOS_ALWAYS) && trace.Actor->flags9 & MF9_BLOCKLOS) {
 		return TRACE_Stop;
 	}
 
@@ -2246,6 +2253,7 @@ ETraceStatus CheckLOFTraceFunc(FTraceResults &trace, void *userdata)
 			((flags & CLOFF_SKIPMONSTER) && (trace.Actor->flags3 & MF3_ISMONSTER)) ||
 			((flags & CLOFF_SKIPENEMY) && data->Self->IsHostile(trace.Actor)) ||
 			((flags & CLOFF_SKIPFRIEND) && data->Self->IsFriend(trace.Actor)) ||
+			((flags & CLOFF_SKIPLOF) && (trace.Actor->flags8 & MF8_BLOCKLOF)) ||
 			((flags & CLOFF_SKIPOBJECT) && !(trace.Actor->flags3 & MF3_ISMONSTER) && !(trace.Actor->flags8 & MF8_BLOCKLOF)) ||
 			((flags & CLOFF_SKIPNONHOSTILE) && (trace.Actor->flags3 & MF3_ISMONSTER) && !data->Self->IsHostile(trace.Actor))
 		)
@@ -2255,6 +2263,10 @@ ETraceStatus CheckLOFTraceFunc(FTraceResults &trace, void *userdata)
 
 	// @Cocktrice - If all checks pass, blocking actors will always return positive
 	if ((trace.Actor->flags8 & MF8_BLOCKLOF)) {
+		return TRACE_Stop;
+	}
+
+	if (!(flags & CLOFF_SKIPLOS) && trace.Actor->flags9 & MF9_BLOCKLOS) {
 		return TRACE_Stop;
 	}
 
