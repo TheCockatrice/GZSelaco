@@ -478,6 +478,66 @@ void HWWall::SetupLights(HWDrawInfo*di, FDynLightData &lightdata)
 		}
 		node = node->nextLight;
 	}
+
+
+	// @Cockatrice - Add any player lights to every flat. This is a hack to prevent the big hit to CPU power by constantly linking and unlinking moving spotlights
+	// BRUTE FORCE FOR NOW: TODO: Keep a list of player lights!
+	AActor* mo = players[consoleplayer].mo;
+	if (mo) {
+		for(auto *light : level.playerLights) {
+			if (!light->IsActive() || light->DontLightMap() || !light->target || light->target->master != mo) {
+				continue;
+			}
+
+			iter_dlight++;
+
+			DVector3 posrel = light->PosRelative(seg->frontsector->PortalGroup);
+			float x = posrel.X;
+			float y = posrel.Y;
+			float z = posrel.Z;
+			float dist = fabsf(p.DistToPoint(x, z, y));
+			float radius = light->GetRadius();
+			float scale = 1.0f / ((2.f * radius) - dist);
+			FVector3 fn, pos;
+
+			if (radius > 0.f && dist < radius)
+			{
+				FVector3 nearPt, up, right;
+
+				pos = { x, z, y };
+				fn = p.Normal();
+
+				fn.GetRightUp(right, up);
+
+				FVector3 tmpVec = fn * dist;
+				nearPt = pos + tmpVec;
+
+				FVector3 t1;
+				int outcnt[4] = { 0,0,0,0 };
+				texcoord tcs[4];
+
+				// do a quick check whether the light touches this polygon
+				for (int i = 0; i < 4; i++)
+				{
+					t1 = FVector3(&vtx[i * 3]);
+					FVector3 nearToVert = t1 - nearPt;
+					tcs[i].u = ((nearToVert | right) * scale) + 0.5f;
+					tcs[i].v = ((nearToVert | up) * scale) + 0.5f;
+
+					if (tcs[i].u < 0) outcnt[0]++;
+					if (tcs[i].u > 1) outcnt[1]++;
+					if (tcs[i].v < 0) outcnt[2]++;
+					if (tcs[i].v > 1) outcnt[3]++;
+
+				}
+				if (outcnt[0] != 4 && outcnt[1] != 4 && outcnt[2] != 4 && outcnt[3] != 4)
+				{
+					draw_dlight += GetLight(lightdata, seg->frontsector->PortalGroup, p, light, true, di->Viewpoint.TicFrac);
+				}
+			}
+		}
+	}
+
 	dynlightindex = screen->mLights->UploadLights(lightdata);
 }
 
