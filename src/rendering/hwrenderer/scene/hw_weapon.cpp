@@ -943,12 +943,12 @@ void HWDrawInfo::PreparePlayerSprites3D(sector_t * viewsector, area_t in_area)
 		{
 			hw_GetDynModelLight(playermo, lightdata, vp.TicFrac);
 			hudsprite.lightindex = screen->mLights->UploadLights(lightdata);
-			LightProbe* probe = FindLightProbe(playermo->Level, playermo->X(), playermo->Y(), playermo->Center());
-			if (probe)
+			FVector3 probeColor;
+			if (TryGetLightProbeColor(playermo->Level, playermo->X(), playermo->Y(), playermo->Center(), probeColor))
 			{
-				hudsprite.dynrgb[0] = probe->Red;
-				hudsprite.dynrgb[1] = probe->Green;
-				hudsprite.dynrgb[2] = probe->Blue;
+				hudsprite.dynrgb[0] = probeColor.X;
+				hudsprite.dynrgb[1] = probeColor.Y;
+				hudsprite.dynrgb[2] = probeColor.Z;
 			}
 		}
 

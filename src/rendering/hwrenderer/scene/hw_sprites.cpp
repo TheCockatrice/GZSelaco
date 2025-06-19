@@ -313,9 +313,11 @@ void HWSprite::DrawSprite(HWDrawInfo *di, FRenderState &state, bool translucent)
 		{
 			if (actor && di->Level->LightProbes.Size() > 0)
 			{
-				LightProbe* probe = FindLightProbe(di->Level, actor->X(), actor->Y(), actor->Center());
-				if (probe)
-					state.SetDynLight(probe->Red, probe->Green, probe->Blue);
+				FVector3 probeColor;
+				if (TryGetLightProbeColor(di->Level, actor->X(), actor->Y(), actor->Center(), probeColor))
+				{
+					state.SetDynLight(probeColor.X, probeColor.Y, probeColor.Z);
+				}
 			}
 
 			FHWModelRenderer renderer(di, state, dynlightindex);

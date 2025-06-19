@@ -1741,6 +1741,17 @@ struct LightProbe
 {
 	float X, Y, Z;
 	float Red, Green, Blue;
+
+	struct SubProbe
+	{
+		uint32_t groupID;
+		float Red, Green, Blue;
+	};
+
+	uint8_t numSubProbes;
+	SubProbe subProbes[4];
+
+	FVector3 CalculateColor(FLevelLocals* level) const;
 };
 
 struct LightProbeCell

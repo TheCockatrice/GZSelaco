@@ -7,6 +7,24 @@
 #include "hw_bonebuffer.h"
 #include "hw_lightbuffer.h"
 
+FVector3 LightProbe::CalculateColor(FLevelLocals* level) const
+{
+	FVector3 result = FVector3(Red, Green, Blue);
+
+	for (uint8_t i = 0; i < numSubProbes; i++)
+	{
+		const SubProbe& subProbe = subProbes[i];
+		const LightGroupData& lightGroup = level->LightGroups[subProbe.groupID];
+
+		if (lightGroup.TickedThisFrame)
+		{
+			result += FVector3(subProbe.Red, subProbe.Green, subProbe.Blue) * lightGroup.Intensity;
+		}
+	}
+
+	return result;
+}
+
 void MarkForRender(AActor* self)
 {
 	self->Level->LightGroups[self->Score].TickedThisFrame = true;
@@ -190,6 +208,7 @@ void P_RenderLightGroups(FLevelLocals* level)
 	state.EnableBrightmap(false);
 	state.EnableModelMatrix(false);
 	state.EnableTextureMatrix(false);
+	state.SetDynLight(0, 0, 0);
 
 	screen->mLights->Clear();
 	screen->mBones->Clear();

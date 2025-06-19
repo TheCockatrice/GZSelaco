@@ -67,10 +67,11 @@ void HWDecal::DrawDecal(HWDrawInfo *di, FRenderState &state)
 	{
 		double x, y;
 		decal->GetXY(decal->Side, x, y);
-		LightProbe *probe = FindLightProbe(di->Level, x, y, decal->GetRealZ(decal->Side) * 0.5);
-		if (probe)
+
+		FVector3 probeColor;
+		if (TryGetLightProbeColor(di->Level, x, y, decal->GetRealZ(decal->Side) * 0.5, probeColor))
 		{
-			state.SetDynLight(probe->Red, probe->Green, probe->Blue);
+			state.SetDynLight(probeColor.X, probeColor.Y, probeColor.Z);
 		}
 	}
 

@@ -3397,7 +3397,29 @@ void MapLoader::LoadLightmap(MapData *map)
 	if (numLightProbes > 0)
 	{
 		Level->LightProbes.Resize(numLightProbes);
-		fr.Read(&Level->LightProbes[0], sizeof(LightProbe) * numLightProbes);
+
+		for (int i = 0; i < numLightProbes; i++)
+		{
+			LightProbe& probe = Level->LightProbes[i];
+
+			probe.X = fr.ReadFloat();
+			probe.Y = fr.ReadFloat();
+			probe.Z = fr.ReadFloat();
+			probe.Red = fr.ReadFloat();
+			probe.Green = fr.ReadFloat();
+			probe.Blue = fr.ReadFloat();
+
+			probe.numSubProbes = fr.ReadUInt8();
+
+			for (int s = 0; s < 4; s++)
+			{
+				probe.subProbes[s].groupID = fr.ReadUInt32();
+				probe.subProbes[s].Red = fr.ReadFloat();
+				probe.subProbes[s].Green = fr.ReadFloat();
+				probe.subProbes[s].Blue = fr.ReadFloat();
+			}
+		}
+		//fr.Read(&Level->LightProbes[0], sizeof(LightProbe) * numLightProbes);
 
 		// Sort the light probes so that they are ordered by cell.
 		// This lets us point at the first probe knowing all other probes in the cell will follow.
