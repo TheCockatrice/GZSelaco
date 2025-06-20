@@ -109,6 +109,7 @@ void HWDrawInfo::DrawPSprite(HUDSprite *huds, FRenderState &state)
 	state.SetObjectColor(0xffffffff);
 	state.SetAddColor(0);
 	state.SetDynLight(0, 0, 0);
+	state.SetLightProbe(0, 0, 0);
 	state.EnableBrightmap(false);
 }
 

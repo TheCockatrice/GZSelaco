@@ -136,6 +136,7 @@ void HWDecal::DrawDecal(HWDrawInfo *di, FRenderState &state)
 	state.SetObjectColor(0xffffffff);
 	state.SetFog(fc, -1);
 	state.SetDynLight(0, 0, 0);
+	state.SetLightProbe(0, 0, 0);
 }
 
 //==========================================================================
