@@ -841,6 +841,14 @@ void HWDrawInfo::PreparePlayerSprites2D(sector_t * viewsector, area_t in_area)
 			GetDynSpriteLight(playermo, nullptr, hudsprite.dynrgb);
 		}
 
+		FVector3 probeColor;
+		if (TryGetLightProbeColor(Level, (float)playermo->X(), (float)playermo->Y(), (float)playermo->Center(), probeColor))
+		{
+			hudsprite.dynrgb[0] += probeColor.X;
+			hudsprite.dynrgb[1] += probeColor.Y;
+			hudsprite.dynrgb[2] += probeColor.Z;
+		}
+
 		if (!hudsprite.GetWeaponRect(this, psp, spos.X, spos.Y, player, vp.TicFrac)) continue;
 		hudsprites.Push(hudsprite);
 	}

@@ -191,6 +191,7 @@ static const char *shaderBindings = R"(
 		vec4 uObjectColor;
 		vec4 uObjectColor2;
 		vec4 uDynLightColor;
+		vec4 uLightProbeColor;
 		vec4 uAddColor;
 		vec4 uTextureAddColor;
 		vec4 uTextureModulateColor;
@@ -300,6 +301,7 @@ static const char *shaderBindings = R"(
 	#define uObjectColor data[uDataIndex].uObjectColor
 	#define uObjectColor2 data[uDataIndex].uObjectColor2
 	#define uDynLightColor data[uDataIndex].uDynLightColor
+	#define uLightProbeColor data[uDataIndex].uLightProbeColor
 	#define uAddColor data[uDataIndex].uAddColor
 	#define uTextureBlendColor data[uDataIndex].uTextureBlendColor
 	#define uTextureModulateColor data[uDataIndex].uTextureModulateColor

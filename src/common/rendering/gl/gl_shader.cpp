@@ -247,6 +247,7 @@ bool FShader::Load(const char * name, const char * vert_prog_lump, const char * 
 		uniform vec4 uObjectColor;
 		uniform vec4 uObjectColor2;
 		uniform vec4 uDynLightColor;
+		uniform vec4 uLightProbeColor;
 		uniform vec4 uAddColor;
 		uniform vec4 uTextureBlendColor;
 		uniform vec4 uTextureModulateColor;
@@ -586,6 +587,7 @@ bool FShader::Load(const char * name, const char * vert_prog_lump, const char * 
 	muBoneIndexBase.Init(hShader, "uBoneIndexBase");
 	muFogColor.Init(hShader, "uFogColor");
 	muDynLightColor.Init(hShader, "uDynLightColor");
+	muLightProbeColor.Init(hShader, "uLightProbeColor");
 	muObjectColor.Init(hShader, "uObjectColor");
 	muObjectColor2.Init(hShader, "uObjectColor2");
 	muGlowBottomColor.Init(hShader, "uGlowBottomColor");

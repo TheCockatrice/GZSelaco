@@ -37,7 +37,7 @@ vec3 lightContribution(int i, vec3 normal)
 
 vec3 ProcessMaterialLight(Material material, vec3 color)
 {
-	vec4 dynlight = uDynLightColor;
+	vec4 dynlight = uDynLightColor + uLightProbeColor;
 	vec3 normal = material.Normal;
 
 	if (uLightIndex >= 0)

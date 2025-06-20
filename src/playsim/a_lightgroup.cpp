@@ -209,6 +209,7 @@ void P_RenderLightGroups(FLevelLocals* level)
 	state.EnableModelMatrix(false);
 	state.EnableTextureMatrix(false);
 	state.SetDynLight(0, 0, 0);
+	state.SetLightProbe(0, 0, 0);
 
 	screen->mLights->Clear();
 	screen->mBones->Clear();

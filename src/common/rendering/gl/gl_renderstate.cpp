@@ -130,6 +130,7 @@ bool FGLRenderState::ApplyShader()
 	activeShader->muFogColor.Set(mStreamData.uFogColor);
 	activeShader->muObjectColor.Set(mStreamData.uObjectColor);
 	activeShader->muDynLightColor.Set(&mStreamData.uDynLightColor.X);
+	activeShader->muLightProbeColor.Set(&mStreamData.uLightProbeColor.X);
 	activeShader->muInterpolationFactor.Set(mStreamData.uInterpolationFactor);
 	activeShader->muTimer.Set((double)(screen->FrameTime - firstFrame) * (double)mShaderTimer / 1000.);
 	activeShader->muAlphaThreshold.Set(mAlphaThreshold);

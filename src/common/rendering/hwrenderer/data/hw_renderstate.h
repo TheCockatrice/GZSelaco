@@ -176,6 +176,7 @@ struct StreamData
 	FVector4PalEntry uObjectColor;
 	FVector4PalEntry uObjectColor2;
 	FVector4 uDynLightColor;
+	FVector4 uLightProbeColor;
 	FVector4PalEntry uAddColor;
 	FVector4PalEntry uTextureAddColor;
 	FVector4PalEntry uTextureModulateColor;
@@ -303,6 +304,7 @@ public:
 		mStreamData.uSplitTopPlane = { 0.0f, 0.0f, 0.0f, 0.0f };
 		mStreamData.uSplitBottomPlane = { 0.0f, 0.0f, 0.0f, 0.0f };
 		mStreamData.uDynLightColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+		mStreamData.uLightProbeColor = { 0.0f, 0.0f, 0.0f, 1.0f };
 		mStreamData.uDetailParms = { 0.0f, 0.0f, 0.0f, 0.0f };
 #ifdef NPOT_EMULATION
 		mStreamData.uNpotEmulation = { 0,0,0,0 };
@@ -488,6 +490,13 @@ public:
 		mStreamData.uDynLightColor.X = r;
 		mStreamData.uDynLightColor.Y = g;
 		mStreamData.uDynLightColor.Z = b;
+	}
+
+	void SetLightProbe(float r, float g, float b)
+	{
+		mStreamData.uLightProbeColor.X = r;
+		mStreamData.uLightProbeColor.Y = g;
+		mStreamData.uLightProbeColor.Z = b;
 	}
 
 	void SetScreenFade(float f)

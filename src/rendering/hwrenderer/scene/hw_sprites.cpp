@@ -172,13 +172,27 @@ void HWSprite::DrawSprite(HWDrawInfo *di, FRenderState &state, bool translucent)
 	}
 	if (RenderStyle.BlendOp != STYLEOP_Shadow)
 	{
-		if (di->Level->HasDynamicLights && !di->isFullbrightScene() && !fullbright)
+		if (!di->isFullbrightScene() && !fullbright)
 		{
-			if (dynlightindex == -1)	// only set if we got no light buffer index. This covers all cases where sprite lighting is used.
+			if (di->Level->HasDynamicLights)
 			{
-				float out[3] = {};
-				di->GetDynSpriteLight(gl_light_sprites ? actor : nullptr, gl_light_particles && isparticle ? this : nullptr, out);
-				state.SetDynLight(out[0], out[1], out[2]);
+				if (dynlightindex == -1)	// only set if we got no light buffer index. This covers all cases where sprite lighting is used.
+				{
+					float out[3] = {};
+					di->GetDynSpriteLight(gl_light_sprites ? actor : nullptr, gl_light_particles && isparticle ? this : nullptr, out);
+					state.SetDynLight(out[0], out[1], out[2]);
+				}
+			}
+
+			if (di->Level->LightProbes.Size() > 0)
+			{
+				bool doLightProbe = (gl_light_particles && isparticle) || (gl_light_sprites && actor);
+				FVector3 probeColor;
+				FVector3 samplePosition = gl_light_particles && isparticle ? FVector3(x, y, z) : gl_light_sprites && actor ? FVector3(actor->X(), actor->Y(), actor->Center()) : FVector3();
+				if (doLightProbe && TryGetLightProbeColor(di->Level, samplePosition.X, samplePosition.Y, samplePosition.Z, probeColor))
+				{
+					state.SetLightProbe(probeColor.X, probeColor.Y, probeColor.Z);
+				}
 			}
 		}
 		sector_t *cursec = actor ? actor->Sector : isparticle ? particlesubsector->sector : nullptr;
@@ -316,7 +330,11 @@ void HWSprite::DrawSprite(HWDrawInfo *di, FRenderState &state, bool translucent)
 				FVector3 probeColor;
 				if (TryGetLightProbeColor(di->Level, actor->X(), actor->Y(), actor->Center(), probeColor))
 				{
-					state.SetDynLight(probeColor.X, probeColor.Y, probeColor.Z);
+					state.SetLightProbe(probeColor.X, probeColor.Y, probeColor.Z);
+				}
+				else
+				{
+					state.SetLightProbe(0, 0, 0);
 				}
 			}
 
@@ -350,6 +368,7 @@ void HWSprite::DrawSprite(HWDrawInfo *di, FRenderState &state, bool translucent)
 	state.SetAddColor(0);
 	state.EnableTexture(true);
 	state.SetDynLight(0, 0, 0);
+	state.SetLightProbe(0, 0, 0);
 }
 
 //==========================================================================

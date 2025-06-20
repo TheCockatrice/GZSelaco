@@ -128,14 +128,6 @@ void HWDrawInfo::GetDynSpriteLight(AActor *self, float x, float y, float z, FLig
 	
 	out[0] = out[1] = out[2] = 0.f;
 
-	FVector3 probeColor;
-	if (TryGetLightProbeColor(Level, x, y, z, probeColor))
-	{
-		out[0] = probeColor.X;
-		out[1] = probeColor.Y;
-		out[2] = probeColor.Z;
-	}
-
 	// Go through both light lists
 	while (node)
 	{
