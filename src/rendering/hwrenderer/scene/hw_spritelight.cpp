@@ -193,6 +193,78 @@ void HWDrawInfo::GetDynSpriteLight(AActor *self, float x, float y, float z, FLig
 		}
 		node = node->nextLight;
 	}
+
+	// Add player lights
+	// @Cockatrice - Add any player lights to every sprite. This is a hack to prevent the big hit to CPU power by constantly linking and unlinking moving spotlights
+	AActor* mo = players[consoleplayer].mo;
+	if (mo) {
+		for (auto* light : level.playerLights) {
+			if (light->ShouldLightActor(self))
+			{
+				float dist;
+				FVector3 L;
+
+				// This is a performance critical section of code where we cannot afford to let the compiler decide whether to inline the function or not.
+				// This will do the calculations explicitly rather than calling one of AActor's utility functions.
+				if (Level->Displacements.size > 0)
+				{
+					int fromgroup = light->Sector->PortalGroup;
+					int togroup = portalgroup;
+					if (fromgroup == togroup || fromgroup == 0 || togroup == 0) goto direct2;
+
+					DVector2 offset = Level->Displacements.getOffset(fromgroup, togroup);
+					L = FVector3(x - (float)(light->X() + offset.X), y - (float)(light->Y() + offset.Y), z - (float)light->Z());
+				}
+				else
+				{
+				direct2:
+					L = FVector3(x - (float)light->X(), y - (float)light->Y(), z - (float)light->Z());
+				}
+
+				dist = (float)L.LengthSquared();
+				radius = light->GetRadius();
+
+				if (dist < radius * radius)
+				{
+					dist = sqrtf(dist);	// only calculate the square root if we really need it.
+
+					frac = 1.0f - (dist / radius);
+
+					if (light->IsSpot())
+					{
+						L *= -1.0f / dist;
+						DAngle negPitch = -*light->pPitch;
+						DAngle Angle = light->target->Angles.Yaw;
+						double xyLen = negPitch.Cos();
+						double spotDirX = -Angle.Cos() * xyLen;
+						double spotDirY = -Angle.Sin() * xyLen;
+						double spotDirZ = -negPitch.Sin();
+						double cosDir = L.X * spotDirX + L.Y * spotDirY + L.Z * spotDirZ;
+						frac *= (float)smoothstep(light->pSpotOuterAngle->Cos(), light->pSpotInnerAngle->Cos(), cosDir);
+					}
+
+					if (frac > 0 && (!light->shadowmapped || (light->GetRadius() > 0 && screen->mShadowMap.ShadowTest(light->Pos, { x, y, z }))))
+					{
+						lr = light->GetRed() / 255.0f;
+						lg = light->GetGreen() / 255.0f;
+						lb = light->GetBlue() / 255.0f;
+						if (light->IsSubtractive())
+						{
+							float bright = (float)FVector3(lr, lg, lb).Length();
+							FVector3 lightColor(lr, lg, lb);
+							lr = (bright - lr) * -1;
+							lg = (bright - lg) * -1;
+							lb = (bright - lb) * -1;
+						}
+
+						out[0] += lr * frac;
+						out[1] += lg * frac;
+						out[2] += lb * frac;
+					}
+				}
+			}
+		}
+	}
 }
 
 void HWDrawInfo::GetDynSpriteLight(AActor *thing, HWSprite *particleSprite, float *out)
@@ -257,5 +329,18 @@ void hw_GetDynModelLight(AActor *self, FDynLightData &modellightdata, double tic
 				node = node->nextLight;
 			}
 		});
+
+
+		// @Cockatrice - Add player lights
+		AActor* mo = players[consoleplayer].mo;
+		if (mo) {
+			for (auto* light : level.playerLights) {
+				if (light->ShouldLightActor(self))
+				{
+					AddLightToList(modellightdata, light->Sector->PortalGroup, light, true, ticFrac);
+					addedLights.Push(light);
+				}
+			}
+		}
 	}
 }

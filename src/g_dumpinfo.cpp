@@ -103,6 +103,16 @@ CCMD(listlights)
 			Printf("- %d walls, %d sectors\n", walls, sectors);
 			
 		}
+
+		// @Cockatrice - Print player lights
+		Printf("Player attached lights =============\n");
+		for (auto* dl : Level->playerLights) {
+			Printf("%s at (%f, %f, %f), color = 0x%02x%02x%02x, radius = %f %s %s\n",
+				dl->target->GetClass()->TypeName.GetChars(),
+				dl->X(), dl->Y(), dl->Z(), dl->GetRed(), dl->GetGreen(), dl->GetBlue(),
+				dl->radius, dl->IsAttenuated() ? "attenuated" : "", dl->shadowmapped ? "shadowmapped" : "");
+		}
+
 		Printf("%i dynamic lights, %d shadowmapped, %d walls, %d sectors\n\n\n", i, shadowcount, allwalls, allsectors);
 	}
 }
