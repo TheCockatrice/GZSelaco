@@ -706,6 +706,7 @@ public:
 	int			ImpactDecalCount;
 
 	FDynamicLight *lights;
+	TArray<FDynamicLight*> playerLights;
 
 	// links to global game objects
 	TArray<TObjPtr<AActor *>> CorpseQueue;
