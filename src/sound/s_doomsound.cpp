@@ -630,6 +630,16 @@ FSoundHandle S_Sound (const FPolyObj *poly, int channel, EChanFlags flags, FSoun
 //
 //==========================================================================
 
+FSoundHandle S_SoundPitch(FLevelLocals* Level, const DVector3& pos, int channel, EChanFlags flags, FSoundID sound_id, float volume, float attenuation, float pitch, float startTime)
+{
+	if (Level != primaryLevel) return 0;
+	// The sound system switches Y and Z around.
+	FVector3 p((float)pos.X, (float)pos.Z, (float)pos.Y);
+	FSoundHandle handle;
+	soundEngine->StartSound (SOURCE_Unattached, nullptr, &p, channel, flags, sound_id, volume, attenuation, nullptr, pitch, startTime, &handle);
+	return handle;
+}
+
 FSoundHandle S_Sound(FLevelLocals *Level, const DVector3 &pos, int channel, EChanFlags flags, FSoundID sound_id, float volume, float attenuation)
 {
 	if (Level != primaryLevel) return 0;

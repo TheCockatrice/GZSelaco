@@ -331,6 +331,8 @@ void FLevelLocals::ClearLevelData(bool fullgc)
 	Thinkers.DestroyAllThinkers(fullgc);
 	ClearAllSubsectorLinks(); // can't be done as part of the polyobj deletion process.
 
+	P_DestroyAllParticleDefinitions(this);
+
 	total_monsters = total_items = total_secrets =
 	killed_monsters = found_items = found_secrets = 0;
 

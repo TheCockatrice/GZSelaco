@@ -31,6 +31,8 @@ class FRenderState;
 struct HWDecal;
 struct FSection;
 enum area_t : int;
+class DParticleDefinition;
+struct particledata_t;
 
 enum HWRenderStyle
 {
@@ -389,9 +391,14 @@ public:
 
 	FGameTexture *texture;
 	AActor * actor;
-	particle_t * particle;
+	//particle_t * particle;
 	TArray<lightlist_t> *lightlist;
 	DRotator Angles;
+
+	bool isparticle = false;
+	bool particlehastexture = false;
+	uint32_t particleflags = 0;
+	subsector_t* particlesubsector = nullptr;
 
 	bool nomipmap; // force the sprite to have no mipmaps (ensures tiny sprites in the distance stay crisp)
 
@@ -404,7 +411,8 @@ public:
 	void CreateVertices(HWDrawInfo *di);
 	void PutSprite(HWDrawInfo *di, bool translucent, double ticFrac = 1.0);
 	void Process(HWDrawInfo *di, AActor* thing,sector_t * sector, area_t in_area, int thruportal = false, bool isSpriteShadow = false);
-	void ProcessParticle(HWDrawInfo *di, particle_t *particle, sector_t *sector, class DVisualThinker *spr);//, int shade, int fakeside)
+	void ProcessParticle(HWDrawInfo* di, particle_t* particle, sector_t* sector, class DVisualThinker* spr);//, int shade, int fakeside)
+	void ProcessDefinedParticle(HWDrawInfo *di, particledata_t *particle, sector_t *sector);
 	void AdjustVisualThinker(HWDrawInfo *di, DVisualThinker *spr, sector_t *sector);
 
 	void DrawSprite(HWDrawInfo *di, FRenderState &state, bool translucent);

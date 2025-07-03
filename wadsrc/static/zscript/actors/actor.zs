@@ -1250,6 +1250,9 @@ class Actor : Thinker native
 	native void A_SpawnDebris(class<Actor> spawntype, bool transfer_translation = false, double mult_h = 1, double mult_v = 1);
 	native void A_SpawnParticle(color color1, int flags = 0, int lifetime = TICRATE, double size = 1, double angle = 0, double xoff = 0, double yoff = 0, double zoff = 0, double velx = 0, double vely = 0, double velz = 0, double accelx = 0, double accely = 0, double accelz = 0, double startalphaf = 1, double fadestepf = -1, double sizestep = 0);
 	native void A_SpawnParticleEx(color color1, TextureID texture, int style = STYLE_None, int flags = 0, int lifetime = TICRATE, double size = 1, double angle = 0, double xoff = 0, double yoff = 0, double zoff = 0, double velx = 0, double vely = 0, double velz = 0, double accelx = 0, double accely = 0, double accelz = 0, double startalphaf = 1, double fadestepf = -1, double sizestep = 0, double startroll = 0, double rollvel = 0, double rollacc = 0);
+	native bool A_SpawnDefinedParticle(class<ParticleDefinition> definition, double xoff = 0, double yoff = 0, double zoff = 0, double xvel = 0, double yvel = 0, double zvel = 0, double angle = 0, double scale = 1, int flags = 0, actor refActor = null);
+	native bool A_SpawnDefinedParticleProjectile(class<ParticleDefinition> definition, double spawnheight = 32, double spawnofs_xy = 0, double angle = 0, int flags = 0, double pitch = 0, int ptr = AAPTR_TARGET);
+	native bool A_SpawnDefinedParticleProjectileSpeed(class<ParticleDefinition> definition, double speedMulti = 1, double spawnHeight = 32, double spawnofs_xy = 0, double angle = 0, int flags = 0, double pitch = 0, int ptr = AAPTR_TARGET);
 	native void A_ExtChase(bool usemelee, bool usemissile, bool playactive = true, bool nightmarefast = false);
 	native void A_DropInventory(class<Inventory> itemtype, int amount = -1);
 	native void A_SetBlend(color color1, double alpha, int tics, color color2 = 0, double alpha2 = 0.);

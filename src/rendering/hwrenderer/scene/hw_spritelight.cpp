@@ -267,15 +267,15 @@ void HWDrawInfo::GetDynSpriteLight(AActor *self, float x, float y, float z, FLig
 	}
 }
 
-void HWDrawInfo::GetDynSpriteLight(AActor *thing, particle_t *particle, float *out)
+void HWDrawInfo::GetDynSpriteLight(AActor *thing, HWSprite *particleSprite, float *out)
 {
 	if (thing != NULL)
 	{
 		GetDynSpriteLight(thing, (float)thing->X(), (float)thing->Y(), (float)thing->Center(), thing->section->lighthead, thing->Sector->PortalGroup, out);
 	}
-	else if (particle != NULL)
+	else if (particleSprite != NULL)
 	{
-		GetDynSpriteLight(NULL, (float)particle->Pos.X, (float)particle->Pos.Y, (float)particle->Pos.Z, particle->subsector->section->lighthead, particle->subsector->sector->PortalGroup, out);
+		GetDynSpriteLight(NULL, particleSprite->x, particleSprite->y, particleSprite->z, particleSprite->particlesubsector->section->lighthead, particleSprite->particlesubsector->sector->PortalGroup, out);
 	}
 }
 

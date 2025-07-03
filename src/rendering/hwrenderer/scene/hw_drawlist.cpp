@@ -521,7 +521,7 @@ void HWDrawList::SortSpriteIntoWall(HWDrawInfo *di, SortNode * head,SortNode * s
 	}
 	else
 	{
-		const bool drawWithXYBillboard = ((ss->particle && gl_billboard_particles) || (!(ss->actor && ss->actor->renderflags & RF_FORCEYBILLBOARD)
+		const bool drawWithXYBillboard = ((ss->isparticle && gl_billboard_particles) || (!(ss->actor && ss->actor->renderflags & RF_FORCEYBILLBOARD)
 			&& (gl_billboard_mode == 1 || (ss->actor && ss->actor->renderflags & RF_FORCEXYBILLBOARD))));
 
 		const bool drawBillboardFacingCamera = hw_force_cambbpref ? gl_billboard_faces_camera :

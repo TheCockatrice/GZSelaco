@@ -424,6 +424,7 @@ void D_Render(std::function<void()> action, bool interpolate)
 		else Level->HasDynamicLights = false;	// lights are off so effectively we have none.
 		if (interpolate) Level->interpolator.DoInterpolations(I_GetTimeFrac());
 		P_FindParticleSubsectors(Level);
+		P_FindDefinedParticleSubsectors(Level);
 		PO_LinkToSubsectors(Level);
 	}
 	action();

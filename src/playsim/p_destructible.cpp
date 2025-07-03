@@ -550,7 +550,7 @@ void P_GeometryRadiusAttack(AActor* bombspot, AActor* bombsource, int bombdamage
 		z_top2 = othersector ? othersector->ceilingplane.ZatPoint(to2d) : z_top1;
 		z_bottom1 = sector->floorplane.ZatPoint(to2d);
 		z_bottom2 = othersector ? othersector->floorplane.ZatPoint(to2d) : z_bottom1;
-		DVector3 to3d_fullheight(to2d.X, to2d.Y, clamp(bombspot->Z(), z_bottom1, z_top1));
+		DVector3 to3d_fullheight(to2d.X, to2d.Y, clamp(bombspot->Z(), min(z_bottom1, z_top1), max(z_bottom1, z_top1)));
 
 		if (ln->health && P_CheckLinedefVulnerable(ln, sd))
 		{

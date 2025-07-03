@@ -1694,43 +1694,280 @@ DEFINE_ACTION_FUNCTION(AActor, A_SpawnParticleEx)
 	fadestep = clamp(fadestep, -1.0, 1.0);
 
 	size = fabs(size);
-	if (lifetime != 0)
+	if (lifetime == 0)
 	{
-		if (flags & SPF_RELANG) angle += self->Angles.Yaw;
+		ACTION_RETURN_BOOL(false);
+	}
+
+	if (flags & SPF_RELANG) angle += self->Angles.Yaw;
+	double s = angle.Sin();
+	double c = angle.Cos();
+	DVector3 pos(xoff, yoff, zoff + self->GetBobOffset());
+	DVector3 vel(xvel, yvel, zvel);
+	DVector3 acc(accelx, accely, accelz);
+	//[MC] Code ripped right out of A_SpawnItemEx.
+	if (flags & SPF_RELPOS)
+	{
+		// in relative mode negative y values mean 'left' and positive ones mean 'right'
+		// This is the inverse orientation of the absolute mode!
+		pos.X = xoff * c + yoff * s;
+		pos.Y = xoff * s - yoff * c;
+	}
+	if (flags & SPF_RELVEL)
+	{
+		vel.X = xvel * c + yvel * s;
+		vel.Y = xvel * s - yvel * c;
+	}
+	if (flags & SPF_RELACCEL)
+	{
+		acc.X = accelx * c + accely * s;
+		acc.Y = accelx * s - accely * c;
+	}
+		
+	FTextureID texid;
+	texid.SetIndex(i_texid);
+		
+	if(style < 0 || style >= STYLE_Count)
+	{
+		style = STYLE_None;
+	}
+
+	bool result = P_SpawnParticle(self->Level, self->Vec3Offset(pos), vel, acc, color, startalpha, lifetime, size, fadestep, sizestep, flags, texid, ERenderStyle(style), startroll, rollvel, rollacc);
+
+	ACTION_RETURN_BOOL(result);
+}
+
+DEFINE_ACTION_FUNCTION(AActor, A_SpawnDefinedParticle)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	PARAM_CLASS	(definitionClass, DParticleDefinition)
+	PARAM_FLOAT	(xoff)		
+	PARAM_FLOAT	(yoff)		
+	PARAM_FLOAT	(zoff)		
+	PARAM_FLOAT	(xvel)		
+	PARAM_FLOAT	(yvel)		
+	PARAM_FLOAT	(zvel)
+	PARAM_ANGLE	(angle)
+	PARAM_FLOAT	(scale)
+	PARAM_INT	(flags)
+	PARAM_POINTER(refActor, AActor);
+
+	if (!definitionClass)
+	{
+		return 0;
+	}
+
+	if (DParticleDefinition* definition = *self->Level->ParticleDefinitionsByType.CheckKey(definitionClass->TypeName.GetIndex()))
+	{
+		if (!(flags & DPF_ABSOLUTEANGLE)) angle += self->Angles.Yaw;
 		double s = angle.Sin();
 		double c = angle.Cos();
 		DVector3 pos(xoff, yoff, zoff + self->GetBobOffset());
 		DVector3 vel(xvel, yvel, zvel);
-		DVector3 acc(accelx, accely, accelz);
+
 		//[MC] Code ripped right out of A_SpawnItemEx.
-		if (flags & SPF_RELPOS)
+		if (!(flags & DPF_ABSOLUTEPOSITION))
 		{
 			// in relative mode negative y values mean 'left' and positive ones mean 'right'
 			// This is the inverse orientation of the absolute mode!
 			pos.X = xoff * c + yoff * s;
 			pos.Y = xoff * s - yoff * c;
 		}
-		if (flags & SPF_RELVEL)
+		if (!(flags & DPF_ABSOLUTEVELOCITY))
 		{
 			vel.X = xvel * c + yvel * s;
 			vel.Y = xvel * s - yvel * c;
 		}
-		if (flags & SPF_RELACCEL)
+		
+		particledata_t* particle = P_SpawnDefinedParticle(self->Level, definition, self->Vec3Offset(pos), vel, scale, flags, refActor ? refActor : self);
+
+		if (particle)
 		{
-			acc.X = accelx * c + accely * s;
-			acc.Y = accelx * s - accely * c;
+			particle->angle = (float)angle.Degrees();
 		}
-		
-		FTextureID texid;
-		texid.SetIndex(i_texid);
-		
-		if(style < 0 || style >= STYLE_Count)
+	}
+
+	return 0;
+}
+
+particledata_t* SpawnMissileParticle(AActor* source, double z, DParticleDefinition* definition, DAngle angle, double vz, double speed)
+{
+	if (source == nullptr || definition == nullptr)
+	{
+		return nullptr;
+	}
+	
+	if (z != ONFLOORZ && z != ONCEILINGZ)
+	{
+		z -= source->Floorclip;
+	}
+
+	DVector3 vel = DVector3(angle.Cos(), angle.Sin(), vz).Resized(speed);
+
+	particledata_t* particle = P_SpawnDefinedParticle(source->Level, definition, source->PosAtZ(z), vel, 1, SPF_REPLACE, source);
+	particle->angle = (float)angle.Degrees();
+
+	return particle;
+}
+
+particledata_t* SpawnMissileParticleXYZ(DVector3 pos, AActor* source, AActor* dest, DParticleDefinition* definition)
+{
+	if (source == nullptr || definition == nullptr)
+	{
+		return nullptr;
+	}
+
+	if (dest == NULL)
+	{
+		Printf("SpawnMissileParticleXYZ: Tried to shoot %s from %s with no destination\n",
+			definition->GetClass()->TypeName.GetChars(), source->GetClass()->TypeName.GetChars());
+		return NULL;
+	}
+
+	if (pos.Z != ONFLOORZ && pos.Z != ONCEILINGZ)
+	{
+		pos.Z -= source->Floorclip;
+	}
+
+	double speed = definition->Speed;
+
+	// [RH]
+	// Hexen calculates the missile velocity based on the source's location.
+	// Would it be more useful to base it on the actual position of the
+	// missile?
+	// Answer: No, because this way, you can set up sets of parallel missiles.
+
+	DVector3 velocity = source->Vec3To(dest);
+	if (pos.Z - source->Z() >= dest->Height)
+	{
+		velocity.Z += (dest->Height - pos.Z + source->Z());
+	}
+
+	particledata_t* particle = P_SpawnDefinedParticle(source->Level, definition, pos, velocity.Resized(speed), 1, SPF_REPLACE, source);
+	particle->angle = (float)VecToAngle(particle->vel).Degrees();
+
+	return particle;
+}
+
+particledata_t* A_SpawnDefinedParticleProjectile(AActor* self, PClass* definitionClass, double spawnHeight, double spawnofs_xy, DAngle angle, int flags, DAngle pitch, int ptr, double speedMulti = 1.0)
+{
+	AActor* ref = COPY_AAPTR(self, ptr);
+	int aimmode = flags & CMF_AIMMODE;
+
+	if (!definitionClass || (!ref && aimmode != 2))
+	{
+		return nullptr;
+	}
+
+	DParticleDefinition* definition = *self->Level->ParticleDefinitionsByType.CheckKey(definitionClass->TypeName.GetIndex());
+	if (!definition)
+	{
+		return nullptr;
+	}
+
+	particledata_t* particle = nullptr;
+
+	DAngle ourAngle = self->Angles.Yaw - DAngle::fromDeg(90.);
+	double x = spawnofs_xy * ourAngle.Cos();
+	double y = spawnofs_xy * ourAngle.Sin();
+	double z = spawnHeight + self->GetBobOffset() - 32 + (self->player ? self->player->crouchoffset : 0.);
+
+	DVector3 pos = self->Pos();
+	if (aimmode == 2)
+	{
+		self->SetXYZ(self->Vec3Offset(x, y, 0.));
+		particle = SpawnMissileParticle(self, self->Z() + self->GetBobOffset() + spawnHeight, definition, self->Angles.Yaw, 0, definition->Speed);
+		self->SetXYZ(pos);
+
+		flags |= CMF_ABSOLUTEPITCH;
+	}
+	else
+	{
+		self->SetXYZ(self->Vec3Offset(x, y, z));
+		particle = SpawnMissileParticleXYZ(self->PosPlusZ(32.), self, ref, definition);
+		self->SetXYZ(pos);
+	}
+
+	if (particle != NULL)
+	{
+		// Use the actual velocity instead of the missile's Speed property
+		// so that this can handle missiles with a high vertical velocity 
+		// component properly.
+
+		double missilespeed;
+
+		if ((CMF_ABSOLUTEPITCH | CMF_OFFSETPITCH) & flags)
 		{
-			style = STYLE_None;
+			if (!(flags & CMF_BADPITCH))
+			{
+				if (CMF_OFFSETPITCH & flags)
+				{
+					pitch += DAngle::fromDeg(particle->vel.Pitch().Degrees());
+				}
+
+				double velSpeed = particle->vel.Length();
+				missilespeed = abs(pitch.Cos() * velSpeed);
+				particle->vel.Z = -pitch.Sin() * velSpeed;
+			}
+			else
+			{
+				// Replicate the bogus calculation from A_CustomMissile in its entirety.
+				// This tried to do the right thing but in the process effectively inverted the base pitch.
+				if (CMF_OFFSETPITCH & flags)
+				{
+					pitch -= DAngle::fromDeg(particle->vel.Pitch().Degrees());
+				}
+
+				double velSpeed = particle->vel.Length();
+				missilespeed = fabs(pitch.Cos() * velSpeed);
+				particle->vel.Z = pitch.Sin() * velSpeed;
+			}
+		}
+		else
+		{
+			missilespeed = DVector2(particle->vel.X, particle->vel.Y).Length();
 		}
 
-		P_SpawnParticle(self->Level, self->Vec3Offset(pos), vel, acc, color, startalpha, lifetime, size, fadestep, sizestep, flags, texid, ERenderStyle(style), startroll, rollvel, rollacc);
+		missilespeed *= speedMulti;
+
+		particle->angle = (CMF_ABSOLUTEANGLE & flags) ? (float)angle.Degrees() : particle->angle + (float)angle.Degrees();
+		particle->vel.X = missilespeed * g_cosdeg(particle->angle);
+		particle->vel.Y = missilespeed * g_sindeg(particle->angle);
 	}
+
+	return particle;
+}
+
+DEFINE_ACTION_FUNCTION(AActor, A_SpawnDefinedParticleProjectile)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	PARAM_CLASS(definitionClass, DParticleDefinition)
+	PARAM_FLOAT(spawnHeight);
+	PARAM_FLOAT(spawnofs_xy);
+	PARAM_ANGLE(angle)
+	PARAM_INT(flags)
+	PARAM_ANGLE(pitch)
+	PARAM_INT(ptr);
+
+	A_SpawnDefinedParticleProjectile(self, definitionClass, spawnHeight, spawnofs_xy, angle, flags, pitch, ptr);
+
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION(AActor, A_SpawnDefinedParticleProjectileSpeed)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	PARAM_CLASS(definitionClass, DParticleDefinition)
+	PARAM_FLOAT(speedMulti)
+	PARAM_FLOAT(spawnHeight);
+	PARAM_FLOAT(spawnofs_xy);
+	PARAM_ANGLE(angle)
+	PARAM_INT(flags)
+	PARAM_ANGLE(pitch)
+	PARAM_INT(ptr);
+
+	A_SpawnDefinedParticleProjectile(self, definitionClass, spawnHeight, spawnofs_xy, angle, flags, pitch, ptr, speedMulti);
+
 	return 0;
 }
 

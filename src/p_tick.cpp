@@ -172,6 +172,8 @@ void P_Ticker (void)
 		Level->Tick();			// [RH] let the level tick
 		Level->Thinkers.RunThinkers(Level);
 
+		P_ThinkDefinedParticles(Level); // Run after the world tick so we get proper moving sector heights
+
 		//if added by MC: Freeze mode.
 		if (!Level->isFrozen())
 		{

@@ -310,10 +310,10 @@ struct TVector2
 	TAngle<vec_t> Angle() const;
 
 	// Returns a rotated vector. angle is in degrees.
-	TVector2 Rotated (double angle) const
+	TVector2 Rotated (vec_t angle) const
 	{
-		double cosval = g_cosdeg (angle);
-		double sinval = g_sindeg (angle);
+		vec_t cosval = (vec_t)g_cosdeg(angle);
+		vec_t sinval = (vec_t)g_sindeg(angle);
 		return TVector2(X*cosval - Y*sinval, Y*cosval + X*sinval);
 	}
 

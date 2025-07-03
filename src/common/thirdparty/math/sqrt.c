@@ -94,6 +94,11 @@ if( x <= 0.0 )
 		mtherr( "_sqrt", DOMAIN );
 	return( 0.0 );
 	}
+
+#ifdef NATIVE_SQRT
+return sqrt(x);
+#endif
+
 w = x;
 /* separate exponent and significand */
 #ifdef UNK
