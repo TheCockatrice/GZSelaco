@@ -315,6 +315,7 @@ class LightGroup : Actor
 
 	int user_animationType;
 	int user_animationInterval;
+	float user_primaryIntensity;
 	float user_secondaryIntensity;
 	bool user_allowColorChange;
 
@@ -323,6 +324,14 @@ class LightGroup : Actor
 		if (user_animationInterval <= 0)
 		{
 			user_animationInterval = NormalizeAngle(spawnAngle);
+		}
+
+		// For non-pulse types, make sure the secondary intensity is the largest one, mimicking FLightDefaults::OrderIntensities()
+		if (user_animationType != LGAT_Pulse && user_primaryIntensity > user_secondaryIntensity)
+		{
+			float temp = user_primaryIntensity;
+			user_primaryIntensity = user_secondaryIntensity;
+			user_secondaryIntensity = temp;
 		}
 	}
 
@@ -352,11 +361,11 @@ class LightGroup : Actor
 		{
 			if (user_animationType == LGAT_Flicker)
 			{
-				SetIntensity(random(0, 360) < user_animationInterval ? 1 : user_secondaryIntensity);
+				SetIntensity(random(0, 360) < user_animationInterval ? user_primaryIntensity : user_secondaryIntensity);
 			}
 			else if (user_animationType == LGAT_FlickerRandom)
 			{
-				float flickerRange = user_secondaryIntensity - 1;
+				float flickerRange = user_secondaryIntensity - user_primaryIntensity;
 				float amt = frandom(0, 1);
 		
 				if (activeTics > user_animationInterval)
@@ -364,9 +373,9 @@ class LightGroup : Actor
 					activeTics = 0;
 				}
 
-				if (activeTics == 0 || user_secondaryIntensity <= 1)
+				if (activeTics == 0 || GetIntensity() > user_secondaryIntensity)
 				{
-					SetIntensity(1.0 + (amt * flickerRange));
+					SetIntensity(user_primaryIntensity + (amt * flickerRange));
 				}
 			}
 			else if (user_animationType == LGAT_Pulse)
@@ -375,7 +384,7 @@ class LightGroup : Actor
 				float pulseTime = float(user_animationInterval) / TICRATE;
 				float cycle = time / pulseTime;
 				float mult = (sin(cycle * 360) + 1) / 2;
-				float intensity = user_secondaryIntensity + (1 - user_secondaryIntensity) * mult;
+				float intensity = user_secondaryIntensity + (user_primaryIntensity - user_secondaryIntensity) * mult;
 
 				SetIntensity(intensity);
 			}
