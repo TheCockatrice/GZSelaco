@@ -321,6 +321,8 @@ class LightGroup : Actor
 
 	void Init()
 	{
+		cvarReduceFlicker = CVar.FindCVar("g_photosensitivitymode2");
+
 		if (user_animationInterval <= 0)
 		{
 			user_animationInterval = NormalizeAngle(spawnAngle);
@@ -359,34 +361,43 @@ class LightGroup : Actor
 		// Mark this LightGroup to render this frame
 		if (!bDormant)
 		{
-			if (user_animationType == LGAT_Flicker)
+			int reduceFlickering = cvarReduceFlicker ? cvarReduceFlicker.GetInt() : 0;
+
+			if (reduceFlickering == 0)
 			{
-				SetIntensity(random(0, 360) < user_animationInterval ? user_primaryIntensity : user_secondaryIntensity);
-			}
-			else if (user_animationType == LGAT_FlickerRandom)
-			{
-				float flickerRange = user_secondaryIntensity - user_primaryIntensity;
-				float amt = frandom(0, 1);
+				if (user_animationType == LGAT_Flicker)
+				{
+					SetIntensity(random(0, 360) < user_animationInterval ? user_primaryIntensity : user_secondaryIntensity);
+				}
+				else if (user_animationType == LGAT_FlickerRandom)
+				{
+					float flickerRange = user_secondaryIntensity - user_primaryIntensity;
+					float amt = frandom(0, 1);
 		
-				if (activeTics > user_animationInterval)
-				{
-					activeTics = 0;
-				}
+					if (activeTics > user_animationInterval)
+					{
+						activeTics = 0;
+					}
 
-				if (activeTics == 0 || GetIntensity() > user_secondaryIntensity)
+					if (activeTics == 0 || GetIntensity() > user_secondaryIntensity)
+					{
+						SetIntensity(user_primaryIntensity + (amt * flickerRange));
+					}
+				}
+				else if (user_animationType == LGAT_Pulse)
 				{
-					SetIntensity(user_primaryIntensity + (amt * flickerRange));
+					float time = float(activeTics) / TICRATE;
+					float pulseTime = float(user_animationInterval) / TICRATE;
+					float cycle = time / pulseTime;
+					float mult = (sin(cycle * 360) + 1) / 2;
+					float intensity = user_secondaryIntensity + (user_primaryIntensity - user_secondaryIntensity) * mult;
+
+					SetIntensity(intensity);
 				}
 			}
-			else if (user_animationType == LGAT_Pulse)
+			else
 			{
-				float time = float(activeTics) / TICRATE;
-				float pulseTime = float(user_animationInterval) / TICRATE;
-				float cycle = time / pulseTime;
-				float mult = (sin(cycle * 360) + 1) / 2;
-				float intensity = user_secondaryIntensity + (user_primaryIntensity - user_secondaryIntensity) * mult;
-
-				SetIntensity(intensity);
+				SetIntensity(1.0);
 			}
 
 			activeTics++;
@@ -420,4 +431,7 @@ class LightGroup : Actor
 
 	bool initialized;
 	int activeTics;
+
+	private CVar cvarReduceFlicker;
+
 }
