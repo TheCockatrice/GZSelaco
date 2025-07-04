@@ -487,7 +487,7 @@ public:
 	int LPMinY = 0;
 	int LPWidth = 0;
 	int LPHeight = 0;
-	static const int LPCellSize = 32;
+	int LPCellSize = 32;
 	TArray<LightProbeCell> LPCells;
 
 	// Portal information.

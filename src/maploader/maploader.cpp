@@ -3359,6 +3359,7 @@ void MapLoader::LoadLightmap(MapData *map)
 	Level->LPMinY = 0;
 	Level->LPWidth = 0;
 	Level->LPHeight = 0;
+	Level->LPCellSize = 32;
 
 	if (Args->CheckParm("-disablelightmaps"))
 		return;
@@ -3372,7 +3373,7 @@ void MapLoader::LoadLightmap(MapData *map)
 
 
 	int version = fr.ReadInt32();
-	if (version != 0)
+	if (version != 0x5e1ac000) // 'Selaco' + Version XX
 	{
 		Printf(PRINT_HIGH, "LoadLightmap: unsupported lightmap lump version\n");
 		return;
@@ -3384,6 +3385,7 @@ void MapLoader::LoadLightmap(MapData *map)
 	uint32_t numTexCoords = fr.ReadUInt32();
 	int32_t numLightProbes = fr.ReadUInt32();
 	uint32_t numSubsectors = fr.ReadUInt32();
+	Level->LPCellSize = fr.ReadInt32();
 	uint32_t numTexBytes = numTextures * textureSize * textureSize * 4;
 
 	if (numSurfaces == 0 || numTexCoords == 0 || numTexBytes == 0)
