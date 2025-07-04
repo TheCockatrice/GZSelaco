@@ -166,14 +166,16 @@ bool GlTexLoadThread::loadResource(GlTexLoadIn & input, GlTexLoadOut & output) {
 	output.gtex = input.gtex;
 	output.mipLevels = -1;
 	output.texUnit = input.texUnit;
+	output.flags = input.flags;
 
 	// Load pixels directly with the reader we copied on the main thread
 	auto* src = input.imgSource;
 	FBitmap pixels;
 
 	const bool uploadPossible = auxContext >= 0;
+	const bool allowMips = input.flags.AllowMips;
 	const bool indexed = false;	// TODO: Determine this properly
-	bool mipmap = !indexed && input.allowMipmaps;
+	bool mipmap = !indexed && allowMips;
 	const bool gpu = src->IsGPUOnly();
 	const int exx = input.spi.shouldExpand && !gpu;
 	const int srcWidth = src->GetWidth();
@@ -195,7 +197,7 @@ bool GlTexLoadThread::loadResource(GlTexLoadIn & input, GlTexLoadOut & output) {
 		// Read into a buffer and blit 
 		FBitmap srcBitmap;
 		srcBitmap.Create(srcWidth, srcHeight);
-		output.isTranslucent = src->ReadPixels(params, &srcBitmap);
+		output.flags.OutputIsTranslucent = src->ReadPixels(params, &srcBitmap);
 		pixels.Blit(exx, exx, srcBitmap);
 
 		// If we need sprite positioning info, generate it here and assign it in the main thread later
@@ -209,12 +211,12 @@ bool GlTexLoadThread::loadResource(GlTexLoadIn & input, GlTexLoadOut & output) {
 		if (gpu) {
 			int numMipLevels;
 			FileReader reader = fileSystem.OpenFileReader(params->lump, FileSys::EReaderType::READER_NEW, FileSys::EReaderType::READERFLAG_SEEKABLE);
-			output.isTranslucent = src->ReadCompressedPixels(&reader, &pixelData, output.totalDataSize, pixelDataSize, numMipLevels);
+			output.flags.OutputIsTranslucent = src->ReadCompressedPixels(&reader, &pixelData, output.totalDataSize, pixelDataSize, numMipLevels);
 			output.mipLevels = numMipLevels;
 			reader.Close();
 
 			if (uploadPossible) {
-				output.tex->BackgroundCreateCompressedTexture(pixelData, (uint32_t)pixelDataSize, (uint32_t)output.totalDataSize, buffWidth, buffHeight, input.texUnit, numMipLevels, "GlTexLoadThread::loadResource(Compressed)", !input.allowMipmaps);
+				output.tex->BackgroundCreateCompressedTexture(pixelData, (uint32_t)pixelDataSize, (uint32_t)output.totalDataSize, buffWidth, buffHeight, input.texUnit, numMipLevels, "GlTexLoadThread::loadResource(Compressed)", !allowMips, input.flags.AllowQualityReduction);
 			}
 
 			if (input.spi.generateSpi) {
@@ -228,7 +230,7 @@ bool GlTexLoadThread::loadResource(GlTexLoadIn & input, GlTexLoadOut & output) {
 
 			FBitmap pixels(pixelData, buffWidth * 4, buffWidth, buffHeight);
 
-			output.isTranslucent = src->ReadPixels(params, &pixels);
+			output.flags.OutputIsTranslucent = src->ReadPixels(params, &pixels);
 			output.totalDataSize = pixelDataSize;
 
 			if (input.spi.generateSpi) {
@@ -242,18 +244,18 @@ bool GlTexLoadThread::loadResource(GlTexLoadIn & input, GlTexLoadOut & output) {
 	output.pixelsSize = pixelDataSize;
 	output.pixelW = buffWidth;
 	output.pixelH = buffHeight;
-	output.createMipmaps = mipmap && input.allowMipmaps;
+	output.flags.CreateMips = mipmap && allowMips;
 
 	if (!uploadPossible) {
-		output.createMipmaps = mipmap;
+		output.flags.CreateMips = mipmap;
 		output.pixels = pixelData;
 	}
 	else {
-		output.createMipmaps = mipmap;
+		output.flags.CreateMips = mipmap;
 		output.pixels = nullptr;
 
 		if (!gpu)
-			output.tex->BackgroundCreateTexture(pixelData, buffWidth, buffHeight, input.texUnit, mipmap, indexed, "GlTexLoadThread::loadResource()", !input.allowMipmaps);
+			output.tex->BackgroundCreateTexture(pixelData, buffWidth, buffHeight, input.texUnit, mipmap, indexed, "GlTexLoadThread::loadResource()", !allowMips);
 
 		free(pixelData);
 	}
@@ -378,7 +380,11 @@ bool OpenGLFrameBuffer::BackgroundCacheMaterial(FMaterial* mat, FTranslationID t
 	FImageLoadParams* params = nullptr;
 	GlTexLoadSpi spi = {};
 	bool shouldExpand = mat->sourcetex->ShouldExpandSprite() && (layer->scaleFlags & CTF_Expand);
-	bool allowMipmaps = !mat->sourcetex->GetNoMipmaps();
+	//bool allowMipmaps = !mat->sourcetex->GetNoMipmaps();
+	GLTexLoadField flags = {0};
+
+	flags.AllowMips = !mat->sourcetex->GetNoMipmaps();;
+	flags.AllowQualityReduction = (layer->scaleFlags & CTF_ReduceQuality);
 
 	// If the texture is already submitted to the cache, find it and move it to the normal queue to reprioritize it
 	if (lumpExists && !secondary && systex->GetState(0) == IHardwareTexture::HardwareState::CACHING) {
@@ -415,7 +421,7 @@ bool OpenGLFrameBuffer::BackgroundCacheMaterial(FMaterial* mat, FTranslationID t
 				systex,
 				mat->sourcetex,
 				0,
-				allowMipmaps
+				flags
 			};
 
 			if (secondary) secondaryTexQueue.queue(in);
@@ -431,6 +437,8 @@ bool OpenGLFrameBuffer::BackgroundCacheMaterial(FMaterial* mat, FTranslationID t
 	const int numLayers = mat->NumLayers();
 	for (int i = 1; i < numLayers; i++)
 	{
+		assert(layer->layerTexture);
+
 		FImageLoadParams* params = nullptr;
 		auto syslayer = static_cast<FHardwareTexture*>(mat->GetLayer(i, 0, &layer));
 		lump = layer->layerTexture->GetSourceLump();
@@ -448,7 +456,7 @@ bool OpenGLFrameBuffer::BackgroundCacheMaterial(FMaterial* mat, FTranslationID t
 		}
 		else if (lumpExists && syslayer->GetState(i) == IHardwareTexture::HardwareState::NONE) {
 			syslayer->SetHardwareState(secondary ? IHardwareTexture::HardwareState::CACHING : IHardwareTexture::HardwareState::LOADING, i);
-			
+
 			FImageTexture* fLayerTexture = dynamic_cast<FImageTexture*>(layer->layerTexture);
 			params = layer->layerTexture->GetImage()->NewLoaderParams(
 				fLayerTexture ? (fLayerTexture->GetNoRemap0() ? FImageSource::noremap0 : FImageSource::normal) : FImageSource::normal,
@@ -468,7 +476,7 @@ bool OpenGLFrameBuffer::BackgroundCacheMaterial(FMaterial* mat, FTranslationID t
 					syslayer,
 					nullptr,
 					i,
-					allowMipmaps
+					flags
 				};
 
 				if (secondary) secondaryTexQueue.queue(in);
@@ -578,10 +586,10 @@ void OpenGLFrameBuffer::UpdateBackgroundCache(bool flush) {
 			// If we have pixels to upload, upload them here
 			if (loaded.pixels) {
 				if (loaded.imgSource->IsGPUOnly()) {
-					loaded.tex->BackgroundCreateCompressedTexture(loaded.pixels, loaded.pixelsSize, loaded.totalDataSize, loaded.pixelW, loaded.pixelH, loaded.texUnit, loaded.mipLevels, "OpenGLFrameBuffer::UpdateBackgroundCache()", !loaded.createMipmaps);
+					loaded.tex->BackgroundCreateCompressedTexture(loaded.pixels, loaded.pixelsSize, loaded.totalDataSize, loaded.pixelW, loaded.pixelH, loaded.texUnit, loaded.mipLevels, "OpenGLFrameBuffer::UpdateBackgroundCache()", !loaded.flags.CreateMips, loaded.flags.AllowQualityReduction);
 				}
 				else {
-					loaded.tex->BackgroundCreateTexture(loaded.pixels, loaded.pixelW, loaded.pixelH, loaded.texUnit, loaded.createMipmaps, false, "OpenGLFrameBuffer::UpdateBackgroundCache()", !loaded.createMipmaps);
+					loaded.tex->BackgroundCreateTexture(loaded.pixels, loaded.pixelW, loaded.pixelH, loaded.texUnit, loaded.flags.CreateMips, false, "OpenGLFrameBuffer::UpdateBackgroundCache()", !loaded.flags.CreateMips);
 				}
 
 				dataLoaded += loaded.totalDataSize;
@@ -592,7 +600,7 @@ void OpenGLFrameBuffer::UpdateBackgroundCache(bool flush) {
 			assert(swapped);
 
 			loaded.tex->SetHardwareState(IHardwareTexture::HardwareState::READY, loaded.texUnit);
-			if (loaded.gtex) loaded.gtex->SetTranslucent(loaded.isTranslucent);
+			if (loaded.gtex) loaded.gtex->SetTranslucent(loaded.flags.OutputIsTranslucent);
 		}
 	}
 

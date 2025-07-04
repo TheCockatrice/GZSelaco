@@ -139,6 +139,14 @@ CUSTOM_CVARD(Int, gl_texture_filter, 4, CVAR_ARCHIVE|CVAR_GLOBALCONFIG|CVAR_NOIN
 	screen->SetTextureFilterMode();
 }
 
+extern void hw_unloadQualitySprites();
+CUSTOM_CVARD(Int, gl_texture_quality, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG | CVAR_NOINITCALL, "changes texture quality. 0 = full, 2 = low")
+{
+	if (self < 0 || self > 4) self = 0;
+	hw_unloadQualitySprites();
+	screen->SetTextureFilterMode();	// For Vulkan, rebuild descriptors
+}
+
 CVAR(Bool, gl_precache, true, CVAR_ARCHIVE)
 CVAR(Bool, gl_precache_actors, true, CVAR_ARCHIVE)
 

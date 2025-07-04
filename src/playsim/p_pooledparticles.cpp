@@ -31,6 +31,7 @@ DEFINE_FIELD_X(ParticleData, particledata_t, master);
 DEFINE_FIELD_X(ParticleData, particledata_t, renderStyle);
 DEFINE_FIELD_X(ParticleData, particledata_t, life);
 DEFINE_FIELD_X(ParticleData, particledata_t, startLife);
+DEFINE_FIELD_X(ParticleData, particledata_t, driftTime);
 DEFINE_FIELD_X(ParticleData, particledata_t, pos);
 DEFINE_FIELD_X(ParticleData, particledata_t, vel);
 DEFINE_FIELD_X(ParticleData, particledata_t, gravity);
@@ -119,6 +120,11 @@ DEFINE_FIELD(DParticleDefinition, MinRollSpeed) DEFINE_FIELD(DParticleDefinition
 DEFINE_FIELD(DParticleDefinition, RollDamping) DEFINE_FIELD(DParticleDefinition, RollDampingBounce)
 DEFINE_FIELD(DParticleDefinition, RestingPitchMin) DEFINE_FIELD(DParticleDefinition, RestingPitchMax) DEFINE_FIELD(DParticleDefinition, RestingPitchSpeed)
 DEFINE_FIELD(DParticleDefinition, RestingRollMin) DEFINE_FIELD(DParticleDefinition, RestingRollMax) DEFINE_FIELD(DParticleDefinition, RestingRollSpeed)
+DEFINE_FIELD(DParticleDefinition, DriftSlowdown)
+DEFINE_FIELD(DParticleDefinition, DriftDirectionSpeed)
+DEFINE_FIELD(DParticleDefinition, DriftOscillationSpeed)
+DEFINE_FIELD(DParticleDefinition, DriftRandomFactor)
+DEFINE_FIELD(DParticleDefinition, DriftVelocityAdjustment)
 DEFINE_FIELD(DParticleDefinition, MaxStepHeight)
 DEFINE_FIELD(DParticleDefinition, MinGravity) DEFINE_FIELD(DParticleDefinition, MaxGravity)
 DEFINE_FIELD(DParticleDefinition, MinBounceFactor) DEFINE_FIELD(DParticleDefinition, MaxBounceFactor)
@@ -723,9 +729,9 @@ void particledata_t::Init(FLevelLocals* Level, DVector3 initialPos)
 	rollStep = 0;
 	bounces = 0;
 	maxBounces = -1;
-	floorz = (float)s->floorplane.ZatPoint(initialPos);
+	floorz = GetFloorHeight();
 	ceilingz = (float)s->ceilingplane.ZatPoint(initialPos);
-	restzoffset = 0;
+	restplane = nullptr;
 	color = 0xffffff;
 	animFrame = 0;
 	animTick = 0;
@@ -798,6 +804,51 @@ bool particledata_t::CheckWater(double* outSurfaceHeight)
 	return false;
 }
 
+float particledata_t::GetFloorHeight()
+{
+	// Only check for 3D floors if we REALLY need to
+	if (definition->Flags & PDF_BOUNCEONFLOORS && vel.Z <= VM_EPSILON)
+	{
+		for (auto rover : subsector->sector->e->XFloor.ffloors)
+		{
+			if (!(rover->flags & FF_EXISTS)) continue;
+
+			if (rover->flags & FF_SOLID)
+			{
+				// If the ceiling of the 3D floor is below the particle, then consider us above the floor
+				float roverZ = (float)rover->bottom.plane->ZatPoint(pos);
+				if (roverZ < pos.Z)
+				{
+					// Add a liiittle bit of an offset for 3D floors, to make sure particles get the right color
+					return (float)rover->top.plane->ZatPoint(pos) + 0.1f;
+				}
+			}
+		}
+	}
+
+	return (float)subsector->sector->floorplane.ZatPoint(pos);
+}
+
+secplane_t* particledata_t::GetFloorPlane()
+{
+	for (auto rover : subsector->sector->e->XFloor.ffloors)
+	{
+		if (!(rover->flags & FF_EXISTS)) continue;
+
+		if (rover->flags & FF_SOLID)
+		{
+			// If the ceiling of the 3D floor is below the particle, then consider us above the floor
+			float roverZ = (float)rover->bottom.plane->ZatPoint(pos);
+			if (roverZ < pos.Z)
+			{
+				return rover->top.plane;
+			}
+		}
+	}
+
+	return &subsector->sector->floorplane;
+}
+
 void particledata_t::UpdateUnderwater()
 {
 	double surfaceHeight = 0;
@@ -816,6 +867,36 @@ void particledata_t::UpdateUnderwater()
 			definition->CallOnParticleExitWater(this, surfaceHeight);
 		}
 	}
+}
+
+void particledata_t::UpdateDrift()
+{
+	// Introduce randomness to add variability
+	float randomFactor = ParticleRandom(-definition->DriftRandomFactor, definition->DriftRandomFactor); // Random small offsets for waving
+
+	// Gradually slow down the velocity
+	vel *= definition->DriftSlowdown;
+
+	// Simulate chaotic directional changes
+	driftTime += definition->DriftDirectionSpeed;
+
+	float pitchOscillation = dcos(driftTime + randomFactor) * ParticleRandom(-definition->DriftOscillationSpeed, definition->DriftOscillationSpeed);
+	float angleOscillation = dsin(driftTime + randomFactor) * ParticleRandom(-definition->DriftOscillationSpeed, definition->DriftOscillationSpeed); // Smaller random waves
+
+	// Add extra random shaking to make it messy
+	pitch += pitchOscillation + ParticleRandom(-25.0f, 25.0f);
+	angle += angleOscillation + ParticleRandom(-25.0f, 25.0f);
+
+	// Calculate velocity relative to the current angle and pitch
+	DVector3 direction = 
+	{
+		dcos(pitch) * dcos(angle),
+		dcos(pitch) * dsin(angle),
+		dsin(pitch)
+	};
+
+	// Update velocity direction
+	vel += direction * ParticleRandom(0.05f, definition->DriftVelocityAdjustment); // Random small adjustments
 }
 
 AActor* particledata_t::SpawnActor(PClassActor* actorClass, const DVector3& offset)
@@ -1292,7 +1373,7 @@ void DParticleDefinition::RestParticle(particledata_t* particle)
 {
 	particle->SetFlag(DPF_ATREST);
 	particle->prevpos = particle->pos;
-	particle->restzoffset = (float)particle->pos.Z - particle->floorz;
+	particle->restplane = particle->GetFloorPlane();
 
 	if (HasFlag(PDF_ROLLSTOP)) 
 	{
@@ -1704,7 +1785,7 @@ void P_ThinkDefinedParticles(FLevelLocals* Level)
 
 			if (particle->HasFlag(DPF_ATREST))
 			{
-				particle->floorz = (float)particle->subsector->sector->floorplane.ZatPoint(particle->pos);
+				particle->floorz = (float)particle->restplane->ZatPoint(particle->pos) + 0.1f;
 
 				// We're setting the vel rather than the pos so that we get proper interpolation for moving floors
 				particle->pos.Z += particle->vel.Z;
@@ -1774,6 +1855,13 @@ void P_ThinkDefinedParticles(FLevelLocals* Level)
 			}
 		}
 
+		if (definition->DriftVelocityAdjustment > 0) 
+		{
+			particle->UpdateDrift();
+		}
+
+		particle->vel *= 1.0f - definition->Drag;
+
 		particle->alpha += particle->alphaStep;
 		particle->scale = FVector2(particle->scale.X * particle->scaleStep.X, particle->scale.Y * particle->scaleStep.Y);
 		particle->angle += particle->angleStep;
@@ -1792,8 +1880,6 @@ void P_ThinkDefinedParticles(FLevelLocals* Level)
 
 		if (particle->gravity != 0)
 		{
-			particle->vel *= 1.0f - definition->Drag;
-
 			if (!particle->HasFlag(DPF_ATREST))
 			{
 				if ((definition->HasFlag(PDF_CHECKWATERSPAWN) && particle->HasFlag(DPF_SPAWNEDUNDERWATER)) || definition->HasFlag(PDF_CHECKWATER))
@@ -1831,7 +1917,7 @@ void P_ThinkDefinedParticles(FLevelLocals* Level)
 			}
 		}
 
-		particle->floorz = (float)s->floorplane.ZatPoint(particle->pos);
+		particle->floorz = particle->GetFloorHeight();
 		particle->ceilingz = (float)s->ceilingplane.ZatPoint(particle->pos);
 
 		if (particle->HasFlag(DPF_ATREST))

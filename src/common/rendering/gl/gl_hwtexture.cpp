@@ -205,7 +205,7 @@ void FHardwareTexture::DestroyLoadedImage() {
 }
 
 // Add a BC7 compressed texture and mipmaps
-unsigned int FHardwareTexture::BackgroundCreateCompressedTexture(unsigned char* buffer, uint32_t dataSize, uint32_t totalSize, int w, int h, int texunit, int numMips, const char* name, bool forceNoMips) {
+unsigned int FHardwareTexture::BackgroundCreateCompressedTexture(unsigned char* buffer, uint32_t dataSize, uint32_t totalSize, int w, int h, int texunit, int numMips, const char* name, bool forceNoMips, bool allowQualityReduction) {
 	int rh, rw;
 
 	glGetError();
@@ -231,7 +231,40 @@ unsigned int FHardwareTexture::BackgroundCreateCompressedTexture(unsigned char* 
 		return 0;	// We can't resize the texture, 
 	}
 
-	glCompressedTexImage2D(GL_TEXTURE_2D, 0, GL_COMPRESSED_RGBA_BPTC_UNORM, rw, rh, 0, dataSize, buffer);
+	bool mipmap = numMips > 1 && !forceNoMips;
+
+	uint32_t mipWidth = w, mipHeight = h;
+	size_t mipSize = dataSize, dataPos = 0;
+	const int startMip = allowQualityReduction ? min((int)gl_texture_quality, (int)numMips - 1) : 0;
+	int mipCnt = 0, maxMips = mipmap ? numMips - startMip : 1;
+
+	for (uint32_t x = 0; x < numMips && mipCnt < maxMips; x++) {
+		if (mipSize == 0 || totalSize - dataPos < mipSize)
+			break;
+
+		if (x >= startMip) {
+			mipCnt++;
+			if (x == startMip) {
+				// Base texture
+				glCompressedTexImage2D(GL_TEXTURE_2D, 0, GL_COMPRESSED_RGBA_BPTC_UNORM, mipWidth, mipHeight, 0, mipSize, buffer + dataPos);
+			}
+			else {
+				glInfo.mipmapped = true;
+				glInfo.forcenofilter = false;
+
+				// Mip
+				CreateCompressedMipmap(glInfo.glTexID, buffer + dataPos, x - startMip, mipWidth, mipHeight, mipSize, texunit);
+			}
+		}
+
+		dataPos += mipSize;
+
+		mipWidth = std::max(1u, (mipWidth >> 1));
+		mipHeight = std::max(1u, (mipHeight >> 1));
+		mipSize = std::max(1u, ((mipWidth + 3) / 4)) * std::max(1u, ((mipHeight + 3) / 4)) * 16;
+	}
+
+	/*glCompressedTexImage2D(GL_TEXTURE_2D, 0, GL_COMPRESSED_RGBA_BPTC_UNORM, rw, rh, 0, dataSize, buffer);
 
 	// Always load mips when available, since loading them later is impossible without another disk fetch and huge waste of time
 	if (numMips > 0 && !forceNoMips) {
@@ -254,6 +287,10 @@ unsigned int FHardwareTexture::BackgroundCreateCompressedTexture(unsigned char* 
 	}
 	else if (forceNoMips) {
 		glInfo.forcenofilter = true;
+	}*/
+
+	if (forceNoMips) {
+		glInfo.forcenofilter = true;
 	}
 
 	if (texunit > 0) glActiveTexture(GL_TEXTURE0);
@@ -264,7 +301,7 @@ unsigned int FHardwareTexture::BackgroundCreateCompressedTexture(unsigned char* 
 }
 
 
-unsigned int FHardwareTexture::CreateCompressedTexture(unsigned char* buffer, uint32_t dataSize, uint32_t totalSize, int w, int h, int texunit, int numMips, const char* name, bool forceNoMips) {
+unsigned int FHardwareTexture::CreateCompressedTexture(unsigned char* buffer, uint32_t dataSize, uint32_t totalSize, int w, int h, int texunit, int numMips, const char* name, bool forceNoMips, bool allowQualityReduction) {
 	int rh, rw;
 
 	glGetError();
@@ -292,7 +329,7 @@ unsigned int FHardwareTexture::CreateCompressedTexture(unsigned char* buffer, ui
 		return 0;	// We can't resize the texture, 
 	}
 
-	glCompressedTexImage2D(GL_TEXTURE_2D, 0, GL_COMPRESSED_RGBA_BPTC_UNORM, rw, rh, 0, dataSize, buffer);
+	/*glCompressedTexImage2D(GL_TEXTURE_2D, 0, GL_COMPRESSED_RGBA_BPTC_UNORM, rw, rh, 0, dataSize, buffer);
 
 	// Always load mips when available, since loading them later is impossible without another disk fetch and huge waste of time
 	if (numMips > 0 && !forceNoMips) {
@@ -313,6 +350,42 @@ unsigned int FHardwareTexture::CreateCompressedTexture(unsigned char* buffer, ui
 	}
 	else if (forceNoMips) {
 		forcenofilter = true;
+	}*/
+	bool mipmap = numMips > 1 && !forceNoMips;
+
+	uint32_t mipWidth = w, mipHeight = h;
+	size_t mipSize = dataSize, dataPos = 0;
+	const int startMip = allowQualityReduction ? min((int)gl_texture_quality, (int)numMips - 1) : 0;
+	int mipCnt = 0, maxMips = mipmap ? numMips - startMip : 1;
+
+	for (uint32_t x = 0; x < numMips && mipCnt < maxMips; x++) {
+		if (mipSize == 0 || totalSize - dataPos < mipSize)
+			break;
+
+		if (x >= startMip) {
+			mipCnt++;
+			if (x == startMip) {
+				// Base texture
+				glCompressedTexImage2D(GL_TEXTURE_2D, 0, GL_COMPRESSED_RGBA_BPTC_UNORM, mipWidth, mipHeight, 0, mipSize, buffer + dataPos);
+			}
+			else {
+				glInfo.mipmapped = true;
+				glInfo.forcenofilter = false;
+
+				// Mip
+				CreateCompressedMipmap(glInfo.glTexID, buffer + dataPos, x - startMip, mipWidth, mipHeight, mipSize, texunit);
+			}
+		}
+
+		dataPos += mipSize;
+
+		mipWidth = std::max(1u, (mipWidth >> 1));
+		mipHeight = std::max(1u, (mipHeight >> 1));
+		mipSize = (size_t)std::max(1u, ((mipWidth + 3) / 4)) * std::max(1u, ((mipHeight + 3) / 4)) * 16;
+	}
+
+	if (forceNoMips) {
+		glInfo.forcenofilter = true;
 	}
 
 	if (texunit > 0) glActiveTexture(GL_TEXTURE0);
@@ -583,7 +656,7 @@ bool FHardwareTexture::BindOrCreate(FTexture *tex, int texunit, int clampmode, i
 			size_t dataSize = 0, totalSize = 0;
 			unsigned char* pixelData;
 			src->ReadCompressedPixels(&reader, &pixelData, totalSize, dataSize, numMipLevels);
-			CreateCompressedTexture(pixelData, (uint32_t)dataSize, (uint32_t)totalSize, tex->GetWidth(), tex->GetHeight(), texunit, numMipLevels, "::BindOrCreate(Compressed)", !forcenofilter);
+			CreateCompressedTexture(pixelData, (uint32_t)dataSize, (uint32_t)totalSize, tex->GetWidth(), tex->GetHeight(), texunit, numMipLevels, "::BindOrCreate(Compressed)", !forcenofilter, flags & CTF_ReduceQuality);
 
 			SetHardwareState(HardwareState::READY, texunit);
 		}

@@ -51,8 +51,11 @@ VkHardwareTexture::VkHardwareTexture(VulkanRenderDevice* fb, int numchannels) : 
 
 VkHardwareTexture::~VkHardwareTexture()
 {
-	if (fb)
+	SetHardwareState(NONE);
+
+	if (fb) {
 		fb->GetTextureManager()->RemoveTexture(this);
+	}
 }
 
 void VkHardwareTexture::Reset()
@@ -137,6 +140,7 @@ VkTextureImage *VkHardwareTexture::GetDepthStencil(FTexture *tex)
 	return mDepthStencil.get();
 }
 
+
 void VkHardwareTexture::CreateImage(FTexture *tex, int translation, int flags)
 {
 	
@@ -177,27 +181,39 @@ void VkHardwareTexture::CreateImage(FTexture *tex, int translation, int flags)
 
 			// Create texture
 			// Mipmaps must be read from the source image, they cannot be generated
-			// TODO: Find some way to prevent UI textures from loading mipmaps. After all they are never used when rendering and just straight up eating VRAM for no reason
+			// TODO: Find some way to prevent UI textures from loading mipmaps
 			uint32_t expectedMipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(srcWidth, srcHeight)))) + 1;
+			const int mipStart = flags & CTF_ReduceQuality ? min((int)gl_texture_quality, (int)expectedMipLevels - 1) : 0;
+
 			if (mipLevels > 0 && mipLevels == (int)expectedMipLevels) {
-				CreateTexture(fb->GetCommands(), mImage.get(), src->GetWidth(), src->GetHeight(), 4, VK_FORMAT_BC7_UNORM_BLOCK, pixelData, true, false, (int)pixelDataSize);
-
 				uint32_t mipWidth = srcWidth, mipHeight = srcHeight;
-				uint32_t mipSize = (uint32_t)pixelDataSize, dataPos = (uint32_t)pixelDataSize;
+				size_t mipSize = pixelDataSize, dataPos = 0;
 
-				for (int x = 1; x < mipLevels; x++) {
-					mipWidth = std::max(1u, (mipWidth >> 1));
-					mipHeight = std::max(1u, (mipHeight >> 1));
-					mipSize = std::max(1u, ((mipWidth + 3) / 4)) * std::max(1u, ((mipHeight + 3) / 4)) * 16;
+				for (int x = 0; x < mipLevels; x++) {
 					if (mipSize == 0 || totalDataSize - dataPos < mipSize)
 						break;
-					CreateTextureMipMap(fb->GetCommands(), mImage.get(), x, mipWidth, mipHeight, 4, VK_FORMAT_BC7_UNORM_BLOCK, pixelData + dataPos, mipSize);
+
+					if (x >= mipStart) {
+						if (x == mipStart) {
+							// Base texture
+							CreateTexture(fb->GetCommands(), mImage.get(), mipWidth, mipHeight, 4, VK_FORMAT_BC7_UNORM_BLOCK, pixelData + dataPos, expectedMipLevels - mipStart, false, mipSize);
+						}
+						else {
+							// Mip
+							CreateTextureMipMap(fb->GetCommands(), mImage.get(), x - mipStart, mipWidth, mipHeight, 4, VK_FORMAT_BC7_UNORM_BLOCK, pixelData + dataPos, mipSize);
+						}
+					}
+
 					dataPos += mipSize;
+					mipWidth = std::max(1u, (mipWidth >> 1));
+					mipHeight = std::max(1u, (mipHeight >> 1));
+					mipSize = (size_t)std::max(1u, ((mipWidth + 3) / 4)) * std::max(1u, ((mipHeight + 3) / 4)) * 16;
 				}
 			}
 			else {
 				CreateTexture(fb->GetCommands(), mImage.get(), src->GetWidth(), src->GetHeight(), 4, VK_FORMAT_BC7_UNORM_BLOCK, pixelData, false, false, (int)pixelDataSize);
 			}
+
 			
 			free(pixelData);
 			reader.Close();
@@ -244,18 +260,18 @@ void VkHardwareTexture::CreateImage(FTexture *tex, int translation, int flags)
 }
 
 void VkHardwareTexture::CreateTexture(int w, int h, int pixelsize, VkFormat format, const void *pixels, bool mipmap) {
-	CreateTexture(fb->GetCommands(), mImage.get(), w, h, pixelsize, format, pixels, mipmap);
+	CreateTexture(fb->GetCommands(), mImage.get(), w, h, pixelsize, format, pixels, mipmap ? -1 : 0);
 	hwState = READY;
 }
 
-void VkHardwareTexture::BackgroundCreateTexture(VkCommandBufferManager* bufManager, int w, int h, int pixelsize, VkFormat format, const void *pixels, bool mipmap, bool createMips, int totalSize) {
+void VkHardwareTexture::BackgroundCreateTexture(VkCommandBufferManager* bufManager, int w, int h, int pixelsize, VkFormat format, const void *pixels, int numMipLevels, bool createMips, int totalSize) {
 	if (!mLoadedImage) mLoadedImage.reset(new VkTextureImage());
 	else {
 		assert(mLoadedImage != nullptr);
 		return; // We cannot reset the loaded image on a different thread
 	}
 
-	CreateTexture(bufManager, mLoadedImage.get(), w, h, pixelsize, format, pixels, mipmap, createMips && fb->device.get()->UploadFamilySupportsGraphics, totalSize);
+	CreateTexture(bufManager, mLoadedImage.get(), w, h, pixelsize, format, pixels, numMipLevels, createMips && fb->device.get()->UploadFamilySupportsGraphics, totalSize);
 }
 
 
@@ -301,13 +317,14 @@ void VkHardwareTexture::CreateTextureMipMap(VkCommandBufferManager* bufManager, 
 	}
 }
 
-void VkHardwareTexture::CreateTexture(VkCommandBufferManager *bufManager, VkTextureImage *img, int w, int h, int pixelsize, VkFormat format, const void *pixels, bool mipmap, bool generateMipmaps, int totalSize)
+void VkHardwareTexture::CreateTexture(VkCommandBufferManager *bufManager, VkTextureImage *img, int w, int h, int pixelsize, VkFormat format, const void *pixels, int mipmap, bool generateMipmaps, int totalSize)
 {
 	if (w <= 0 || h <= 0)
 		throw CVulkanError("Trying to create zero size texture");
 
-	if(totalSize < 0) totalSize = w * h * pixelsize;
-	int mipLevels = !mipmap ? 1 : GetMipLevels(w, h);
+	if (totalSize < 0) totalSize = w * h * pixelsize;
+	if (mipmap == -1) mipmap = GetMipLevels(w, h);
+	int mipLevels = mipmap <= 0 ? 1 : mipmap;
 
 	auto stagingBuffer = BufferBuilder()
 		.Size(totalSize)
@@ -345,7 +362,7 @@ void VkHardwareTexture::CreateTexture(VkCommandBufferManager *bufManager, VkText
 	region.imageExtent.height = h;
 	cmdBuffer->copyBufferToImage(stagingBuffer->buffer, img->Image->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-	if (generateMipmaps && mipmap) img->GenerateMipmaps(cmdBuffer);
+	if (generateMipmaps && mipmap > 0) img->GenerateMipmaps(cmdBuffer);
 
 	// If we queued more than 64 MB of data already: wait until the uploads finish before continuing
 	bufManager->TransferDeleteList->Add(std::move(stagingBuffer));

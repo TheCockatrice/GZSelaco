@@ -54,6 +54,7 @@ struct ParticleData
     native uint8        RenderStyle;
     native int16        Life;       // Tics to live, -1 = forever
     native int16        StartLife;  // The life this particle started with
+    native int16        DriftTime;
     native vector3      Pos;
     native vector3      Vel;
     native float        Gravity;
@@ -186,6 +187,12 @@ class ParticleDefinition native play
 	native float RollDamping, RollDampingBounce;
 	native float RestingPitchMin, RestingPitchMax, RestingPitchSpeed;
 	native float RestingRollMin, RestingRollMax, RestingRollSpeed;
+
+    native float DriftSlowdown;
+	native float DriftDirectionSpeed;
+	native float DriftOscillationSpeed;
+	native float DriftRandomFactor;
+	native float DriftVelocityAdjustment;
 
     native float MaxStepHeight;
     native float MinGravity, MaxGravity;

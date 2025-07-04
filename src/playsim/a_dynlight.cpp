@@ -72,6 +72,8 @@ static FRandom randLight;
 extern TArray<FLightDefaults *> StateLights;
 
 
+CVAR(Bool, gl_link_playerlights, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
+
 //==========================================================================
 //
 //
@@ -124,6 +126,14 @@ void AttachLight(AActor *self)
 	light->lighttype = (uint8_t)self->IntVar(NAME_lighttype);
 	light->Pos.Zero();
 	self->AttachedLights.Push(light);
+
+	// Add to the list of player lights if this is attached to a player
+	if (!gl_link_playerlights && ((self == players[consoleplayer].mo) || (self->master && self->master == players[consoleplayer].mo))) {
+		light->AddPlayerLight();
+	}
+	else {
+		light->RemovePlayerLight();
+	}
 
 	// Disable postponed processing of dynamic light because its setup has been completed by this function
 	self->flags8 &= ~MF8_RECREATELIGHTS;
@@ -229,6 +239,8 @@ void FDynamicLight::ReleaseLight()
 	if (next != nullptr) next->prev = prev;
 	next = prev = nullptr;
 	FreeList.Push(this);
+	
+	RemovePlayerLight();
 }
 
 
@@ -397,11 +409,13 @@ void FDynamicLight::UpdateLocation()
 		// Offset is calculated in relation to the owning actor.
 		DAngle angle = target->Angles.Yaw;
 		DAngle pitch = pPitch != nullptr ? *pPitch : target->Angles.Pitch;
-		
+	
+		bool isPlayerLight = target->master && target->master->player == &players[consoleplayer];
+
 		// @Cockatrice - Hack alert, this is a special case for spotlights attached to actors parented to the player
 		// This is to prevent "laggy" flashlights that don't follow the camera perfectly
 		// companion code in hw_dynlightdata.cpp for frame-perfect implementation
-		if(target->master && target->master->player == &players[consoleplayer]) {
+		if(isPlayerLight) {
 			angle = target->master->Angles.Yaw;
 			pitch = target->master->Angles.Pitch;
 			// TODO: Add view offsets to these angles
@@ -450,7 +464,8 @@ void FDynamicLight::UpdateLocation()
 		if (X() != oldx || Y() != oldy || radius != oldradius || angleChanged)
 		{
 			//Update the light lists
-			LinkLight();
+			if(!isPlayerLight || gl_link_playerlights)
+				LinkLight();
 		}
 	}
 }
@@ -849,6 +864,8 @@ void FDynamicLight::LinkLight()
 		
 
 		// @Cockatrice - If this is a spot light, collect only within a radius from the center of the spot, we don't care about stuff that is behind the spot light
+		// This helps improves performance for a light that is moving, but reduces performance significantly for lights that only rotate
+		// TODO: Mark rotating lights to avoid this tradeoff
 		if (IsSpot()) {
 			dl_validcount++;
 			::validcount++;

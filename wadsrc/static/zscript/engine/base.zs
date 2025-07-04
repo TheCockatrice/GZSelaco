@@ -313,7 +313,9 @@ struct TexMan
 
 	// @Cockatrice - Checks and loads (in background when available) texture. Returns TRUE if fully loaded OR if unloadable/null.  Returns FALSE when waiting for load.
 	// Will not function correctly with animated textures
-	native static ui bool MakeReady(TextureID tex, int translation = 0);}
+	native static ui bool MakeReady(TextureID tex, int translation = 0);
+	native static ui bool UnloadTexture(TextureID tex);		// @Cockatrice - Experimental, but we need to be able to unload things when they are no longer needed especially in the UI
+}
 
 
 // SoundHandleStruct: Function holder for SoundHandle type, since SoundHandle is just an INT pseudo-type
@@ -597,6 +599,13 @@ struct Screen native
 	native static void ClearTransform();
 
 	native static void SetCursor(String texName = "None");
+	native static ui void CloseAutomap();
+	native static ui void ToggleAutomap();
+
+	// @Cockatrice - Only works in Vulkan right now. 
+	// Returns number of devices found, and fills the devices array with device names in the same order as internal
+	native static ui int GetDeviceList(out Array<String> devices);
+	native static ui int GetScreenList(out Array<String> screens);
 }
 
 struct Font native

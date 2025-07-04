@@ -34,7 +34,6 @@
 **
 */
 
-#include "filesystem.h"
 #include "printf.h"
 #include "c_cvars.h"
 
@@ -50,6 +49,9 @@
 #include "basics.h"
 #include "cmdlib.h"
 #include "m_argv.h"
+#include "engineerrors.h"
+#include "filesystem.h"
+
 using namespace FileSys;
 
 FTextureManager TexMan;
@@ -940,19 +942,27 @@ void FTextureManager::ParseTextureDef(int lump, FMultipatchTextureBuilder &build
 			}
 
 			// Confirm that we have a valid texture name here
-			FTextureID texID = TexMan.CheckForTexture(name.GetChars(), ETextureType::Sprite);
+			FTextureID texID = TexMan.CheckForTexture(name.GetChars(), ETextureType::Sprite, TEXMAN_Overridable);
 			FGameTexture *tex = TexMan.GetGameTexture(texID, false);
 			
+			if (!texID.isValid() || tex == nullptr) {
+				// Try full name search
+				int wadnum = fileSystem.GetFileContainer(lump);
+				int num = fileSystem.CheckNumForName(name.GetChars(), ns_sprites, wadnum, false);
+				auto fullName = num < 0 ? nullptr : fileSystem.GetFileFullName(num);
+				texID = TexMan.CheckForTexture(fullName, ETextureType::Sprite, TEXMAN_Overridable);
+				tex = TexMan.GetGameTexture(texID, false);
+			}
 
 			if (!texID.isValid() || tex == nullptr) {
-				sc.ScriptMessage("Warning: Unknown sprite: %s",  name.GetChars());
+				sc.ScriptMessage("Warning: Unknown sprite: %s", name.GetChars());
 			}
 
 			double scalex = 3.0, scaley = 3.0;
 			bool bWorldPanning = false, bNoTrim = false;
 			bool offset2set = false;
-			int LeftOffset[2] = { 0,0 };
-			int TopOffset[2] = { 0,0 };
+			float LeftOffset[2] = { 0,0 };
+			float TopOffset[2] = { 0,0 };
 
 			if (sc.CheckString("{"))
 			{
@@ -995,11 +1005,11 @@ void FTextureManager::ParseTextureDef(int lump, FMultipatchTextureBuilder &build
 					}
 					else if (sc.Compare("Offset"))
 					{
-						sc.MustGetNumber();
-						LeftOffset[0] = sc.Number;
+						sc.MustGetFloat();
+						LeftOffset[0] = sc.Float;
 						sc.MustGetStringName(",");
-						sc.MustGetNumber();
-						TopOffset[0] = sc.Number;
+						sc.MustGetFloat();
+						TopOffset[0] = sc.Float;
 						if (!offset2set)
 						{
 							LeftOffset[1] = LeftOffset[0];
@@ -1008,11 +1018,11 @@ void FTextureManager::ParseTextureDef(int lump, FMultipatchTextureBuilder &build
 					}
 					else if (sc.Compare("Offset2"))
 					{
-						sc.MustGetNumber();
-						LeftOffset[1] = sc.Number;
+						sc.MustGetFloat();
+						LeftOffset[1] = sc.Float;
 						sc.MustGetStringName(",");
-						sc.MustGetNumber();
-						TopOffset[1] = sc.Number;
+						sc.MustGetFloat();
+						TopOffset[1] = sc.Float;
 						offset2set = true;
 					}
 					else
@@ -1023,10 +1033,78 @@ void FTextureManager::ParseTextureDef(int lump, FMultipatchTextureBuilder &build
 			}
 
 			if (tex != nullptr) {
-				if (width > 0 && height > 0) tex->SetSize(width, height);
-				tex->SetOffsets(0, LeftOffset[0], TopOffset[0]);
-				tex->SetOffsets(1, LeftOffset[1], TopOffset[1]);
-				tex->SetScale((float)scalex, (float)scaley);
+				// Don't expand weaponsprites
+				// Don't trim them either
+				tex->SetNeverExpand(true);
+
+				// @Cockatrice - This is a huge hack but let's detect if we are working with reduced resolution sprites
+				// We handle scaling specially, mostly compensating for floating point adjustment in offsets/size
+				// This will almost exclusively be used for half-res weapon sprites
+				int tw = tex->GetTexelWidth();
+				int th = tex->GetTexelHeight();
+				bool sizeMatch = (width == tw && height == th);
+
+				if (name.CompareNoCase("RIF2A0") == 0) {
+					Printf("RIF2A0");
+				}
+
+				if (width > 0 && height > 0 && !sizeMatch && (tw <= width && th <= height)) {
+					//if (sizeMatch || (tw > width && th > height)) {
+					//	tex->SetDisplaySize(width / scalex, height / scaley);
+					//}
+					//else {
+						// Quick hack
+						// TODO: Handle factors != 2
+						tex->SetDisplaySize(
+							(width % 2) != 0 ? (width - 1) / scalex : width / scalex,
+							(height % 2) != 0 ? (height - 1) / scaley : height / scaley
+						);
+						tex->SetOffsets(0, tex->GetScaleX() / scalex * LeftOffset[0], tex->GetScaleY() / scaley * TopOffset[0]);
+						tex->SetOffsets(1, tex->GetScaleX() / scalex * LeftOffset[1], tex->GetScaleY() / scaley * TopOffset[1]);
+					//}
+				}
+				else {
+					if (width > 0 && height > 0) tex->SetSize(width, height);
+					tex->SetOffsets(0, LeftOffset[0], TopOffset[0]);
+					tex->SetOffsets(1, LeftOffset[1], TopOffset[1]);
+					tex->SetScale((float)scalex, (float)scaley);
+				}
+
+				// If width and height do not match, adjust offsets by the difference
+				/*if (!sizeMatch && width > 0 && height > 0) {
+					tex->SetOffsets(0, tex->GetScaleX() / scalex * LeftOffset[0], tex->GetScaleY() / scaley * TopOffset[0]);
+					tex->SetOffsets(1, tex->GetScaleX() / scalex * LeftOffset[1], tex->GetScaleY() / scaley * TopOffset[1]);
+				}
+				else {
+					tex->SetOffsets(0, LeftOffset[0], TopOffset[0]);
+					tex->SetOffsets(1, LeftOffset[1], TopOffset[1]);
+				}*/
+
+				/*if (width > 0 && height > 0) {
+					tex->SetDisplaySize(
+						width % 2 == 0 ? width / scalex : (width - 1) / scalex,
+						height % 2 == 0 ? height / scalex : (height - 1) / scaley
+					);
+				}
+				else {
+					tex->SetScale((float)scalex, (float)scaley);
+					tex->SetOffsets(0, LeftOffset[0], TopOffset[0]);
+					tex->SetOffsets(1, LeftOffset[1], TopOffset[1]);
+				}
+
+				// If width and height do not match, adjust offsets by the difference
+				if (width > 0 && height > 0 && (tex->GetTexelWidth() != width || tex->GetTexelHeight() != height)) {
+					//tex->SetOffsets(0, tex->GetScaleX() / scalex * LeftOffset[0], tex->GetScaleY() / scaley * TopOffset[0]);
+					//tex->SetOffsets(1, tex->GetScaleX() / scalex * LeftOffset[1], tex->GetScaleY() / scaley * TopOffset[1]);
+					// HACK ALERT! Assuming we have half-res sprites here for now
+					tex->SetOffsets(0, LeftOffset[0] * 0.5, TopOffset[0] * 0.5);
+					tex->SetOffsets(1, LeftOffset[1] * 0.5, TopOffset[1] * 0.5);
+				}
+				else {
+					tex->SetOffsets(0, LeftOffset[0], TopOffset[0]);
+					tex->SetOffsets(1, LeftOffset[1], TopOffset[1]);
+				}*/
+
 				tex->SetWorldPanning(bWorldPanning);
 				tex->SetNoTrimming(bNoTrim);
 				tex->SetNoMipmaps(!mips);

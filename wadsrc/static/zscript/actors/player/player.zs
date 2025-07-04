@@ -654,7 +654,7 @@ class PlayerPawn : Actor
 			}
 		}
 
-		if (Alternative)
+		if (Alternative || !g_viewbob)
 		{
 			bob = 0;
 		}

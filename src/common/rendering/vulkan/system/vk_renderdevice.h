@@ -37,13 +37,19 @@ struct VkTexLoadSpi {
 	bool generateSpi, shouldExpand, notrimming;
 };
 
+enum VkTexLoadInFlags {
+	TEXLOAD_ALLOWMIPS		= 1,
+	TEXLOAD_ALLOWQUALITY	= 1 << 1
+};
+
 struct VkTexLoadIn {
-	FImageSource *imgSource;
-	FImageLoadParams *params;
+	FImageSource* imgSource;
+	FImageLoadParams* params;
 	VkTexLoadSpi spi;
-	VkHardwareTexture *tex;					// Texture is created in main thread
-	FGameTexture *gtex;
-	bool allowMipmaps;
+	VkHardwareTexture* tex;					// Texture is created in main thread
+	FGameTexture* gtex;
+	int8_t flags;
+	//bool allowMipmaps;
 };
 
 struct VkTexLoadOut {
@@ -57,6 +63,7 @@ struct VkTexLoadOut {
 	unsigned char* pixels = nullptr;		// Returned when we can't upload in the backghround thread
 	size_t pixelsSize = 0, totalDataSize = 0;
 	int pixelW = 0, pixelH = 0;
+	int8_t flags;
 };
 
 struct VkModelLoadIn {

@@ -238,7 +238,7 @@ void HWWall::ProcessDecal(HWDrawInfo *di, DBaseDecal *decal, const FVector3 &nor
 		gl_texture_thread &&
 		screen->SupportsBackgroundCache()) {
 
-		int scaleflags = 0;
+		int scaleflags = CTF_ReduceQuality;
 		if (shouldUpscale(texture, UF_Sprite)) scaleflags |= CTF_Upscale;
 
 		FMaterial * gltex = FMaterial::ValidateTexture(texture, scaleflags, false);

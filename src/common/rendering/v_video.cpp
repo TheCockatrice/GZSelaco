@@ -445,6 +445,27 @@ void IVideo::DumpAdapters ()
 	Printf("Multi-monitor support unavailable.\n");
 }
 
+void IVideo::DumpAdapters(TArray<FString> &ar)
+{
+	// Do nothing
+}
+
+
+DEFINE_ACTION_FUNCTION(_Screen, GetScreenList)
+{
+	PARAM_PROLOGUE;
+	PARAM_POINTER(lst, TArray<FString>);
+
+	lst->clear();
+
+	if (Video != NULL) {
+		Video->DumpAdapters(*lst);
+	}
+
+	ACTION_RETURN_INT(lst->size());
+}
+
+
 CUSTOM_CVAR(Bool, vid_fullscreen, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG | CVAR_NOINITCALL)
 {
 	setmodeneeded = true;

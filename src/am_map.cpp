@@ -71,6 +71,8 @@
 #include "d_buttons.h"
 #include "texturemanager.h"
 
+#include "vm.h"
+
 
 //=============================================================================
 //
@@ -280,6 +282,35 @@ CCMD(am_zoom)
 		am_zoomdir = (float)atof(argv[1]);
 	}
 }
+
+
+static int AutomapToggle() { 
+	if (gameaction == ga_nothing)
+	{
+		gameaction = ga_togglemap;
+	}
+
+	return 1; 
+}
+
+static int AutomapClose() {
+	AM_Stop();
+	return 1;
+}
+
+
+DEFINE_ACTION_FUNCTION_NATIVE(_Screen, ToggleAutomap, AutomapToggle)
+{
+	PARAM_PROLOGUE;
+	ACTION_RETURN_INT(AutomapToggle());
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(_Screen, CloseAutomap, AutomapClose)
+{
+	PARAM_PROLOGUE;
+	ACTION_RETURN_INT(AutomapToggle());
+}
+
 
 
 //=============================================================================

@@ -3419,6 +3419,15 @@ FxExpression *ZCCCompiler::ConvertNode(ZCC_TreeNode *ast, bool substitute)
 		auto iff = static_cast<ZCC_IfStmt *>(ast);
 		FxExpression *const truePath = ConvertImplicitScopeNode(ast, iff->TruePath);
 		FxExpression *const falsePath = ConvertImplicitScopeNode(ast, iff->FalsePath);
+		
+		// @Cockatrice - Check for an empty if statement by making sure one path with expressions exists
+		// Blame Nexxtic for constantly putting a ; after IF statement
+		if ((truePath == nullptr || dynamic_cast<FxNop*>(truePath) != nullptr) &&
+			(falsePath == nullptr || dynamic_cast<FxNop*>(falsePath) != nullptr)
+			) {
+			Error(iff->Condition, "IF statement with no body. Check for a rogue semicolon.");
+		}
+
 		return new FxIfStatement(ConvertNode(iff->Condition), truePath, falsePath, *ast);
 	}
 

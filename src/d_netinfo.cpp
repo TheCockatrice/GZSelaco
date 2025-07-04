@@ -70,6 +70,7 @@ CVAR (Float,	wbobfire,				0.f,		CVAR_USERINFO | CVAR_ARCHIVE);
 CVAR (String,	playerclass,			"Dawn",		CVAR_USERINFO | CVAR_ARCHIVE);
 CVAR (Bool,		classicflight,			false,		CVAR_USERINFO | CVAR_ARCHIVE);
 CVAR (Bool,		vertspread,				false,		CVAR_USERINFO | CVAR_ARCHIVE);
+CVAR (Bool,		g_viewbob,				true,		CVAR_SERVERINFO | CVAR_ARCHIVE);
 
 enum
 {

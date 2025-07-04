@@ -520,7 +520,7 @@ int M_GetSavegamesPaths(TArray<FString>& outputAr) {
 	path = "";
 
 	// Try Saved Games
-	path = GetKnownFolder(-1, FOLDERID_SavedGames, false);
+	path = GetKnownFolder(-1, FOLDERID_SavedGames, false, false);
 	if(!path.IsEmpty()) {
 		path << "/" GAMENAME "/";
 		outputAr.Push(path);

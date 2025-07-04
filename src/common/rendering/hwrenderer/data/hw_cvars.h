@@ -6,6 +6,7 @@
 EXTERN_CVAR(Bool,gl_enhanced_nightvision)
 EXTERN_CVAR(Int, screenblocks);
 EXTERN_CVAR(Int, gl_texture_filter)
+EXTERN_CVAR(Int, gl_texture_quality)
 EXTERN_CVAR(Float, gl_texture_filter_anisotropic)
 EXTERN_CVAR(Int, gl_texture_format)
 EXTERN_CVAR(Bool, gl_usefb)

@@ -1033,6 +1033,8 @@ void HWSprite::Process(HWDrawInfo *di, AActor* thing, sector_t * sector, area_t 
 		int scaleflags = (type == RF_FACESPRITE) ? CTF_Expand : 0;
 		if (shouldUpscale(tex, UF_Sprite)) scaleflags |= CTF_Upscale;
 
+		scaleflags |= CTF_ReduceQuality;	// Allow quality reduction when possible and specified with gl_texture_quality
+
 		// @Cockatrice - If this texture is not loaded, and we are able to BG load it, try to render this sprites last frame instead
 		// Also load the texture
 		// Reusing the last patch will have the flaw of not matching the last translation, but this is a rare instance and we will ignore it for now 
@@ -1837,7 +1839,10 @@ void HWSprite::ProcessDefinedParticle(HWDrawInfo* di, particledata_t* particle, 
 				gl_texture_thread &&
 				screen->SupportsBackgroundCache()) 
 			{
-				FMaterial* gltex = FMaterial::ValidateTexture(texture, 0, false);
+				int scaleflags = texture->ShouldExpandSprite() ? CTF_Expand : 0;
+				if (shouldUpscale(texture, UF_Sprite)) scaleflags |= CTF_Upscale;
+
+				FMaterial* gltex = FMaterial::ValidateTexture(texture, scaleflags, false);
 				if (!gltex || !gltex->IsHardwareCached(0))
 				{
 					if (gltex) 
@@ -1846,7 +1851,7 @@ void HWSprite::ProcessDefinedParticle(HWDrawInfo* di, particledata_t* particle, 
 					}
 					else 
 					{
-						screen->BackgroundCacheTextureMaterial(texture, translation, 0, true);
+						screen->BackgroundCacheTextureMaterial(texture, translation, scaleflags, true);
 					}
 
 					if (lastTexture.isValid())

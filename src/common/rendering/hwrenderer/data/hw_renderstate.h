@@ -638,6 +638,7 @@ public:
 		if (!sysCallbacks.PreBindTexture || !sysCallbacks.PreBindTexture(this, tex, upscalemask, scaleflags, clampmode, translation, overrideshader))
 		{
 			if (shouldUpscale(tex, upscalemask)) scaleflags |= CTF_Upscale;
+			if (shouldScaleQuality(tex)) scaleflags |= CTF_ReduceQuality;
 		}
 		auto mat = FMaterial::ValidateTexture(tex, scaleflags);
 		assert(mat);

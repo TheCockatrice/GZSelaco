@@ -181,8 +181,9 @@ public:
 	{
  		Matrix3x4 other{};
 
-		float c = (float)g_cosdeg(angle);
-		float s = (float)g_sindeg(angle);
+		float rads = angle * (pi::pif() / 180.0f);
+		float c = cosf(rads);
+		float s = sinf(rads);
 
  		other.m[0][0] = 1.0f;
  		
@@ -199,8 +200,9 @@ public:
 	{
  		Matrix3x4 other{};
 
-		float c = (float)g_cosdeg(angle);
-		float s = (float)g_sindeg(angle);
+		float rads = angle * (pi::pif() / 180.0f);
+		float c = cosf(rads);
+		float s = sinf(rads);
 
  		other.m[0][0] = c;
  		other.m[0][2] = s;

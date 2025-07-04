@@ -87,6 +87,7 @@ struct particledata_t
 	uint8_t renderStyle;						// +1
 	int16_t life;								// +2 
 	int16_t startLife;							// +2 
+	int16_t driftTime;							// +2
 	DVector3 prevpos;							// +24
 	DVector3 pos;								// +24
 	DVector3 vel;								// +24
@@ -100,7 +101,7 @@ struct particledata_t
 	float roll, rollStep;						// +8 
 	int16_t bounces, maxBounces;				// +4
 	float floorz, ceilingz;						// +8
-	float restzoffset;							// +4
+	secplane_t* restplane;						// +8
 	int color;									// +4
 	FTextureID texture, lastTexture;			// +8
 	uint8_t animFrame, animTick;				// +2 
@@ -116,7 +117,10 @@ struct particledata_t
 	void Init(FLevelLocals* Level, DVector3 initialPos);
 
 	bool CheckWater(double* outSurfaceHeight);
+	float GetFloorHeight();
+	secplane_t* GetFloorPlane();
 	void UpdateUnderwater();
+	void UpdateDrift();
 
 	AActor* SpawnActor(PClassActor* actorClass, const DVector3& offset);
 	FSoundHandle PlaySound(int soundid, float volume, float attenuation, float pitch);
@@ -183,6 +187,12 @@ public:
 	float RollDamping = 0, RollDampingBounce = 0.3f;
 	float RestingPitchMin = 0, RestingPitchMax = 0, RestingPitchSpeed = -1;
 	float RestingRollMin = 0, RestingRollMax = 0, RestingRollSpeed = -1;
+
+	float DriftSlowdown = 0.96f;
+	float DriftDirectionSpeed = 35;
+	float DriftOscillationSpeed = 45;
+	float DriftRandomFactor = 25;
+	float DriftVelocityAdjustment = 0;
 
 	float MaxStepHeight = 8;
 	float MinGravity = 0, MaxGravity = 0;

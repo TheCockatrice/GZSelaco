@@ -54,6 +54,10 @@ FMaterial::FMaterial(FGameTexture * tx, int scaleflags)
 	auto imgtex = tx->GetTexture();
 	mTextureLayers.Push({ imgtex, scaleflags, -1 });
 
+	if (scaleflags & CTF_ReduceQuality) {
+		mTextureLayers[0].scaleFlags |= CTF_ReduceQuality;
+	}
+
 	if (tx->GetUseType() == ETextureType::SWCanvas && static_cast<FWrapperTexture*>(imgtex)->GetColorFormat() == 0)
 	{
 		mShaderIndex = SHADER_Paletted;
@@ -151,7 +155,8 @@ FMaterial::FMaterial(FGameTexture * tx, int scaleflags)
 	mScaleFlags = scaleflags;
 
 	mTextureLayers.ShrinkToFit();
-	tx->Material[scaleflags] = this;
+	int index = scaleflags & ~CTF_ReduceQuality;
+	tx->Material[index] = this;
 	if (tx->isHardwareCanvas()) tx->SetTranslucent(false);
 }
 
@@ -238,10 +243,14 @@ FMaterial * FMaterial::ValidateTexture(FGameTexture * gtex, int scaleflags, bool
 	{
 		if (scaleflags & CTF_Indexed) scaleflags = CTF_Indexed;
 		if (!gtex->expandSprites()) scaleflags &= ~CTF_Expand;
+		
+		FMaterial* hwtex;
+		hwtex = gtex->Material[scaleflags & ~CTF_ReduceQuality];
 
-		FMaterial *hwtex = gtex->Material[scaleflags];
 		if (hwtex == NULL && create)
 		{
+			if (shouldScaleQuality(gtex)) scaleflags |= CTF_ReduceQuality;
+
 			hwtex = screen->CreateMaterial(gtex, scaleflags);
 		}
 		return hwtex;

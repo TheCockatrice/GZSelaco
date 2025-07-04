@@ -28,6 +28,34 @@ struct GlTexLoadSpi {
 	bool generateSpi, shouldExpand, notrimming;
 };
 
+
+enum GLTexLoadFlags {
+	GL_TEXLOAD_ALLOWMIPS		= 1,		// Mipmaps allowed at all (IN)
+	GL_TEXLOAD_CREATEMIPS		= 1 << 1,	// Create mipmaps in main thread (OUT)
+	GL_TEXLOAD_ALLOWQUALITY		= 1 << 2,	// Allow quality reduction from gl_texture_quality (IN/OUT)
+	GL_TEXLOAD_ISTRANSLUCENT	= 1 << 3	// Texture loaded was translucent (OUT)
+};
+
+
+union GLTexLoadField {
+	struct {
+		bool AllowMips					: 1;
+		bool CreateMips					: 1;
+		bool AllowQualityReduction		: 1;
+		bool OutputIsTranslucent		: 1;
+		bool Unused1 : 1;
+		bool Unused2 : 1;
+		bool Unused3 : 1;
+		bool Unused4 : 1;
+	};
+
+	uint8_t mask = 0;
+};
+
+// @Cockatrice - One can never be too sure. Blame it on the compiler not me!
+static_assert(sizeof(GLTexLoadField) == sizeof(uint8_t));
+
+
 struct GlTexLoadIn {
 	FImageSource* imgSource;
 	FImageLoadParams* params;
@@ -35,7 +63,8 @@ struct GlTexLoadIn {
 	FHardwareTexture* tex;
 	FGameTexture* gtex;
 	int texUnit;
-	bool allowMipmaps;
+	GLTexLoadField flags;
+	//bool allowMipmaps; // Moved to flags
 };
 
 struct GlTexLoadOut {
@@ -43,12 +72,13 @@ struct GlTexLoadOut {
 	FGameTexture* gtex;
 	GlTexLoadSpiFull spi;
 	int conversion, translation, texUnit;
-	bool isTranslucent;
+	//bool isTranslucent;					// Moved to flags
 	FImageSource* imgSource;
 	unsigned char* pixels = nullptr;		// Returned when we can't upload in the backghround thread
 	size_t pixelsSize = 0, totalDataSize = 0;
 	int pixelW = 0, pixelH = 0, mipLevels = -1;
-	bool createMipmaps = false;
+	//bool createMipmaps = false;			// Moved to flags
+	GLTexLoadField flags;
 };
 
 struct GLModelLoadIn {

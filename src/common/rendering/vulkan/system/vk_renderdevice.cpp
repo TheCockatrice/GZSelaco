@@ -67,6 +67,7 @@
 #include "c_dispatch.h"
 #include "image.h"
 #include "model.h"
+#include "vm.h"
 
 
 FString JitCaptureStackTrace(int framesToSkip, bool includeNativeFrames, int maxFrames = -1);
@@ -114,6 +115,21 @@ CCMD(vk_listdevices)
 }
 
 
+DEFINE_ACTION_FUNCTION(_Screen, GetDeviceList)
+{
+	PARAM_PROLOGUE;
+	PARAM_POINTER(lst, TArray<FString>);
+
+	lst->clear();
+
+	for (size_t i = 0; i < SupportedDevices.size(); i++) {
+		lst->Push(SupportedDevices[i].Device->Properties.Properties.deviceName);
+	}
+
+	ACTION_RETURN_INT(lst->size());
+}
+
+
 void VulkanError(const char* text)
 {
 	throw CVulkanError(text);
@@ -156,14 +172,24 @@ ADD_STAT(vkloader)
 		sc->GetBGStats(minLoad, maxLoad, avgLoad);
 		sc->GetBGStats2(minFG, maxFG, avgFG);
 
-		FString out;
+		static VmaBudget budgets[10] = {};
+		VkDeviceSize a = 0, b = 0;
+
+		vmaGetHeapBudgets(sc->device->allocator, budgets);
+		for (auto& bud : budgets) {
+			a += bud.usage;
+			b += bud.budget;
+		}
+
+		FString out = "";
 		out.AppendFormat(
+			"VRAM: %dMB / %dMB\n"
 			"[%d Threads] Queued: %3.3d - %3.3d Out: %3.3d  Col: %d\nMax: %3.3d Max Sec: %3.3d Tot: %d\n"
 			"Models: %d\n"
 			"Min: %.3fms  FG: %.3fms\n"
 			"Max: %.3fms  FG: %.3fms\n"
 			"Avg: %.3fms  FG: %.3fms\n",
-			sc->GetNumThreads(), queue, secQueue, outSize, collisions, maxQueue, maxSecondaryQueue, total, models, minLoad, minFG, maxLoad, maxFG, avgLoad, avgFG
+			a / 1024 / 1024, b / 1024 / 1024, sc->GetNumThreads(), queue, secQueue, outSize, collisions, maxQueue, maxSecondaryQueue, total, models, minLoad, minFG, maxLoad, maxFG, avgLoad, avgFG
 		);
 		return out;
 	}
@@ -253,34 +279,42 @@ VkTexLoadThread::~VkTexLoadThread() {
 }
 
 
-static void TempUploadTexture(VkCommandBufferManager *cmd, VkHardwareTexture *tex, VkFormat fmt, int buffWidth, int buffHeight, unsigned char *pixelData, size_t pixelDataSize, size_t totalSize, bool mipmap = true, bool gpuOnly = false, bool indexed = false) {
+static void TempUploadTexture(VkCommandBufferManager *cmd, VkHardwareTexture *tex, VkFormat fmt, int buffWidth, int buffHeight, unsigned char *pixelData, size_t pixelDataSize, size_t totalSize, bool mipmap = true, bool gpuOnly = false, bool indexed = false, bool allowQualityReduction = false) {
 	if (gpuOnly) {
 		uint32_t numMipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(buffWidth, buffHeight)))) + 1;
-		if (!mipmap) {
-			// Skip mips
-			tex->BackgroundCreateTexture(cmd, buffWidth, buffHeight, 4, fmt, pixelData, false, false, (int)pixelDataSize);
-		}
-		else {
-			// Base texture
-			tex->BackgroundCreateTexture(cmd, buffWidth, buffHeight, indexed ? 1 : 4, fmt, pixelData, true, false, (int)pixelDataSize);
+		uint32_t mipWidth = buffWidth, mipHeight = buffHeight;
+		size_t mipSize = pixelDataSize, dataPos = 0;
+		const int startMip = allowQualityReduction ? min((int)gl_texture_quality, (int)numMipLevels - 1) : 0;
+		int mipCnt = 0, maxMips = mipmap ? numMipLevels - startMip : 1;
+		
 
-			// Mips
-			uint32_t mipWidth = buffWidth, mipHeight = buffHeight;
-			uint32_t mipSize = (uint32_t)pixelDataSize, dataPos = (uint32_t)pixelDataSize;
+		assert(indexed == false);
 
-			for (uint32_t x = 1; x < numMipLevels; x++) {
-				mipWidth = std::max(1u, (mipWidth >> 1));
-				mipHeight = std::max(1u, (mipHeight >> 1));
-				mipSize = std::max(1u, ((mipWidth + 3) / 4)) * std::max(1u, ((mipHeight + 3) / 4)) * 16;
-				if (mipSize == 0 || totalSize - dataPos < mipSize)
-					break;
-				tex->BackgroundCreateTextureMipMap(cmd, x, mipWidth, mipHeight, 4, fmt, pixelData + dataPos, mipSize);
-				dataPos += mipSize;
+		for (uint32_t x = 0; x < numMipLevels && mipCnt < maxMips; x++) {
+			if (mipSize == 0 || totalSize - dataPos < mipSize)
+				break;
+
+			if (x >= startMip) {
+				mipCnt++;
+				if (x == startMip) {
+					// Base texture
+					tex->BackgroundCreateTexture(cmd, mipWidth, mipHeight, 4, fmt, pixelData + dataPos, numMipLevels - startMip, false, mipSize);
+				}
+				else {
+					// Mip
+					tex->BackgroundCreateTextureMipMap(cmd, x - startMip, mipWidth, mipHeight, 4, fmt, pixelData + dataPos, mipSize);
+				}
 			}
+				
+			dataPos += mipSize;
+
+			mipWidth = std::max(1u, (mipWidth >> 1));
+			mipHeight = std::max(1u, (mipHeight >> 1));
+			mipSize = (size_t)std::max(1u, ((mipWidth + 3) / 4)) * std::max(1u, ((mipHeight + 3) / 4)) * 16;
 		}
 	}
 	else {
-		tex->BackgroundCreateTexture(cmd, buffWidth, buffHeight, indexed ? 1 : 4, fmt, pixelData, mipmap, mipmap, (int)pixelDataSize);
+		tex->BackgroundCreateTexture(cmd, buffWidth, buffHeight, indexed ? 1 : 4, fmt, pixelData, mipmap ? -1 : 0, mipmap, (int)pixelDataSize);
 	}
 }
 
@@ -299,6 +333,7 @@ bool VkTexLoadThread::loadResource(VkTexLoadIn &input, VkTexLoadOut &output) {
 	output.spi.shouldExpand = input.spi.shouldExpand;
 	output.gtex = input.gtex;
 	output.releaseSemaphore = nullptr;
+	output.flags = input.flags;
 
 	auto *src = input.imgSource;
 	bool gpu = src->IsGPUOnly();
@@ -308,7 +343,8 @@ bool VkTexLoadThread::loadResource(VkTexLoadIn &input, VkTexLoadOut &output) {
 	int buffWidth = src->GetWidth() + 2 * exx;
 	int buffHeight = src->GetHeight() + 2 * exx;
 	bool indexed = false;	// TODO: Determine this properly
-	bool mipmap = !indexed && input.allowMipmaps;
+	bool allowMips = (input.flags & TEXLOAD_ALLOWMIPS);
+	bool mipmap = !indexed && allowMips;
 	VkFormat fmt = indexed ? VK_FORMAT_R8_UNORM : VK_FORMAT_B8G8R8A8_UNORM;
 	VulkanDevice* device = cmd != nullptr ? cmd->GetRenderDevice()->device.get() : nullptr;
 
@@ -356,15 +392,15 @@ bool VkTexLoadThread::loadResource(VkTexLoadIn &input, VkTexLoadOut &output) {
 			// Only perform upload if we have a command buffer
 			if (cmd) {
 				mipmap = false;	// Don't generate mipmaps past this point
-				TempUploadTexture(cmd, output.tex, fmt, buffWidth, buffHeight, pixelData, pixelDataSize, totalSize, input.allowMipmaps && numMipLevels == (int)expectedMipLevels && numMipLevels > 0, true, indexed);
+				TempUploadTexture(cmd, output.tex, fmt, buffWidth, buffHeight, pixelData, pixelDataSize, totalSize, allowMips && numMipLevels == (int)expectedMipLevels && numMipLevels > 0, true, indexed, input.flags & TEXLOAD_ALLOWQUALITY);
 			}
 			else {
-				mipmap = input.allowMipmaps && numMipLevels == (int)expectedMipLevels && numMipLevels > 0;	// Upload mipmaps if the science is correct
+				mipmap = allowMips && numMipLevels == (int)expectedMipLevels && numMipLevels > 0;	// Upload mipmaps if the science is correct
 			}
 
 			if (input.spi.generateSpi) {
 				// Generate sprite data without pixel data, since no trimming should occur
-				FGameTexture::GenerateEmptySpriteData(output.spi.info, buffWidth, buffHeight);
+				FGameTexture::GenerateEmptySpriteData(output.spi.info, input.gtex ? input.gtex->GetTexelWidth() : buffWidth, input.gtex ? input.gtex->GetTexelHeight() : buffHeight);
 			}
 		}
 		else {
@@ -401,7 +437,7 @@ bool VkTexLoadThread::loadResource(VkTexLoadIn &input, VkTexLoadOut &output) {
 
 		// Upload non-gpu only textures
 		if (!gpu) {
-			output.tex->BackgroundCreateTexture(cmd, buffWidth, buffHeight, indexed ? 1 : 4, fmt, pixelData, mipmap, mipmap, (int)pixelDataSize);
+			output.tex->BackgroundCreateTexture(cmd, buffWidth, buffHeight, indexed ? 1 : 4, fmt, pixelData, mipmap ? -1 : 0, mipmap, (int)pixelDataSize);
 		}
 
 		// Wait for operations to finish, since we can't maintain a regular loop of clearing the buffer
@@ -717,7 +753,7 @@ void VulkanRenderDevice::UploadLoadedTextures(bool flush) {
 
 		assert(loaded.pixels);
 
-		TempUploadTexture(mCommands.get(), loaded.tex, fmt, loaded.pixelW, loaded.pixelH, loaded.pixels, loaded.pixelsSize, loaded.totalDataSize, loaded.createMipmaps, gpuOnly, false);
+		TempUploadTexture(mCommands.get(), loaded.tex, fmt, loaded.pixelW, loaded.pixelH, loaded.pixels, loaded.pixelsSize, loaded.totalDataSize, loaded.createMipmaps, gpuOnly, false, loaded.flags & TEXLOAD_ALLOWQUALITY);
 		free(loaded.pixels);
 		loaded.pixels = 0;
 
@@ -1055,7 +1091,9 @@ bool VulkanRenderDevice::BackgroundCacheTextureMaterial(FGameTexture *tex, FTran
 // @Cockatrice - Submit each texture in the material to the background loader
 // Call from main thread only
 bool VulkanRenderDevice::BackgroundCacheMaterial(FMaterial *mat, FTranslationID translation, bool makeSPI, bool secondary) {
-	if (mat->Source()->GetUseType() == ETextureType::SWCanvas) {
+	const auto useType = mat->Source()->GetUseType();
+
+	if (useType == ETextureType::SWCanvas) {
 		return false;
 	}
 
@@ -1072,7 +1110,11 @@ bool VulkanRenderDevice::BackgroundCacheMaterial(FMaterial *mat, FTranslationID 
 	VkTexLoadSpi spi = {};
 
 	bool shouldExpand = mat->sourcetex->ShouldExpandSprite() && (layer->scaleFlags & CTF_Expand);
-	bool allowMips = !mat->sourcetex->GetNoMipmaps();
+	int8_t flags = 0;
+
+	if (!mat->sourcetex->GetNoMipmaps()) flags |= TEXLOAD_ALLOWMIPS;
+	if (layer->scaleFlags & CTF_ReduceQuality) 
+		flags |= TEXLOAD_ALLOWQUALITY;
 
 	// If the texture is already submitted to the cache, find it and move it to the normal queue to reprioritize it
 	if (lumpExists && !secondary && systex->GetState() == IHardwareTexture::HardwareState::CACHING) {
@@ -1107,7 +1149,7 @@ bool VulkanRenderDevice::BackgroundCacheMaterial(FMaterial *mat, FTranslationID 
 				spi,
 				systex,
 				mat->sourcetex,
-				allowMips
+				flags
 			};
 
 			if (secondary) secondaryTexQueue.queue(in);
@@ -1128,7 +1170,8 @@ bool VulkanRenderDevice::BackgroundCacheMaterial(FMaterial *mat, FTranslationID 
 		lump = layer->layerTexture->GetSourceLump();
 		bool lumpExists = fileSystem.FileLength(lump) >= 0;
 
-		if (lump == 0) continue;
+		if (lump == 0) 
+			continue;
 		if (lumpExists && syslayer->GetState() == IHardwareTexture::HardwareState::CACHING) {
 			// Move from secondary queue to primary
 			VkTexLoadIn in;
@@ -1158,7 +1201,7 @@ bool VulkanRenderDevice::BackgroundCacheMaterial(FMaterial *mat, FTranslationID 
 					},
 					syslayer,
 					nullptr,
-					allowMips
+					flags
 				};
 
 				if (secondary) secondaryTexQueue.queue(in);

@@ -113,6 +113,49 @@ static void PrecacheSprite(FGameTexture *tex, SpriteHits &hits)
 }
 
 
+// @Cockatrice - Used to unload sprites after texture quality has changed
+void hw_unloadQualitySprites() {
+	screen->FlushBackground();
+
+	for (int i = 1; i < TexMan.NumTextures(); i++)
+	{
+		auto gametex = TexMan.GameByIndex(i);
+		if (gametex && gametex->isValid() &&
+			gametex->GetTexture()->GetImage() && 
+			shouldScaleQuality(gametex))
+		{
+			TArray<FTexture*> layers;
+			gametex->GetLayers(layers);
+
+			for (auto layer : layers) {
+				if (layer->GetImage() && layer->GetImage()->IsGPUOnly()) {
+					layer->CleanHardwareTextures();
+				}
+			}
+		}
+	}
+}
+
+
+void hw_unloadTexture(FGameTexture* tex) {
+	if (tex && tex->isValid()) {
+		TArray<FTexture*> layers;
+		tex->GetLayers(layers);
+
+		for (auto layer : layers) {
+			if (layer->GetImage()) {
+				layer->CleanHardwareTextures();
+			}
+		}
+
+		for (int x = 0; x < 5; x++) {
+			FMaterial* mat = tex->GetMaterial(x);
+			if (mat) mat->DeleteDescriptors();
+		}
+	}
+}
+
+
 //==========================================================================
 //
 // DFrameBuffer :: Precache
@@ -338,6 +381,7 @@ void hw_PrecacheTexture(uint8_t *texhitlist, TMap<PClassActor*, bool> &actorhitl
 			{
 				int scaleflags = CTF_Expand;
 				if (shouldUpscale(tex, UF_Sprite)) scaleflags |= CTF_Upscale;
+				if (shouldScaleQuality(tex)) scaleflags |= CTF_ReduceQuality;
 
 				FMaterial *mat = FMaterial::ValidateTexture(tex, true, true);
 				if (mat != nullptr)

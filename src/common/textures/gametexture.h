@@ -93,7 +93,7 @@ class FGameTexture
 	FTextureID id;
 
 	uint16_t TexelWidth, TexelHeight;
-	int16_t LeftOffset[2], TopOffset[2];
+	float LeftOffset[2], TopOffset[2];
 	float DisplayWidth, DisplayHeight;
 	float ScaleX, ScaleY;
 
@@ -160,8 +160,8 @@ public:
 	int GetSourceLump() const { return Base->GetSourceLump(); }
 	void SetBrightmap(FGameTexture* tex) { Brightmap = tex->GetTexture(); }
 
-	int GetTexelLeftOffset(int adjusted = 0) const { return LeftOffset[adjusted]; }
-	int GetTexelTopOffset(int adjusted = 0) const { return TopOffset[adjusted]; }
+	float GetTexelLeftOffset(int adjusted = 0) const { return LeftOffset[adjusted]; }
+	float GetTexelTopOffset(int adjusted = 0) const { return TopOffset[adjusted]; }
 	float GetDisplayLeftOffset(int adjusted = 0) const { return LeftOffset[adjusted] / ScaleX; }
 	float GetDisplayTopOffset(int adjusted = 0) const { return TopOffset[adjusted] / ScaleY; }
 
@@ -174,6 +174,7 @@ public:
 	void SetWorldPanning(bool on) { if (on) flags |= GTexf_WorldPanning; else flags &= ~GTexf_WorldPanning; }
 	void SetNoTrimming(bool on) { if (on) flags |= GTexf_NoTrim; else flags &= ~GTexf_NoTrim; }
 	void SetNoMipmaps(bool on) { if (on) flags |= GTexf_NoMips; else flags &= ~GTexf_NoMips; }
+	void SetNeverExpand(bool never) { expandSprite = never ? 0 : -1; }
 	bool GetNoTrimming() { return !!(flags & GTexf_NoTrim); }
 	bool GetNoMipmaps() const { return !!(flags & GTexf_NoMips); }
 	bool allowNoDecals() const { return !!(flags & GTexf_NoDecals);	}
@@ -286,6 +287,11 @@ public:
 		SetDisplaySize(float(x), float(y));
 		if (GetTexture()) GetTexture()->SetSize(x, y);
 	}
+	void SetApparentSize(int x, int y) {
+		TexelWidth = x;
+		TexelHeight = y;
+		SetDisplaySize(float(x), float(y));
+	}
 	void SetDisplaySize(float w, float h) 
 	{ 
 		DisplayWidth = w;
@@ -302,12 +308,12 @@ public:
 	{
 		Base = Tex;
 	}
-	void SetOffsets(int which, int x, int y)
+	void SetOffsets(int which, float x, float y)
 	{
 		LeftOffset[which] = x;
 		TopOffset[which] = y;
 	}
-	void SetOffsets(int x, int y)
+	void SetOffsets(float x, float y)
 	{
 		LeftOffset[0] = x;
 		TopOffset[0] = y;
@@ -464,6 +470,11 @@ inline int shouldUpscale(FGameTexture* tex, EUpscaleFlags UseType)
 	// This only checks the global scale mask and the texture's validation for upscaling. Everything else has been done up front elsewhere.
 	if (!(upscalemask & UseType)) return 0;
 	return tex->GetUpscaleFlag();
+}
+
+inline bool shouldScaleQuality(FGameTexture* tex) {
+	auto useType = tex->GetUseType();
+	return useType == ETextureType::Sprite || useType == ETextureType::SkinSprite || useType == ETextureType::Decal;
 }
 
 struct FTexCoordInfo

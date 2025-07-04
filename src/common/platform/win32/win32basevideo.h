@@ -14,6 +14,7 @@ public:
 	Win32BaseVideo();
 
 	void DumpAdapters();
+	void DumpAdapters(TArray<FString>& ar);
 
 	HDC m_hDC;
 

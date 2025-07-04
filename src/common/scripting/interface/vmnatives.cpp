@@ -465,6 +465,18 @@ DEFINE_ACTION_FUNCTION_NATIVE(_TexMan, FindTextures, FindTextures)
 	ACTION_RETURN_INT(FindTextures(search, out, type, flags));
 }
 
+extern void hw_unloadTexture(FGameTexture *tex);
+
+DEFINE_ACTION_FUNCTION(_TexMan, UnloadTexture)
+{
+	PARAM_PROLOGUE;
+	PARAM_INT(texid);
+	
+	auto tex = TexMan.GameByIndex(texid, false);
+	hw_unloadTexture(tex);
+	ACTION_RETURN_INT(1);
+}
+
 //==========================================================================
 //
 //
