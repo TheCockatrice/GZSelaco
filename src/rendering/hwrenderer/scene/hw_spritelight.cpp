@@ -46,7 +46,7 @@ T smoothstep(const T edge0, const T edge1, const T x)
 	return t * t * (3.0 - 2.0 * t);
 }
 
-LightProbe* FindLightProbe(FLevelLocals* level, float x, float y, float z)
+LightProbe* FindLightProbe(FLevelLocals* level, float x, float y, float z, float floorz /* = -FLT_MAX */)
 {
 	LightProbe* foundprobe = nullptr;
 	if (level->LightProbes.Size() > 0)
@@ -58,6 +58,7 @@ LightProbe* FindLightProbe(FLevelLocals* level, float x, float y, float z)
 		int gridWidth = level->LPWidth;
 		int gridHeight = level->LPHeight;
 		float lastdist = 0.0f;
+
 		for (int gridY = gridCenterY - 1; gridY <= gridCenterY + 1; gridY++)
 		{
 			for (int gridX = gridCenterX - 1; gridX <= gridCenterX + 1; gridX++)
@@ -68,14 +69,18 @@ LightProbe* FindLightProbe(FLevelLocals* level, float x, float y, float z)
 					for (int i = 0; i < cell.NumProbes; i++)
 					{
 						LightProbe* probe = cell.FirstProbe + i;
-						float dx = probe->X - x;
-						float dy = probe->Y - y;
-						float dz = probe->Z - z;
-						float dist = dx * dx + dy * dy + dz * dz;
-						if (!foundprobe || dist < lastdist)
+						// Check the probe isn't under the floor, which can happen with thin 3D floors
+						if (floorz < probe->Z)
 						{
-							foundprobe = probe;
-							lastdist = dist;
+							float dx = probe->X - x;
+							float dy = probe->Y - y;
+							float dz = probe->Z - z;
+							float dist = dx * dx + dy * dy + dz * dz;
+							if (!foundprobe || dist < lastdist)
+							{
+								foundprobe = probe;
+								lastdist = dist;
+							}
 						}
 					}
 				}
@@ -101,9 +106,19 @@ LightProbe* FindLightProbe(FLevelLocals* level, float x, float y, float z)
 	return foundprobe;
 }
 
-bool TryGetLightProbeColor(FLevelLocals* level, float x, float y, float z, FVector3& out)
+bool TryGetLightProbeColor(FLevelLocals* level, AActor* actor, FVector3& out)
 {
-	if (LightProbe* probe = FindLightProbe(level, x, y, z))
+	if (!actor)
+	{
+		return false;
+	}
+
+	return TryGetLightProbeColor(level, actor->X(), actor->Y(), actor->Center(), out, actor->floorz);
+}
+
+bool TryGetLightProbeColor(FLevelLocals* level, float x, float y, float z, FVector3& out, float floorz /* = -FLT_MAX */)
+{
+	if (LightProbe* probe = FindLightProbe(level, x, y, z, floorz))
 	{
 		out = probe->CalculateColor(level);
 		return true;
