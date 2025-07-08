@@ -1698,6 +1698,9 @@ void FLevelLocals::StartTravel ()
 					inv->ChangeStatNum (STAT_TRAVELLING);
 					inv->UnlinkFromWorld (nullptr);
 					inv->DeleteAttachedLights();
+					tid = inv->tid;
+					inv->SetTID(0);
+					inv->tid = tid;
 				}
 			}
 		}
@@ -1802,7 +1805,7 @@ int FLevelLocals::FinishTravel ()
 		pawn->LinkToWorld (nullptr);
 		pawn->ClearInterpolation();
 		pawn->ClearFOVInterpolation();
-		const int tid = pawn->tid;	// Save TID (actor isn't linked into the hash chain yet)
+		int tid = pawn->tid;	// Save TID (actor isn't linked into the hash chain yet)
 		pawn->tid = 0;				// Reset TID
 		pawn->SetTID(tid);			// Set TID (and link actor into the hash chain)
 		pawn->SetState(pawn->SpawnState);
@@ -1813,6 +1816,9 @@ int FLevelLocals::FinishTravel ()
 			inv->ChangeStatNum (STAT_INVENTORY);
 			inv->LinkToWorld (nullptr);
 			P_FindFloorCeiling(inv, FFCF_ONLYSPAWNPOS);
+			tid = inv->tid;
+			inv->tid = 0;
+			inv->SetTID(tid);
 
 			IFVIRTUALPTRNAME(inv, NAME_Inventory, Travelled)
 			{
