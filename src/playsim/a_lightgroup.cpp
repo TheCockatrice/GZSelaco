@@ -231,7 +231,6 @@ void P_RenderLightGroups(FLevelLocals* level)
 	state.EnableFog(false);
 	state.SetScreenFade(1);
 	state.SetSoftLightLevel(255);
-	state.EnableModelMatrix(true);
 	state.EnableTextureMatrix(false);
 	state.ResetColor();
 }
