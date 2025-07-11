@@ -363,7 +363,10 @@ sector_t* RenderView(player_t* player)
 		// Draw all lightmaps
 		for (auto Level : AllLevels())
 		{
-			P_RenderLightGroups(Level);
+			if (Level->MasterLightmaps.size() > 0)
+			{
+				P_RenderLightGroups(Level);
+			}
 		}
 
 		// Draw all canvases that changed
