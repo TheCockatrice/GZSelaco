@@ -115,3 +115,6 @@ version "4.12"
 #include "zscript/compatibility.zs"
 #include "zscript/scriptutil/scriptutil.zs"
 #include "zscript/actors/mbf21.zs"
+
+// Archipelago integration
+#include "zscript/archipelago.zs"
