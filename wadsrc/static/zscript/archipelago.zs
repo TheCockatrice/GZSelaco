@@ -327,19 +327,19 @@ class ArchipelagoHelpers
     // Process received Archipelago items
     static void ProcessReceivedItems()
     {
-        Array<ArchipelagoItem> items = ArchipelagoManager.GetPendingItems();
+        int itemCount = ArchipelagoManager.GetPendingItemCount();
         
-        for (int i = 0; i < items.Size(); i++)
+        for (int i = 0; i < itemCount; i++)
         {
-            ArchipelagoItem item = items[i];
-            Console.Printf("Processing received item: %d from player %d", 
-                         item.itemId, item.playerId);
+            String itemInfo = ArchipelagoManager.GetPendingItemInfo(i);
+            Console.Printf("Processing received item: %s", itemInfo);
             
-            // Convert Archipelago item to Selaco item
-            GiveSelacoDItem(item);
+            // For now, just log the item processing
+            // In a full implementation, you'd parse itemInfo and give the actual item
+            Console.Printf("Item processed (placeholder implementation)");
         }
         
-        if (items.Size() > 0)
+        if (itemCount > 0)
         {
             ArchipelagoManager.ClearPendingItems();
         }
@@ -372,12 +372,12 @@ class ArchipelagoHelpers
         return 5000; // Placeholder
     }
     
-    // Give received item to player
-    private static void GiveSelacoDItem(ArchipelagoItem item)
+    // Give received item to player (simplified version)
+    private static void GiveSelacoDItem(String itemInfo)
     {
-        // Convert AP item ID to Selaco item and give to player
+        // Convert AP item info to Selaco item and give to player
         // This would integrate with Selaco's inventory system
-        Console.Printf("Giving Selaco item for AP item %d", item.itemId);
+        Console.Printf("Giving Selaco item for AP item: %s", itemInfo);
     }
 }
 
