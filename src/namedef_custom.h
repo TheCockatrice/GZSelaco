@@ -915,3 +915,4 @@ xx(frictionfactor)
 xx(movefactor)
 
 xx(Corona)
+xx(BuiltinStateOffset)
