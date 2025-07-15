@@ -273,6 +273,29 @@ class SelacoSetup:
         if not vcpkg_path.exists():
             raise SelacoBuildError(f"vcpkg executable not found: {vcpkg_path}")
         
+        # Create vcpkg.json manifest file
+        self.create_vcpkg_manifest()
+        
+        # Create vcpkg-configuration.json file for triplet specification
+        self.create_vcpkg_configuration()
+        
+        # Install dependencies using manifest mode
+        self.log_info("Installing dependencies from manifest...")
+        self.run_command([
+            str(vcpkg_path), "install"
+        ], cwd=self.root_dir)
+        
+        self.log_success("All dependencies installed")
+    
+    def create_vcpkg_configuration(self):
+        """Create vcpkg-configuration.json file for triplet specification"""
+        config_path = self.root_dir / "vcpkg-configuration.json"
+        
+        # Check if configuration already exists
+        if config_path.exists():
+            self.log_info("vcpkg-configuration.json already exists, skipping creation")
+            return
+        
         # Determine triplet
         if self.is_windows:
             triplet = "x64-windows"
@@ -281,29 +304,98 @@ class SelacoSetup:
         elif self.is_macos:
             triplet = "x64-osx"
         else:
-            raise SelacoBuildError(f"Unsupported platform: {self.system}")
+            triplet = "x64-linux"  # Default fallback
         
-        # Dependencies to install
-        dependencies = [
-            "rapidjson",
-            "zlib",
-            "bzip2",
-            "libjpeg-turbo",
-            "libpng",
-            "openal-soft",
-            "libvorbis",
-            "libflac",
-            "libsndfile",
-            "mpg123"
-        ]
+        config = {
+            "default-triplet": triplet,
+            "registries": [
+                {
+                    "kind": "git",
+                    "repository": "https://github.com/Microsoft/vcpkg",
+                    "baseline": "master",
+                    "packages": ["*"]
+                }
+            ]
+        }
         
-        for dep in dependencies:
-            self.log_info(f"Installing {dep}...")
-            self.run_command([
-                str(vcpkg_path), "install", f"{dep}:{triplet}"
-            ], cwd=self.vcpkg_dir)
+        try:
+            with open(config_path, 'w') as f:
+                json.dump(config, f, indent=2)
+            
+            self.log_success(f"vcpkg configuration created: {config_path}")
+            
+        except Exception as e:
+            self.log_warning(f"Failed to create vcpkg configuration: {e}")
+            # This is not critical, continue without it
+    
+    def create_vcpkg_manifest(self):
+        """Create vcpkg.json manifest file for dependencies"""
+        self.log_info("Creating vcpkg manifest...")
         
-        self.log_success("All dependencies installed")
+        manifest_path = self.root_dir / "vcpkg.json"
+        
+        # Check if manifest already exists
+        if manifest_path.exists():
+            self.log_info("vcpkg.json already exists, skipping creation")
+            return
+        
+        try:
+            # Get the current vcpkg baseline (commit hash)
+            result = self.run_command(["git", "rev-parse", "HEAD"], cwd=self.vcpkg_dir, check=False)
+            baseline = result.stdout.strip() if result.returncode == 0 else None
+            
+            # Create vcpkg.json manifest
+            manifest = {
+                "name": "selaco-archipelago",
+                "version": "1.0.0",
+                "description": "Selaco with Archipelago multiworld randomizer integration",
+                "dependencies": [
+                    "rapidjson",
+                    "zlib",
+                    "bzip2",
+                    "libjpeg-turbo",
+                    "libpng",
+                    "openal-soft",
+                    "libvorbis",
+                    "libflac",
+                    "libsndfile",
+                    "mpg123"
+                ]
+            }
+            
+            # Add baseline if we got it
+            if baseline:
+                manifest["builtin-baseline"] = baseline
+            
+            with open(manifest_path, 'w') as f:
+                json.dump(manifest, f, indent=2)
+            
+            self.log_success(f"vcpkg manifest created: {manifest_path}")
+            
+        except Exception as e:
+            self.log_error(f"Failed to create vcpkg manifest: {e}")
+            # Fall back to a simple manifest without baseline
+            manifest = {
+                "name": "selaco-archipelago",
+                "version": "1.0.0",
+                "dependencies": [
+                    "rapidjson",
+                    "zlib",
+                    "bzip2",
+                    "libjpeg-turbo",
+                    "libpng",
+                    "openal-soft",
+                    "libvorbis",
+                    "libflac",
+                    "libsndfile",
+                    "mpg123"
+                ]
+            }
+            
+            with open(manifest_path, 'w') as f:
+                json.dump(manifest, f, indent=2)
+            
+            self.log_success(f"vcpkg manifest created (without baseline): {manifest_path}")
     
     def setup_zmusic(self):
         """Set up ZMusic library"""
@@ -355,6 +447,16 @@ class SelacoSetup:
         
         if self.clean and self.build_dir.exists():
             shutil.rmtree(self.build_dir)
+        
+        # Clean vcpkg files if doing clean build
+        if self.clean:
+            vcpkg_manifest = self.root_dir / "vcpkg.json"
+            if vcpkg_manifest.exists():
+                vcpkg_manifest.unlink()
+            
+            vcpkg_config = self.root_dir / "vcpkg-configuration.json"
+            if vcpkg_config.exists():
+                vcpkg_config.unlink()
         
         self.build_dir.mkdir(parents=True, exist_ok=True)
         
@@ -520,6 +622,15 @@ fi
         
         self.log(f"\n{Colors.BOLD}Files Created:{Colors.RESET}")
         self.log_info(f"Configuration: {self.root_dir}/archipelago.cfg")
+        
+        # Check for vcpkg files
+        vcpkg_manifest = self.root_dir / "vcpkg.json"
+        if vcpkg_manifest.exists():
+            self.log_info(f"vcpkg Manifest: {vcpkg_manifest}")
+        
+        vcpkg_config = self.root_dir / "vcpkg-configuration.json"
+        if vcpkg_config.exists():
+            self.log_info(f"vcpkg Configuration: {vcpkg_config}")
         
         if self.is_windows:
             self.log_info(f"Launch Script: {self.root_dir}/launch_selaco.bat")
