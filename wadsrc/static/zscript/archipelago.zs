@@ -164,11 +164,6 @@ class ArchipelagoManager : EventHandler
         return GetArchipelagoInt("GetHintPoints");
     }
     
-    static play int GetReceivedItemCount()
-    {
-        return GetArchipelagoInt("GetReceivedItemCount");
-    }
-    
     static play int GetMessagesSent()
     {
         return GetArchipelagoInt("GetMessagesSent");
@@ -266,29 +261,6 @@ class ArchipelagoManager : EventHandler
                 SendChatMessage(args[1]);
             }
         }
-    }
-    
-    // Helper functions to interface with C++ code
-    private static bool CallArchipelagoFunction(String functionName, String arg1 = "", String arg2 = "", String arg3 = "", String arg4 = "")
-    {
-        // This would need to be implemented as a native function call
-        // For now, return a placeholder
-        Console.Printf("Called Archipelago function: %s", functionName);
-        return true;
-    }
-    
-    private static int GetArchipelagoInt(String functionName, String arg = "")
-    {
-        // This would need to be implemented as a native function call
-        // For now, return a placeholder
-        return 0;
-    }
-    
-    private static String GetArchipelagoString(String functionName, String arg = "")
-    {
-        // This would need to be implemented as a native function call
-        // For now, return empty string
-        return "";
     }
 }
 
