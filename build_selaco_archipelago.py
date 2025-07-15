@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Build script for Selaco with Archipelago integration
+Setup script for Selaco with Archipelago integration
+Configures build environment but doesn't compile - use Visual Studio or make to build
 Supports Windows, Linux, and macOS
 """
 
@@ -30,7 +31,7 @@ class SelacoBuildError(Exception):
     """Custom exception for build errors"""
     pass
 
-class SelacoBuilder:
+class SelacoSetup:
     def __init__(self, args):
         self.args = args
         self.root_dir = Path(__file__).parent.absolute()
@@ -362,18 +363,22 @@ class SelacoBuilder:
         
         self.log_success("CMake configuration complete")
     
-    def build_selaco(self):
-        """Build Selaco"""
-        self.log_info(f"Building Selaco ({self.build_type})...")
+    def setup_build_environment(self):
+        """Set up build environment without compiling"""
+        self.log_info("Build environment setup complete!")
+        self.log_info("Project configured and ready for compilation.")
         
-        build_args = ["cmake", "--build", ".", "--config", self.build_type]
+        if self.is_windows:
+            # Find Visual Studio solution file
+            sln_files = list(self.build_dir.glob("*.sln"))
+            if sln_files:
+                self.log_success(f"Visual Studio solution created: {sln_files[0].name}")
+            else:
+                self.log_info("Visual Studio project files should be in the build directory")
+        else:
+            self.log_info("Makefiles generated and ready for compilation")
         
-        if not self.is_windows:
-            build_args.extend(["--", f"-j{self.cpu_count}"])
-        
-        self.run_command(build_args, cwd=self.build_dir)
-        
-        self.log_success("Selaco build complete")
+        self.log_info("Skipping compilation - you can now build manually")
     
     def create_config_file(self):
         """Create Archipelago configuration file"""
@@ -441,7 +446,8 @@ if exist "build\\src\\{self.build_type}\\selaco.exe" (
     "build\\src\\selaco.exe" %*
 ) else (
     echo ERROR: Selaco executable not found!
-    echo Make sure the build completed successfully.
+    echo You need to build the project first.
+    echo Open the Visual Studio solution in the build directory and build it.
     pause
     exit /b 1
 )
@@ -465,7 +471,8 @@ if [ -f "build/src/selaco" ]; then
     ./build/src/selaco "$@"
 else
     echo "ERROR: Selaco executable not found!"
-    echo "Make sure the build completed successfully."
+    echo "You need to build the project first."
+    echo "Run: cd build && make -j$(nproc)"
     exit 1
 fi
 """
@@ -480,11 +487,11 @@ fi
         self.log_success(f"Launch script created: {script_path}")
     
     def print_summary(self):
-        """Print build summary"""
-        self.log(f"\n{Colors.BOLD}=== BUILD SUMMARY ==={Colors.RESET}")
-        self.log_success("Selaco with Archipelago integration build complete!")
+        """Print setup summary"""
+        self.log(f"\n{Colors.BOLD}=== BUILD SETUP SUMMARY ==={Colors.RESET}")
+        self.log_success("Selaco with Archipelago integration setup complete!")
         
-        self.log(f"\n{Colors.BOLD}Build Details:{Colors.RESET}")
+        self.log(f"\n{Colors.BOLD}Setup Details:{Colors.RESET}")
         self.log_info(f"Build Type: {self.build_type}")
         self.log_info(f"Platform: {platform.system()} {platform.machine()}")
         self.log_info(f"Build Directory: {self.build_dir}")
@@ -494,26 +501,51 @@ fi
         
         if self.is_windows:
             self.log_info(f"Launch Script: {self.root_dir}/launch_selaco.bat")
+            sln_files = list(self.build_dir.glob("*.sln"))
+            if sln_files:
+                self.log_info(f"Visual Studio Solution: {self.build_dir}/{sln_files[0].name}")
         else:
             self.log_info(f"Launch Script: {self.root_dir}/launch_selaco.sh")
+            self.log_info(f"Makefiles: {self.build_dir}/Makefile")
         
-        self.log(f"\n{Colors.BOLD}Console Commands:{Colors.RESET}")
+        self.log(f"\n{Colors.BOLD}How to Build:{Colors.RESET}")
+        if self.is_windows:
+            self.log_info("1. Open Visual Studio")
+            if list(self.build_dir.glob("*.sln")):
+                sln_file = list(self.build_dir.glob("*.sln"))[0]
+                self.log_info(f"2. Open solution: {sln_file}")
+            else:
+                self.log_info(f"2. Open solution file in: {self.build_dir}")
+            self.log_info("3. Select your build configuration (Debug/Release)")
+            self.log_info("4. Build → Build Solution (or F7)")
+        else:
+            self.log_info(f"1. cd {self.build_dir}")
+            self.log_info(f"2. make -j{self.cpu_count}")
+            self.log_info("   or")
+            self.log_info(f"   cmake --build . --config {self.build_type} -j{self.cpu_count}")
+        
+        self.log(f"\n{Colors.BOLD}Console Commands (after building):{Colors.RESET}")
         self.log_info("ap_connect <server> <port> <slot> [password] - Connect to Archipelago server")
         self.log_info("ap_status - Show connection status")
         self.log_info("ap_items - List received items")
         self.log_info("ap_chat <message> - Send chat message")
         
         self.log(f"\n{Colors.BOLD}Next Steps:{Colors.RESET}")
-        self.log_info("1. Edit archipelago.cfg with your server details")
-        self.log_info("2. Run the launch script to start Selaco")
-        self.log_info("3. Use console commands to connect to Archipelago")
-        self.log_info("4. Join a multiworld game and enjoy!")
+        self.log_info("1. Build the project using your preferred method (Visual Studio/make)")
+        self.log_info("2. Edit archipelago.cfg with your server details")
+        self.log_info("3. Run the launch script or executable to start Selaco")
+        self.log_info("4. Use console commands to connect to Archipelago")
+        self.log_info("5. Join a multiworld game and enjoy!")
+        
+        self.log(f"\n{Colors.BOLD}Note:{Colors.RESET}")
+        self.log_info("This script only sets up the build environment - it doesn't compile the code.")
+        self.log_info("You need to build the project manually using Visual Studio or make.")
     
-    def build(self):
-        """Main build function"""
+    def setup(self):
+        """Main setup function"""
         try:
-            self.log(f"{Colors.BOLD}=== SELACO ARCHIPELAGO BUILD ==={Colors.RESET}")
-            self.log_info(f"Building on {platform.system()} {platform.machine()}")
+            self.log(f"{Colors.BOLD}=== SELACO ARCHIPELAGO SETUP ==={Colors.RESET}")
+            self.log_info(f"Setting up on {platform.system()} {platform.machine()}")
             self.log_info(f"Build type: {self.build_type}")
             self.log_info(f"Root directory: {self.root_dir}")
             
@@ -524,10 +556,10 @@ fi
                 self.install_dependencies()
                 self.setup_zmusic()
             else:
-                self.log_info("Quick build mode: Skipping dependency setup")
+                self.log_info("Quick setup mode: Skipping dependency setup")
                 
             self.configure_cmake()
-            self.build_selaco()
+            self.setup_build_environment()
             self.create_config_file()
             self.create_launch_script()
             self.print_summary()
@@ -536,7 +568,7 @@ fi
             self.log_error(str(e))
             return 1
         except KeyboardInterrupt:
-            self.log_warning("Build interrupted by user")
+            self.log_warning("Setup interrupted by user")
             return 1
         except Exception as e:
             self.log_error(f"Unexpected error: {e}")
@@ -546,13 +578,16 @@ fi
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Build Selaco with Archipelago integration",
+        description="Set up Selaco with Archipelago integration (configure but don't compile)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python build_selaco_archipelago.py                    # Default build (RelWithDebInfo)
+  python build_selaco_archipelago.py                    # Default setup (RelWithDebInfo)
   python build_selaco_archipelago.py --build-type Release --clean
   python build_selaco_archipelago.py --verbose --clean
+  
+This script sets up the build environment but doesn't compile. 
+After running this, you can build in Visual Studio or with make.
   
 For more information, see BUILD_ARCHIPELAGO.md
         """
@@ -561,31 +596,32 @@ For more information, see BUILD_ARCHIPELAGO.md
         "--build-type", 
         choices=["Debug", "Release", "RelWithDebInfo"], 
         default="RelWithDebInfo",
-        help="CMake build type (default: RelWithDebInfo)"
+        help="CMake build configuration type (default: RelWithDebInfo)"
     )
     parser.add_argument(
         "--clean", 
         action="store_true",
-        help="Clean build directory before building"
+        help="Clean build directory before setup"
     )
     parser.add_argument(
         "--verbose", 
         action="store_true",
-        help="Enable verbose output"
+        help="Enable verbose output for debugging"
     )
     parser.add_argument(
         "--quick", 
         action="store_true",
-        help="Skip dependency checks for faster builds (use only if dependencies are already set up)"
+        help="Skip dependency setup for faster configuration (use only if dependencies are already set up)"
     )
     
     args = parser.parse_args()
     
-    builder = SelacoBuilder(args)
-    return builder.build()
+    setup = SelacoSetup(args)
+    return setup.setup()
 
 if __name__ == "__main__":
     sys.exit(main())
 
-# Create a convenient alias for the build script
-build = main
+# Create convenient aliases for the setup script
+setup = main
+build = main  # For backward compatibility
