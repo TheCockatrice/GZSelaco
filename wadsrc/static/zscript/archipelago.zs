@@ -198,22 +198,6 @@ class ArchipelagoManager : EventHandler
         return "placeholder";
     }
     
-    static int GetHintPoints()
-    {
-        return GetArchipelagoInt("GetHintPoints");
-    }
-    
-    // Statistics
-    static int GetMessagesSent()
-    {
-        return GetArchipelagoInt("GetMessagesSent");
-    }
-    
-    static int GetMessagesReceived()
-    {
-        return GetArchipelagoInt("GetMessagesReceived");
-    }
-    
     // Configuration
     static void SetAutoReconnect(bool enabled)
     {
