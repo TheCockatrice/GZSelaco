@@ -48,6 +48,7 @@ class SelacoBuilder:
         self.build_type = args.build_type
         self.clean = args.clean
         self.verbose = args.verbose
+        self.quick = args.quick
         
     def log(self, message: str, color: str = Colors.WHITE):
         """Print colored log message"""
@@ -338,9 +339,15 @@ class SelacoBuilder:
         cmake_args = [
             "cmake", "..",
             f"-DCMAKE_BUILD_TYPE={self.build_type}",
-            f"-DCMAKE_TOOLCHAIN_FILE={self.vcpkg_dir}/scripts/buildsystems/vcpkg.cmake",
             "-DARCHIPELAGO_INTEGRATION=ON"
         ]
+        
+        # Add vcpkg toolchain if available
+        vcpkg_toolchain = self.vcpkg_dir / "scripts" / "buildsystems" / "vcpkg.cmake"
+        if vcpkg_toolchain.exists():
+            cmake_args.append(f"-DCMAKE_TOOLCHAIN_FILE={vcpkg_toolchain}")
+        elif not self.quick:
+            self.log_warning("vcpkg toolchain not found, dependencies may not be available")
         
         # Platform-specific settings
         if self.is_windows:
@@ -511,9 +518,14 @@ fi
             self.log_info(f"Root directory: {self.root_dir}")
             
             self.check_prerequisites()
-            self.setup_vcpkg()
-            self.install_dependencies()
-            self.setup_zmusic()
+            
+            if not self.quick:
+                self.setup_vcpkg()
+                self.install_dependencies()
+                self.setup_zmusic()
+            else:
+                self.log_info("Quick build mode: Skipping dependency setup")
+                
             self.configure_cmake()
             self.build_selaco()
             self.create_config_file()
@@ -533,7 +545,18 @@ fi
         return 0
 
 def main():
-    parser = argparse.ArgumentParser(description="Build Selaco with Archipelago integration")
+    parser = argparse.ArgumentParser(
+        description="Build Selaco with Archipelago integration",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python build_selaco_archipelago.py                    # Default build (RelWithDebInfo)
+  python build_selaco_archipelago.py --build-type Release --clean
+  python build_selaco_archipelago.py --verbose --clean
+  
+For more information, see BUILD_ARCHIPELAGO.md
+        """
+    )
     parser.add_argument(
         "--build-type", 
         choices=["Debug", "Release", "RelWithDebInfo"], 
@@ -550,6 +573,11 @@ def main():
         action="store_true",
         help="Enable verbose output"
     )
+    parser.add_argument(
+        "--quick", 
+        action="store_true",
+        help="Skip dependency checks for faster builds (use only if dependencies are already set up)"
+    )
     
     args = parser.parse_args()
     
@@ -558,3 +586,6 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
+# Create a convenient alias for the build script
+build = main
