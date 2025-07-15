@@ -16,46 +16,46 @@ rem **
 rem **---------------------------------------------------------------------------
 
 rem Get script directory
-set SCRIPT_DIR=%~dp0
-set BUILD_DIR=%SCRIPT_DIR%build
-set ARCHIPELAGO_DIR=%SCRIPT_DIR%src\archipelago
+set "SCRIPT_DIR=%~dp0"
+set "BUILD_DIR=%SCRIPT_DIR%build"
+set "ARCHIPELAGO_DIR=%SCRIPT_DIR%src\archipelago"
 
 rem Build configuration
-set BUILD_TYPE=Release
-set JOBS=%NUMBER_OF_PROCESSORS%
-if "%JOBS%"=="" set JOBS=4
+set "BUILD_TYPE=Release"
+set "JOBS=%NUMBER_OF_PROCESSORS%"
+if "%JOBS%"=="" set "JOBS=4"
 
 rem Parse command line arguments
 :parse_args
 if "%~1"=="--debug" (
-    set BUILD_TYPE=Debug
+    set "BUILD_TYPE=Debug"
     shift
     goto parse_args
 )
 if "%~1"=="--release" (
-    set BUILD_TYPE=Release
+    set "BUILD_TYPE=Release"
     shift
     goto parse_args
 )
 if "%~1"=="--relwithdebinfo" (
-    set BUILD_TYPE=RelWithDebInfo
+    set "BUILD_TYPE=RelWithDebInfo"
     shift
     goto parse_args
 )
 if "%~1"=="--jobs" (
-    set JOBS=%~2
+    set "JOBS=%~2"
     shift
     shift
     goto parse_args
 )
 if "%~1"=="-j" (
-    set JOBS=%~2
+    set "JOBS=%~2"
     shift
     shift
     goto parse_args
 )
 if "%~1"=="--clean" (
-    set CLEAN_BUILD=1
+    set "CLEAN_BUILD=1"
     shift
     goto parse_args
 )
@@ -75,9 +75,9 @@ echo Options:
 echo   --debug              Build in Debug mode
 echo   --release            Build in Release mode (default)
 echo   --relwithdebinfo     Build with debug info
-echo   --jobs ^| -j N        Use N parallel jobs (default: %JOBS%)
+echo   --jobs / -j N        Use N parallel jobs (default: %JOBS%)
 echo   --clean              Clean build directory first
-echo   --help ^| -h ^| /?     Show this help
+echo   --help / -h / /?     Show this help
 exit /b 0
 
 :log_info
@@ -97,7 +97,7 @@ echo [ERROR] %~1
 exit /b 1
 
 :check_command
-where %1 >nul 2>&1
+where "%~1" >nul 2>&1
 exit /b %errorlevel%
 
 :check_prerequisites
@@ -181,11 +181,7 @@ if not exist "zmusic\build" mkdir "zmusic\build"
 if not exist "vcpkg_installed" mkdir "vcpkg_installed"
 
 call :log_info "Building ZMusic..."
-cmake -S zmusic -B zmusic\build ^
-    -DCMAKE_TOOLCHAIN_FILE=..\vcpkg\scripts\buildsystems\vcpkg.cmake ^
-    -DVCPKG_LIBSNDFILE=1 ^
-    -DCMAKE_BUILD_TYPE=%BUILD_TYPE% ^
-    -DVCPKG_INSTALLED_DIR=..\vcpkg_installed\
+cmake -S zmusic -B zmusic\build -DCMAKE_TOOLCHAIN_FILE=..\vcpkg\scripts\buildsystems\vcpkg.cmake -DVCPKG_LIBSNDFILE=1 -DCMAKE_BUILD_TYPE=%BUILD_TYPE% -DVCPKG_INSTALLED_DIR=..\vcpkg_installed\
 
 cmake --build zmusic\build --config %BUILD_TYPE% --parallel %JOBS%
 
@@ -201,7 +197,7 @@ exit /b 0
 call :log_info "Verifying Archipelago integration..."
 
 rem Check if Archipelago source files exist
-set ARCHIPELAGO_FILES=websocket_client.h websocket_client.cpp archipelago_client.h archipelago_client.cpp ap_definitions.h ap_definitions.cpp
+set "ARCHIPELAGO_FILES=websocket_client.h websocket_client.cpp archipelago_client.h archipelago_client.cpp ap_definitions.h ap_definitions.cpp"
 
 for %%f in (%ARCHIPELAGO_FILES%) do (
     if not exist "%ARCHIPELAGO_DIR%\%%f" (
@@ -230,11 +226,7 @@ exit /b 0
 call :log_info "Configuring Selaco build..."
 
 rem Configure with CMake
-cmake -S .. -B . ^
-    -DCMAKE_TOOLCHAIN_FILE=vcpkg\scripts\buildsystems\vcpkg.cmake ^
-    -DCMAKE_BUILD_TYPE=%BUILD_TYPE% ^
-    -DVCPKG_INSTALLED_DIR=vcpkg_installed\ ^
-    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cmake -S .. -B . -DCMAKE_TOOLCHAIN_FILE=vcpkg\scripts\buildsystems\vcpkg.cmake -DCMAKE_BUILD_TYPE=%BUILD_TYPE% -DVCPKG_INSTALLED_DIR=vcpkg_installed\ -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
 if errorlevel 1 (
     call :log_error "CMake configuration failed"
@@ -256,48 +248,44 @@ exit /b 0
 call :log_info "Creating configuration files..."
 
 rem Create Archipelago configuration
-(
-echo # Archipelago Configuration for Selaco
-echo # This file is automatically created and updated by the game
-echo.
-echo # Server connection settings
-echo server_address=archipelago.gg
-echo server_port=38281
-echo.
-echo # Player identification
-echo slot_name=
-echo password=
-echo.
-echo # Connection behavior
-echo auto_connect=false
-echo auto_reconnect=true
-echo reconnect_delay=3000
-echo.
-echo # UI settings
-echo show_notifications=true
-echo show_chat=true
-echo.
-echo # HUD display
-echo # Set this in console: set ap_show_hud true/false
-) > "%BUILD_DIR%\archipelago.cfg"
+echo # Archipelago Configuration for Selaco> "%BUILD_DIR%\archipelago.cfg"
+echo # This file is automatically created and updated by the game>> "%BUILD_DIR%\archipelago.cfg"
+echo.>> "%BUILD_DIR%\archipelago.cfg"
+echo # Server connection settings>> "%BUILD_DIR%\archipelago.cfg"
+echo server_address=archipelago.gg>> "%BUILD_DIR%\archipelago.cfg"
+echo server_port=38281>> "%BUILD_DIR%\archipelago.cfg"
+echo.>> "%BUILD_DIR%\archipelago.cfg"
+echo # Player identification>> "%BUILD_DIR%\archipelago.cfg"
+echo slot_name=>> "%BUILD_DIR%\archipelago.cfg"
+echo password=>> "%BUILD_DIR%\archipelago.cfg"
+echo.>> "%BUILD_DIR%\archipelago.cfg"
+echo # Connection behavior>> "%BUILD_DIR%\archipelago.cfg"
+echo auto_connect=false>> "%BUILD_DIR%\archipelago.cfg"
+echo auto_reconnect=true>> "%BUILD_DIR%\archipelago.cfg"
+echo reconnect_delay=3000>> "%BUILD_DIR%\archipelago.cfg"
+echo.>> "%BUILD_DIR%\archipelago.cfg"
+echo # UI settings>> "%BUILD_DIR%\archipelago.cfg"
+echo show_notifications=true>> "%BUILD_DIR%\archipelago.cfg"
+echo show_chat=true>> "%BUILD_DIR%\archipelago.cfg"
+echo.>> "%BUILD_DIR%\archipelago.cfg"
+echo # HUD display>> "%BUILD_DIR%\archipelago.cfg"
+echo # Set this in console: set ap_show_hud true/false>> "%BUILD_DIR%\archipelago.cfg"
 
 rem Create launch script
-(
-echo @echo off
-echo rem Launch script for Selaco with Archipelago integration
-echo cd /d "%%~dp0"
-echo.
-echo rem Launch Selaco
-echo if exist gzdoom.exe (
-echo     gzdoom.exe %%*
-echo ^) else if exist selaco.exe (
-echo     selaco.exe %%*
-echo ^) else (
-echo     echo Error: Selaco executable not found!
-echo     pause
-echo     exit /b 1
-echo ^)
-) > "%BUILD_DIR%\launch_selaco.bat"
+echo @echo off> "%BUILD_DIR%\launch_selaco.bat"
+echo rem Launch script for Selaco with Archipelago integration>> "%BUILD_DIR%\launch_selaco.bat"
+echo cd /d "%%~dp0">> "%BUILD_DIR%\launch_selaco.bat"
+echo.>> "%BUILD_DIR%\launch_selaco.bat"
+echo rem Launch Selaco>> "%BUILD_DIR%\launch_selaco.bat"
+echo if exist gzdoom.exe (>> "%BUILD_DIR%\launch_selaco.bat"
+echo     gzdoom.exe %%*>> "%BUILD_DIR%\launch_selaco.bat"
+echo ^) else if exist selaco.exe (>> "%BUILD_DIR%\launch_selaco.bat"
+echo     selaco.exe %%*>> "%BUILD_DIR%\launch_selaco.bat"
+echo ^) else (>> "%BUILD_DIR%\launch_selaco.bat"
+echo     echo Error: Selaco executable not found!>> "%BUILD_DIR%\launch_selaco.bat"
+echo     pause>> "%BUILD_DIR%\launch_selaco.bat"
+echo     exit /b 1>> "%BUILD_DIR%\launch_selaco.bat"
+echo ^)>> "%BUILD_DIR%\launch_selaco.bat"
 
 call :log_success "Configuration files created"
 exit /b 0
