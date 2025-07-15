@@ -594,6 +594,7 @@ file( GLOB HEADER_FILES
 	common/thirdparty/math/*h
 	common/thirdparty/libsmackerdec/include/*.h
 	common/thirdparty/utf8proc/*.h
+	archipelago/*.h
 	common/rendering/*.h
 	common/rendering/gl_load/*.h
 	common/rendering/gles/*.h
@@ -1241,6 +1242,11 @@ set( GAME_SOURCES
 	common/filesystem/source/fs_stringpool.cpp
 	common/filesystem/source/unicode.cpp
 	common/filesystem/source/critsec.cpp
+
+	# Archipelago integration
+	archipelago/websocket_client.cpp
+	archipelago/ap_definitions.cpp
+	archipelago/archipelago_client.cpp
 
 )
 

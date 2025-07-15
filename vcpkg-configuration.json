@@ -1,0 +1,13 @@
+{
+  "default-triplet": "x64-windows",
+  "registries": [
+    {
+      "kind": "git",
+      "repository": "https://github.com/Microsoft/vcpkg",
+      "baseline": "30f771d4acf01bc7773d5c602443e7f839844a15",
+      "packages": [
+        "*"
+      ]
+    }
+  ]
+}

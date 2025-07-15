@@ -1,0 +1,22 @@
+# Archipelago Configuration for Selaco
+# This file is automatically created and updated by the game
+
+# Server connection settings
+server_address=archipelago.gg
+server_port=38281
+
+# Player identification
+slot_name=
+password=
+
+# Connection behavior  
+auto_connect=false
+auto_reconnect=true
+reconnect_delay=3000
+
+# UI settings
+show_notifications=true
+show_chat=true
+
+# HUD display
+# Set this in console: set ap_show_hud true/false

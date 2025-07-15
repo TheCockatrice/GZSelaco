@@ -1,0 +1,9 @@
+[submodule "jsoncpp"]
+	path = jsoncpp
+	url = https://github.com/open-source-parsers/jsoncpp
+[submodule "IXWebSocket"]
+	path = IXWebSocket
+	url = https://github.com/machinezone/IXWebSocket
+[submodule "zlib"]
+	path = zlib
+	url = https://github.com/madler/zlib/
