@@ -402,44 +402,12 @@ class ArchipelagoStatusHUD : EventHandler
     }
 }
 
-// Console commands for Archipelago
-class ArchipelagoConsoleCommands : EventHandler
-{
-    override void ConsoleProcess(ConsoleEvent e)
-    {
-        String cmd = e.Name;
-        cmd = cmd.MakeLower();
-        
-        if (cmd == "ap_connect")
-        {
-            Console.Printf("Archipelago connect requested with args: %d %d %d", e.Args[0], e.Args[1], e.Args[2]);
-        }
-        else if (cmd == "ap_disconnect")
-        {
-            Console.Printf("Archipelago disconnect requested");
-        }
-        else if (cmd == "ap_status")
-        {
-            Console.Printf("=== Archipelago Status ===");
-            Console.Printf("Archipelago integration loaded");
-            Console.Printf("Use ap_connect to connect to server");
-        }
-        else if (cmd == "ap_check")
-        {
-            int locationId = e.Args[0];
-            Console.Printf("Archipelago location check requested: %d", locationId);
-        }
-        else if (cmd == "ap_items")
-        {
-            Console.Printf("Archipelago items list requested");
-        }
-        else if (cmd == "ap_process_items")
-        {
-            Console.Printf("Archipelago process items requested");
-        }
-        else if (cmd == "ap_chat")
-        {
-            Console.Printf("Archipelago chat message received");
-        }
-    }
-}
+// Console commands are now implemented in C++ (src/archipelago/archipelago_client.cpp)
+// Available commands:
+// - ap_status
+// - ap_connect <server> <port> <slot_name> [password]
+// - ap_disconnect
+// - ap_check <location_id>
+// - ap_items
+// - ap_process_items
+// - ap_chat <message>

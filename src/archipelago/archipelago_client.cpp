@@ -5,6 +5,8 @@
 #include <iostream>
 #include <optional>
 #include <algorithm>
+#include "c_console.h"
+#include "c_dispatch.h"
 
 ArchipelagoClient::ArchipelagoClient()
     : connection_state_(APConnectionState::Disconnected)
@@ -563,4 +565,118 @@ void SelacoDArchipelagoManager::SaveConfig()
         file << "auto_connect=" << (config_.auto_connect ? "true" : "false") << std::endl;
         file.close();
     }
+}
+
+// Console commands for Archipelago
+CCMD(ap_status)
+{
+    auto& manager = SelacoDArchipelagoManager::GetInstance();
+    auto& client = manager.GetClient();
+    
+    Printf("=== Archipelago Status ===\n");
+    Printf("Connection State: %s\n", client.IsConnected() ? "Connected" : "Disconnected");
+    Printf("Team: %d\n", client.GetTeam());
+    Printf("Slot: %d\n", client.GetSlot());
+    Printf("Received Items: %d\n", client.GetReceivedItemCount());
+    Printf("Hint Points: %d\n", client.GetHintPoints());
+    Printf("Messages Sent: %zu\n", client.GetMessagesSent());
+    Printf("Messages Received: %zu\n", client.GetMessagesReceived());
+}
+
+CCMD(ap_connect)
+{
+    auto& manager = SelacoDArchipelagoManager::GetInstance();
+    auto& client = manager.GetClient();
+    
+    if (argv.argc() < 4) {
+        Printf("Usage: ap_connect <server> <port> <slot_name> [password]\n");
+        return;
+    }
+    
+    std::string server = argv[1];
+    int port = atoi(argv[2]);
+    std::string slot_name = argv[3];
+    std::string password = argv.argc() > 4 ? argv[4] : "";
+    
+    Printf("Connecting to Archipelago server %s:%d as %s...\n", server.c_str(), port, slot_name.c_str());
+    
+    if (client.Connect(server, port, slot_name, password)) {
+        Printf("Connection initiated successfully\n");
+    } else {
+        Printf("Failed to initiate connection\n");
+    }
+}
+
+CCMD(ap_disconnect)
+{
+    auto& manager = SelacoDArchipelagoManager::GetInstance();
+    auto& client = manager.GetClient();
+    
+    client.Disconnect();
+    Printf("Disconnected from Archipelago server\n");
+}
+
+CCMD(ap_check)
+{
+    auto& manager = SelacoDArchipelagoManager::GetInstance();
+    auto& client = manager.GetClient();
+    
+    if (argv.argc() < 2) {
+        Printf("Usage: ap_check <location_id>\n");
+        return;
+    }
+    
+    int64_t location_id = atoll(argv[1]);
+    client.CheckLocation(location_id);
+    Printf("Checked location %lld\n", location_id);
+}
+
+CCMD(ap_items)
+{
+    auto& manager = SelacoDArchipelagoManager::GetInstance();
+    auto& client = manager.GetClient();
+    
+    auto items = client.GetPendingItems();
+    Printf("=== Pending Items (%zu) ===\n", items.size());
+    
+    for (const auto& item : items) {
+        Printf("Item ID: %lld, Location: %lld, Player: %d\n", 
+               item.item_id, item.location_id, item.player_id);
+    }
+    
+    if (items.empty()) {
+        Printf("No pending items\n");
+    }
+}
+
+CCMD(ap_process_items)
+{
+    auto& manager = SelacoDArchipelagoManager::GetInstance();
+    auto& client = manager.GetClient();
+    
+    auto items = client.GetPendingItems();
+    Printf("Processing %zu pending items...\n", items.size());
+    
+    client.ClearPendingItems();
+    Printf("Items processed\n");
+}
+
+CCMD(ap_chat)
+{
+    auto& manager = SelacoDArchipelagoManager::GetInstance();
+    auto& client = manager.GetClient();
+    
+    if (argv.argc() < 2) {
+        Printf("Usage: ap_chat <message>\n");
+        return;
+    }
+    
+    std::string message;
+    for (int i = 1; i < argv.argc(); i++) {
+        if (i > 1) message += " ";
+        message += argv[i];
+    }
+    
+    client.SendChatMessage(message);
+    Printf("Sent chat message: %s\n", message.c_str());
 }
