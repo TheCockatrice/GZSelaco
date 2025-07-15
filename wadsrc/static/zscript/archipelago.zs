@@ -379,9 +379,9 @@ class ArchipelagoHelpers
 // HUD element to display Archipelago status (simplified)
 class ArchipelagoStatusHUD : EventHandler
 {
-    bool showStatus;
-    String statusText;
-    double lastUpdate;
+    ui bool showStatus;
+    ui String statusText;
+    ui double lastUpdate;
     
     override void RenderOverlay(RenderEvent e)
     {
