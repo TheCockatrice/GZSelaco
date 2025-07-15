@@ -1,23 +1,26 @@
 # Building Selaco with Archipelago Integration
 
-This guide explains how to build Selaco with the Archipelago multiworld randomizer integration using the provided build scripts.
+This guide explains how to build Selaco with the Archipelago multiworld randomizer integration using the provided Python build script.
 
 ## Quick Start
 
-### Linux / macOS
+### Cross-Platform (Python 3.7+)
 ```bash
-# Make the script executable (if not already)
-chmod +x build_selaco_archipelago.sh
+# Run the Python build script
+python build_selaco_archipelago.py
 
-# Run the build script
-./build_selaco_archipelago.sh
+# Or use the simple wrapper
+python build.py
+
+# For verbose output
+python build_selaco_archipelago.py --verbose
 ```
 
-### Windows
-```cmd
-# Run the build script
-build_selaco_archipelago.bat
-```
+### Requirements
+- Python 3.7 or later
+- CMake 3.16 or later
+- Git
+- Platform-specific build tools (see Prerequisites section)
 
 ## Prerequisites
 
@@ -74,41 +77,31 @@ brew install git cmake nasm autoconf libtool pkg-config sdl2
 
 ## Build Script Options
 
-Both scripts support the following command-line options:
+The Python build script supports the following command-line options:
 
-### Linux/macOS (`build_selaco_archipelago.sh`)
+### `build_selaco_archipelago.py`
 ```bash
-# Build options
-./build_selaco_archipelago.sh --debug          # Debug build
-./build_selaco_archipelago.sh --release        # Release build (default)
-./build_selaco_archipelago.sh --relwithdebinfo # Release with debug info
-
-# Performance options
-./build_selaco_archipelago.sh --jobs 8         # Use 8 parallel jobs
-./build_selaco_archipelago.sh -j 8             # Same as above
+# Build type options
+python build_selaco_archipelago.py --build-type Debug          # Debug build
+python build_selaco_archipelago.py --build-type Release        # Release build
+python build_selaco_archipelago.py --build-type RelWithDebInfo # Release with debug info (default)
 
 # Utility options
-./build_selaco_archipelago.sh --clean          # Clean build directory first
-./build_selaco_archipelago.sh --help           # Show help
+python build_selaco_archipelago.py --clean          # Clean build directory first
+python build_selaco_archipelago.py --verbose        # Enable verbose output
+python build_selaco_archipelago.py --help           # Show help
+
+# Examples
+python build_selaco_archipelago.py --build-type Release --clean --verbose
+python build.py --clean                             # Using the wrapper script
 ```
 
-### Windows (`build_selaco_archipelago.bat`)
-```cmd
-# Build options
-build_selaco_archipelago.bat --debug          # Debug build
-build_selaco_archipelago.bat --release        # Release build (default)
-build_selaco_archipelago.bat --relwithdebinfo # Release with debug info
+### Available Build Types
+- **Debug**: Full debug symbols, no optimization (largest, slowest)
+- **Release**: Full optimization, no debug symbols (smallest, fastest)
+- **RelWithDebInfo**: Optimization with debug symbols (recommended for development)
 
-# Performance options
-build_selaco_archipelago.bat --jobs 8         # Use 8 parallel jobs
-build_selaco_archipelago.bat -j 8             # Same as above
-
-# Utility options
-build_selaco_archipelago.bat --clean          # Clean build directory first
-build_selaco_archipelago.bat --help           # Show help
-```
-
-## What the Build Scripts Do
+## What the Python Build Script Does
 
 ### 1. **Dependency Management**
 - Automatically downloads and sets up vcpkg package manager
@@ -219,10 +212,10 @@ sudo apt-get install libsdl2-dev libgtk-3-dev libx11-dev
 #### Build Fails with vcpkg Errors
 ```bash
 # Clean and retry
-./build_selaco_archipelago.sh --clean
+python build_selaco_archipelago.py --clean
 
 # Or manually clean vcpkg
-rm -rf build/vcpkg
+rm -rf vcpkg
 ```
 
 #### CMake Configuration Errors
@@ -244,20 +237,14 @@ If you encounter issues:
 ### Custom Build Types
 ```bash
 # Debug build with symbols
-./build_selaco_archipelago.sh --debug
+python build_selaco_archipelago.py --build-type Debug
 
 # Release with debug info (recommended for development)
-./build_selaco_archipelago.sh --relwithdebinfo
+python build_selaco_archipelago.py --build-type RelWithDebInfo
 ```
 
 ### Parallel Building
-```bash
-# Use all available CPU cores
-./build_selaco_archipelago.sh -j $(nproc)
-
-# Use specific number of cores
-./build_selaco_archipelago.sh -j 4
-```
+The Python script automatically detects and uses all available CPU cores for optimal build performance.
 
 ### Manual CMake
 If you need to customize the build further:
@@ -283,10 +270,10 @@ After building successfully:
 
 ## Contributing
 
-If you encounter issues or want to improve the build scripts:
+If you encounter issues or want to improve the build script:
 
-1. Check that your changes work on both Linux and Windows
-2. Test with different build configurations (`--debug`, `--release`)
+1. Check that your changes work on Windows, Linux, and macOS
+2. Test with different build configurations (`--build-type Debug`, `--build-type Release`)
 3. Ensure all Archipelago integration files are properly included
 4. Update this README if you add new features or options
 
