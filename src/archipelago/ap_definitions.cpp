@@ -96,6 +96,33 @@ bool APNetworkPlayer::FromJSON(const rapidjson::Value& value)
     return true;
 }
 
+// APNetworkLocation implementation
+rapidjson::Value APNetworkLocation::ToJSON(rapidjson::Document::AllocatorType& allocator) const
+{
+    rapidjson::Value obj(rapidjson::kObjectType);
+    obj.AddMember("location", location, allocator);
+    obj.AddMember("name", rapidjson::Value(name.c_str(), allocator), allocator);
+    obj.AddMember("player", player, allocator);
+    return obj;
+}
+
+bool APNetworkLocation::FromJSON(const rapidjson::Value& value)
+{
+    if (!value.IsObject()) return false;
+    
+    if (value.HasMember("location") && value["location"].IsInt64()) {
+        location = value["location"].GetInt64();
+    }
+    if (value.HasMember("name") && value["name"].IsString()) {
+        name = value["name"].GetString();
+    }
+    if (value.HasMember("player") && value["player"].IsInt()) {
+        player = value["player"].GetInt();
+    }
+    
+    return true;
+}
+
 // APJSONMessagePart implementation
 rapidjson::Value APJSONMessagePart::ToJSON(rapidjson::Document::AllocatorType& allocator) const
 {

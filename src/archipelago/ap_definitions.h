@@ -87,6 +87,16 @@ struct APNetworkPlayer
     bool FromJSON(const rapidjson::Value& value);
 };
 
+struct APNetworkLocation
+{
+    int64_t location = 0;
+    std::string name;
+    int32_t player = 0;
+    
+    rapidjson::Value ToJSON(rapidjson::Document::AllocatorType& allocator) const;
+    bool FromJSON(const rapidjson::Value& value);
+};
+
 struct APJSONMessagePart
 {
     std::string type;
