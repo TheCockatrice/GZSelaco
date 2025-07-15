@@ -1,0 +1,17 @@
+name: Check for typos
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  codespell:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: codespell-project/actions-codespell@v2

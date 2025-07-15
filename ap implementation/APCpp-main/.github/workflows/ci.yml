@@ -1,0 +1,59 @@
+name: CI
+
+# Trigger this workflow on push or pull request
+on: [push, pull_request]
+
+jobs:
+  build-win:
+    name: Build (windows-latest)
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: 'recursive'
+    - name: CMake configure (default version)
+      run: |
+        mkdir build
+        cd build
+        cmake -G "Visual Studio 17 2022" -A Win32 `
+              -DCMAKE_BUILD_TYPE=Release ..
+    - name: Build (default version)
+      run: |
+        cd build
+        cmake --build . --config Release
+    - name: Create Artifact Folder
+      run: |
+        mkdir artifact
+        copy build/Release/APCpp.dll artifact
+        copy build/Release/APCpp.lib artifact
+    - name: Create Build Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: APCpp-win
+        path: |
+          artifact/*
+
+  build-msys:
+    name: Build (MSYS)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: git mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake unzip make
+      - name: CMake configure (MSYS)
+        run: |
+          mkdir build
+          cd build
+          cmake .. -DWIN32=1 -DMSYS=1 -G"MSYS Makefiles" -DMBEDTLS_FATAL_WARNINGS=OFF
+      - name: Build (MSYS)
+        run: |
+          cd build
+          cmake --build . 
