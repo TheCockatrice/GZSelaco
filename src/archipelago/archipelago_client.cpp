@@ -7,6 +7,7 @@
 #include <algorithm>
 #include "c_console.h"
 #include "c_dispatch.h"
+#include "../common/engine/printf.h"
 
 ArchipelagoClient::ArchipelagoClient()
     : connection_state_(APConnectionState::Disconnected)
@@ -641,7 +642,7 @@ CCMD(ap_items)
     
     for (const auto& item : items) {
         Printf("Item ID: %lld, Location: %lld, Player: %d\n", 
-               item.item_id, item.location_id, item.player_id);
+               item.item, item.location, item.player);
     }
     
     if (items.empty()) {
