@@ -379,9 +379,9 @@ class ArchipelagoHelpers
 // HUD element to display Archipelago status (simplified)
 class ArchipelagoStatusHUD : EventHandler
 {
-    private bool showStatus;
-    private String statusText;
-    private double lastUpdate;
+    bool showStatus;
+    String statusText;
+    double lastUpdate;
     
     override void RenderOverlay(RenderEvent e)
     {
@@ -407,26 +407,12 @@ class ArchipelagoConsoleCommands : EventHandler
 {
     override void ConsoleProcess(ConsoleEvent e)
     {
-        if (e.Args.Size() == 0) return;
-        
-        String cmd = e.Args[0];
+        String cmd = e.Name;
         cmd = cmd.MakeLower();
         
         if (cmd == "ap_connect")
         {
-            if (e.Args.Size() < 4)
-            {
-                Console.Printf("Usage: ap_connect <server> <port> <slot_name> [password]");
-                return;
-            }
-            
-            String server = e.Args[1];
-            int port = e.Args[2].ToInt();
-            String slotName = e.Args[3];
-            String password = e.Args.Size() > 4 ? e.Args[4] : "";
-            
-            // Note: ConnectToServer needs to be called from play context
-            Console.Printf("Archipelago connect requested to %s:%d as %s", server, port, slotName);
+            Console.Printf("Archipelago connect requested with args: %d %d %d", e.Args[0], e.Args[1], e.Args[2]);
         }
         else if (cmd == "ap_disconnect")
         {
@@ -440,13 +426,7 @@ class ArchipelagoConsoleCommands : EventHandler
         }
         else if (cmd == "ap_check")
         {
-            if (e.Args.Size() < 2)
-            {
-                Console.Printf("Usage: ap_check <location_id>");
-                return;
-            }
-            
-            int locationId = e.Args[1].ToInt();
+            int locationId = e.Args[0];
             Console.Printf("Archipelago location check requested: %d", locationId);
         }
         else if (cmd == "ap_items")
@@ -459,20 +439,7 @@ class ArchipelagoConsoleCommands : EventHandler
         }
         else if (cmd == "ap_chat")
         {
-            if (e.Args.Size() < 2)
-            {
-                Console.Printf("Usage: ap_chat <message>");
-                return;
-            }
-            
-            String message = "";
-            for (int i = 1; i < e.Args.Size(); i++)
-            {
-                if (i > 1) message = message .. " ";
-                message = message .. e.Args[i];
-            }
-            
-            Console.Printf("Archipelago chat message: %s", message);
+            Console.Printf("Archipelago chat message received");
         }
     }
 }
