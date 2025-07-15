@@ -268,7 +268,7 @@ class ArchipelagoManager : EventHandler
 class ArchipelagoHelpers
 {
     // Common location types for Selaco
-    static void CheckBossDefeated(String bossName)
+    static play void CheckBossDefeated(String bossName)
     {
         Console.Printf("Boss defeated: %s", bossName);
         // Map boss names to location IDs
@@ -279,7 +279,7 @@ class ArchipelagoHelpers
         }
     }
     
-    static void CheckItemPickup(String itemName)
+    static play void CheckItemPickup(String itemName)
     {
         Console.Printf("Item picked up: %s", itemName);
         int locationId = GetItemLocationId(itemName);
@@ -289,7 +289,7 @@ class ArchipelagoHelpers
         }
     }
     
-    static void CheckLevelComplete(String levelName)
+    static play void CheckLevelComplete(String levelName)
     {
         Console.Printf("Level completed: %s", levelName);
         int locationId = GetLevelLocationId(levelName);
@@ -299,7 +299,7 @@ class ArchipelagoHelpers
         }
     }
     
-    static void CheckSecretFound(String secretName)
+    static play void CheckSecretFound(String secretName)
     {
         Console.Printf("Secret found: %s", secretName);
         int locationId = GetSecretLocationId(secretName);
@@ -309,7 +309,7 @@ class ArchipelagoHelpers
         }
     }
     
-    static void CheckObjectiveComplete(String objectiveName)
+    static play void CheckObjectiveComplete(String objectiveName)
     {
         Console.Printf("Objective completed: %s", objectiveName);
         int locationId = GetObjectiveLocationId(objectiveName);
@@ -320,7 +320,7 @@ class ArchipelagoHelpers
     }
     
     // Process received Archipelago items
-    static void ProcessReceivedItems()
+    static play void ProcessReceivedItems()
     {
         int itemCount = ArchipelagoManager.GetPendingItemCount();
         
@@ -341,34 +341,34 @@ class ArchipelagoHelpers
     }
     
     // Map boss names to location IDs (these would need to be defined)
-    private static int GetBossLocationId(String bossName)
+    private static play int GetBossLocationId(String bossName)
     {
         // Return base boss location + specific boss ID
         return 1000; // Placeholder
     }
     
-    private static int GetItemLocationId(String itemName)
+    private static play int GetItemLocationId(String itemName)
     {
         return 2000; // Placeholder
     }
     
-    private static int GetLevelLocationId(String levelName)
+    private static play int GetLevelLocationId(String levelName)
     {
         return 3000; // Placeholder
     }
     
-    private static int GetSecretLocationId(String secretName)
+    private static play int GetSecretLocationId(String secretName)
     {
         return 4000; // Placeholder
     }
     
-    private static int GetObjectiveLocationId(String objectiveName)
+    private static play int GetObjectiveLocationId(String objectiveName)
     {
         return 5000; // Placeholder
     }
     
     // Give received item to player (simplified version)
-    private static void GiveSelacoDItem(String itemInfo)
+    private static play void GiveSelacoDItem(String itemInfo)
     {
         // Convert AP item info to Selaco item and give to player
         // This would integrate with Selaco's inventory system
@@ -410,7 +410,7 @@ class ArchipelagoConsoleCommands : EventHandler
         if (e.Args.Size() == 0) return;
         
         String cmd = e.Args[0];
-        cmd.MakeLower();
+        cmd = cmd.MakeLower();
         
         if (cmd == "ap_connect")
         {
