@@ -3,6 +3,8 @@
 #include <chrono>
 #include <fstream>
 #include <iostream>
+#include <optional>
+#include <algorithm>
 
 ArchipelagoClient::ArchipelagoClient()
     : connection_state_(APConnectionState::Disconnected)
@@ -386,8 +388,8 @@ void ArchipelagoClient::HandlePrintJSON(const APPrintJSONPacket& packet)
     // Convert PrintJSON to readable text and call chat callback
     std::string message;
     for (const APJSONMessagePart& part : packet.data) {
-        if (part.text.has_value()) {
-            message += part.text.value();
+        if (!part.text.empty()) {
+            message += part.text;
         }
     }
     

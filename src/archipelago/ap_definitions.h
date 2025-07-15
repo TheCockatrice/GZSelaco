@@ -9,6 +9,7 @@
 #include <map>
 #include <functional>
 #include <cstdint>
+#include <optional>
 
 // Archipelago Protocol Version
 #define AP_PROTOCOL_VERSION "0.5.1"
@@ -237,6 +238,30 @@ struct APPrintJSONPacket : public APPacket
     int32_t countdown = 0;
     
     APPrintJSONPacket() { cmd = "PrintJSON"; }
+    rapidjson::Value ToJSON(rapidjson::Document::AllocatorType& allocator) const override;
+    bool FromJSON(const rapidjson::Value& value) override;
+};
+
+// Location information packet
+struct APLocationInfoPacket : public APPacket
+{
+    std::vector<APNetworkLocation> locations;
+    
+    APLocationInfoPacket() { cmd = "LocationInfo"; }
+    
+    rapidjson::Value ToJSON(rapidjson::Document::AllocatorType& allocator) const override;
+    bool FromJSON(const rapidjson::Value& value) override;
+};
+
+// Room update packet
+struct APRoomUpdatePacket : public APPacket
+{
+    std::vector<APNetworkPlayer> players;
+    std::vector<int64_t> checked_locations;
+    std::vector<int64_t> missing_locations;
+    
+    APRoomUpdatePacket() { cmd = "RoomUpdate"; }
+    
     rapidjson::Value ToJSON(rapidjson::Document::AllocatorType& allocator) const override;
     bool FromJSON(const rapidjson::Value& value) override;
 };

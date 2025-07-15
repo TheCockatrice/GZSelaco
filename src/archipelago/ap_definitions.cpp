@@ -599,3 +599,101 @@ std::string GenerateUUID()
     };
     return ss.str();
 }
+
+// APLocationInfoPacket implementation
+rapidjson::Value APLocationInfoPacket::ToJSON(rapidjson::Document::AllocatorType& allocator) const
+{
+    rapidjson::Value obj(rapidjson::kObjectType);
+    
+    obj.AddMember("cmd", rapidjson::Value(cmd.c_str(), allocator), allocator);
+    
+    rapidjson::Value locations_array(rapidjson::kArrayType);
+    for (const auto& location : locations) {
+        rapidjson::Value location_obj = location.ToJSON(allocator);
+        locations_array.PushBack(location_obj, allocator);
+    }
+    obj.AddMember("locations", locations_array, allocator);
+    
+    return obj;
+}
+
+bool APLocationInfoPacket::FromJSON(const rapidjson::Value& value)
+{
+    if (!value.IsObject()) return false;
+    
+    if (value.HasMember("locations") && value["locations"].IsArray()) {
+        locations.clear();
+        for (const auto& location_val : value["locations"].GetArray()) {
+            APNetworkLocation location;
+            if (location.FromJSON(location_val)) {
+                locations.push_back(location);
+            }
+        }
+    }
+    
+    return true;
+}
+
+// APRoomUpdatePacket implementation
+rapidjson::Value APRoomUpdatePacket::ToJSON(rapidjson::Document::AllocatorType& allocator) const
+{
+    rapidjson::Value obj(rapidjson::kObjectType);
+    
+    obj.AddMember("cmd", rapidjson::Value(cmd.c_str(), allocator), allocator);
+    
+    rapidjson::Value players_array(rapidjson::kArrayType);
+    for (const auto& player : players) {
+        rapidjson::Value player_obj = player.ToJSON(allocator);
+        players_array.PushBack(player_obj, allocator);
+    }
+    obj.AddMember("players", players_array, allocator);
+    
+    rapidjson::Value checked_array(rapidjson::kArrayType);
+    for (const auto& location : checked_locations) {
+        checked_array.PushBack(rapidjson::Value(location), allocator);
+    }
+    obj.AddMember("checked_locations", checked_array, allocator);
+    
+    rapidjson::Value missing_array(rapidjson::kArrayType);
+    for (const auto& location : missing_locations) {
+        missing_array.PushBack(rapidjson::Value(location), allocator);
+    }
+    obj.AddMember("missing_locations", missing_array, allocator);
+    
+    return obj;
+}
+
+bool APRoomUpdatePacket::FromJSON(const rapidjson::Value& value)
+{
+    if (!value.IsObject()) return false;
+    
+    if (value.HasMember("players") && value["players"].IsArray()) {
+        players.clear();
+        for (const auto& player_val : value["players"].GetArray()) {
+            APNetworkPlayer player;
+            if (player.FromJSON(player_val)) {
+                players.push_back(player);
+            }
+        }
+    }
+    
+    if (value.HasMember("checked_locations") && value["checked_locations"].IsArray()) {
+        checked_locations.clear();
+        for (const auto& location_val : value["checked_locations"].GetArray()) {
+            if (location_val.IsInt64()) {
+                checked_locations.push_back(location_val.GetInt64());
+            }
+        }
+    }
+    
+    if (value.HasMember("missing_locations") && value["missing_locations"].IsArray()) {
+        missing_locations.clear();
+        for (const auto& location_val : value["missing_locations"].GetArray()) {
+            if (location_val.IsInt64()) {
+                missing_locations.push_back(location_val.GetInt64());
+            }
+        }
+    }
+    
+    return true;
+}
