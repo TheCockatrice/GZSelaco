@@ -1,31 +1,18 @@
 @echo off
 setlocal enabledelayedexpansion
 
-rem **
-rem ** build_selaco_archipelago.bat
-rem ** Comprehensive build script for Selaco with Archipelago integration (Windows)
-rem **
-rem ** This script handles all dependencies, compilation, and setup for Selaco
-rem ** with the Archipelago multiworld randomizer integration on Windows.
-rem **
-rem ** Prerequisites:
-rem **   - Visual Studio 2019 or later (with C++ build tools)
-rem **   - Git for Windows
-rem **   - CMake (3.16 or later)
-rem **
-rem **---------------------------------------------------------------------------
+rem Build script for Selaco with Archipelago integration (Windows)
+rem Prerequisites: Visual Studio 2019+, Git, CMake 3.16+
 
-rem Get script directory
 set "SCRIPT_DIR=%~dp0"
 set "BUILD_DIR=%SCRIPT_DIR%build"
 set "ARCHIPELAGO_DIR=%SCRIPT_DIR%src\archipelago"
 
-rem Build configuration
 set "BUILD_TYPE=Release"
 set "JOBS=%NUMBER_OF_PROCESSORS%"
 if "%JOBS%"=="" set "JOBS=4"
 
-rem Parse command line arguments
+rem Parse arguments
 :parse_args
 if "%~1"=="--debug" (
     set "BUILD_TYPE=Debug"
@@ -88,10 +75,6 @@ exit /b 0
 echo [SUCCESS] %~1
 exit /b 0
 
-:log_warning
-echo [WARNING] %~1
-exit /b 0
-
 :log_error
 echo [ERROR] %~1
 exit /b 1
@@ -103,7 +86,6 @@ exit /b %errorlevel%
 :check_prerequisites
 call :log_info "Checking prerequisites..."
 
-rem Check essential tools
 call :check_command git
 if errorlevel 1 (
     call :log_error "Git not found. Please install Git for Windows."
@@ -116,10 +98,9 @@ if errorlevel 1 (
     exit /b 1
 )
 
-rem Check for Visual Studio
 call :check_command cl
 if errorlevel 1 (
-    call :log_error "Visual Studio C++ compiler not found. Please install Visual Studio 2019 or later with C++ build tools."
+    call :log_error "Visual Studio C++ compiler not found. Please install Visual Studio 2019+ with C++ build tools."
     exit /b 1
 )
 
@@ -150,7 +131,6 @@ if exist "vcpkg" (
     git clone https://github.com/microsoft/vcpkg
 )
 
-rem Bootstrap vcpkg
 if not exist "vcpkg\vcpkg.exe" (
     call :log_info "Bootstrapping vcpkg..."
     call vcpkg\bootstrap-vcpkg.bat
@@ -173,10 +153,8 @@ if exist "zmusic" (
     git clone https://github.com/zdoom/zmusic
 )
 
-rem Checkout specific version
 git -C zmusic checkout 1.1.12
 
-rem Create build directory
 if not exist "zmusic\build" mkdir "zmusic\build"
 if not exist "vcpkg_installed" mkdir "vcpkg_installed"
 
@@ -196,23 +174,41 @@ exit /b 0
 :verify_archipelago
 call :log_info "Verifying Archipelago integration..."
 
-rem Check if Archipelago source files exist
-set "ARCHIPELAGO_FILES=websocket_client.h websocket_client.cpp archipelago_client.h archipelago_client.cpp ap_definitions.h ap_definitions.cpp"
-
-for %%f in (%ARCHIPELAGO_FILES%) do (
-    if not exist "%ARCHIPELAGO_DIR%\%%f" (
-        call :log_error "Missing Archipelago file: %%f"
-        exit /b 1
-    )
+if not exist "%ARCHIPELAGO_DIR%\websocket_client.h" (
+    call :log_error "Missing Archipelago file: websocket_client.h"
+    exit /b 1
 )
 
-rem Check if ZScript integration exists
+if not exist "%ARCHIPELAGO_DIR%\websocket_client.cpp" (
+    call :log_error "Missing Archipelago file: websocket_client.cpp"
+    exit /b 1
+)
+
+if not exist "%ARCHIPELAGO_DIR%\archipelago_client.h" (
+    call :log_error "Missing Archipelago file: archipelago_client.h"
+    exit /b 1
+)
+
+if not exist "%ARCHIPELAGO_DIR%\archipelago_client.cpp" (
+    call :log_error "Missing Archipelago file: archipelago_client.cpp"
+    exit /b 1
+)
+
+if not exist "%ARCHIPELAGO_DIR%\ap_definitions.h" (
+    call :log_error "Missing Archipelago file: ap_definitions.h"
+    exit /b 1
+)
+
+if not exist "%ARCHIPELAGO_DIR%\ap_definitions.cpp" (
+    call :log_error "Missing Archipelago file: ap_definitions.cpp"
+    exit /b 1
+)
+
 if not exist "%SCRIPT_DIR%wadsrc\static\zscript\archipelago.zs" (
     call :log_error "Missing Archipelago ZScript integration"
     exit /b 1
 )
 
-rem Check if CMakeLists.txt includes Archipelago sources
 findstr /c:"archipelago/" "%SCRIPT_DIR%src\CMakeLists.txt" >nul
 if errorlevel 1 (
     call :log_error "Archipelago sources not found in CMakeLists.txt"
@@ -225,7 +221,6 @@ exit /b 0
 :build_selaco
 call :log_info "Configuring Selaco build..."
 
-rem Configure with CMake
 cmake -S .. -B . -DCMAKE_TOOLCHAIN_FILE=vcpkg\scripts\buildsystems\vcpkg.cmake -DCMAKE_BUILD_TYPE=%BUILD_TYPE% -DVCPKG_INSTALLED_DIR=vcpkg_installed\ -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
 if errorlevel 1 (
@@ -247,7 +242,6 @@ exit /b 0
 :create_config_files
 call :log_info "Creating configuration files..."
 
-rem Create Archipelago configuration
 echo # Archipelago Configuration for Selaco> "%BUILD_DIR%\archipelago.cfg"
 echo # This file is automatically created and updated by the game>> "%BUILD_DIR%\archipelago.cfg"
 echo.>> "%BUILD_DIR%\archipelago.cfg"
@@ -271,7 +265,6 @@ echo.>> "%BUILD_DIR%\archipelago.cfg"
 echo # HUD display>> "%BUILD_DIR%\archipelago.cfg"
 echo # Set this in console: set ap_show_hud true/false>> "%BUILD_DIR%\archipelago.cfg"
 
-rem Create launch script
 echo @echo off> "%BUILD_DIR%\launch_selaco.bat"
 echo rem Launch script for Selaco with Archipelago integration>> "%BUILD_DIR%\launch_selaco.bat"
 echo cd /d "%%~dp0">> "%BUILD_DIR%\launch_selaco.bat"
@@ -325,7 +318,6 @@ echo   ap_items
 echo   ap_chat ^<message^>
 echo.
 
-rem Open build directory on success
 if exist "%BUILD_DIR%" explorer "%BUILD_DIR%"
 
 exit /b 0
