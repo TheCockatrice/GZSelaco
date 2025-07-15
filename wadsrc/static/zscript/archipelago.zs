@@ -24,10 +24,10 @@ enum EArchipelagoClientStatus
 // Item structure for received items
 struct ArchipelagoItem
 {
-    int64 itemId;
-    int64 locationId;
-    int32 playerId;
-    int32 flags;
+    int itemId;
+    int locationId;
+    int playerId;
+    int flags;
     String itemName;    // Resolved name if available
     String playerName;  // Resolved name if available
 }
@@ -35,8 +35,8 @@ struct ArchipelagoItem
 // Player information
 struct ArchipelagoPlayer
 {
-    int32 team;
-    int32 slot;
+    int team;
+    int slot;
     String alias;
     String name;
 }
@@ -81,7 +81,7 @@ class ArchipelagoManager : EventHandler
     }
     
     // Location checking
-    static void CheckLocation(int64 locationId)
+    static void CheckLocation(int locationId)
     {
         Console.Printf("Checking Archipelago location: %d", locationId);
         CallArchipelagoFunction("CheckLocation", String.Format("%d", locationId));
@@ -90,51 +90,30 @@ class ArchipelagoManager : EventHandler
     static void CheckSelacoDLocation(int selacoLocationId)
     {
         // Convert Selaco location ID to Archipelago ID
-        int64 apLocationId = 200000 + selacoLocationId; // Using LOCATION_BASE from definitions
+        int apLocationId = 200000 + selacoLocationId; // Using LOCATION_BASE from definitions
         CheckLocation(apLocationId);
     }
     
-    static bool IsLocationChecked(int64 locationId)
+    static bool IsLocationChecked(int locationId)
     {
         return GetArchipelagoInt("IsLocationChecked", String.Format("%d", locationId)) != 0;
     }
     
     static bool IsSelacoDLocationChecked(int selacoLocationId)
     {
-        int64 apLocationId = 200000 + selacoLocationId;
+        int apLocationId = 200000 + selacoLocationId;
         return IsLocationChecked(apLocationId);
     }
     
-    // Item management
-    static Array<ArchipelagoItem> GetPendingItems()
+    // Item management (simplified - ZScript has limitations with struct arrays)
+    static int GetPendingItemCount()
     {
-        Array<ArchipelagoItem> items;
-        String itemData = GetArchipelagoString("GetPendingItems");
-        
-        // Parse item data string (simplified format: "itemId,locationId,playerId,flags;...")
-        Array<String> itemStrings;
-        itemData.Split(itemStrings, ";");
-        
-        for (int i = 0; i < itemStrings.Size(); i++)
-        {
-            if (itemStrings[i].Length() > 0)
-            {
-                Array<String> parts;
-                itemStrings[i].Split(parts, ",");
-                
-                if (parts.Size() >= 4)
-                {
-                    ArchipelagoItem item;
-                    item.itemId = parts[0].ToInt();
-                    item.locationId = parts[1].ToInt();
-                    item.playerId = parts[2].ToInt();
-                    item.flags = parts[3].ToInt();
-                    items.Push(item);
-                }
-            }
-        }
-        
-        return items;
+        return GetArchipelagoInt("GetPendingItemCount");
+    }
+    
+    static String GetPendingItemInfo(int index)
+    {
+        return GetArchipelagoString("GetPendingItemInfo", String.Format("%d", index));
     }
     
     static void ClearPendingItems()
@@ -159,36 +138,15 @@ class ArchipelagoManager : EventHandler
         CallArchipelagoFunction("SendChat", message);
     }
     
-    // Game information
-    static Array<ArchipelagoPlayer> GetPlayers()
+    // Game information (simplified - ZScript has limitations with struct arrays)
+    static int GetPlayerCount()
     {
-        Array<ArchipelagoPlayer> players;
-        String playerData = GetArchipelagoString("GetPlayers");
-        
-        // Parse player data (simplified format: "team,slot,alias,name;...")
-        Array<String> playerStrings;
-        playerData.Split(playerStrings, ";");
-        
-        for (int i = 0; i < playerStrings.Size(); i++)
-        {
-            if (playerStrings[i].Length() > 0)
-            {
-                Array<String> parts;
-                playerStrings[i].Split(parts, ",");
-                
-                if (parts.Size() >= 4)
-                {
-                    ArchipelagoPlayer player;
-                    player.team = parts[0].ToInt();
-                    player.slot = parts[1].ToInt();
-                    player.alias = parts[2];
-                    player.name = parts[3];
-                    players.Push(player);
-                }
-            }
-        }
-        
-        return players;
+        return GetArchipelagoInt("GetPlayerCount");
+    }
+    
+    static String GetPlayerInfo(int index)
+    {
+        return GetArchipelagoString("GetPlayerInfo", String.Format("%d", index));
     }
     
     static int GetTeam()
@@ -423,14 +381,14 @@ class ArchipelagoHelpers
     }
 }
 
-// HUD element to display Archipelago status
-class ArchipelagoStatusHUD : HUDMessageBase
+// HUD element to display Archipelago status (simplified)
+class ArchipelagoStatusHUD : EventHandler
 {
     private bool showStatus;
     private String statusText;
     private double lastUpdate;
     
-    override void BeginHUD(int width, int height)
+    override void RenderOverlay(RenderEvent e)
     {
         showStatus = CVar.GetCVar("ap_show_hud", players[consoleplayer]).GetBool();
         
@@ -439,35 +397,31 @@ class ArchipelagoStatusHUD : HUDMessageBase
             UpdateStatusText();
             lastUpdate = level.totaltime;
         }
+        
+        if (showStatus && statusText.Length() > 0)
+        {
+            DrawStatusText();
+        }
     }
     
-    override void DrawHUD()
+    private void DrawStatusText()
     {
-        if (!showStatus || statusText.Length() == 0) return;
-        
-        // Draw status in top-right corner
-        int width, height;
-        [width, height] = Screen.GetViewWindow();
-        
-        HUDFont font = HUDFont.Create("SmallFont");
-        int textWidth = font.StringWidth(statusText);
-        
-        DrawString(font, statusText, (width - textWidth - 10, 10), 
-                  DI_SCREEN_TOP_RIGHT, Font.CR_WHITE);
+        // Simple text display - can be enhanced later
+        Console.Printf("Archipelago Status: %s", statusText);
     }
     
     private void UpdateStatusText()
     {
         if (ArchipelagoManager.IsConnected())
         {
-            statusText = String.Format("AP: Connected (T%d/S%d)", 
+            statusText = String.Format("Connected (T%d/S%d)", 
                                      ArchipelagoManager.GetTeam(), 
                                      ArchipelagoManager.GetSlot());
         }
         else
         {
             EArchipelagoConnectionState state = ArchipelagoManager.GetConnectionState();
-            statusText = "AP: " .. ArchipelagoManager.GetConnectionStatusString();
+            statusText = "Disconnected";
         }
     }
 }
@@ -520,8 +474,8 @@ class ArchipelagoConsoleCommands : EventHandler
                              ArchipelagoManager.GetMessagesSent(),
                              ArchipelagoManager.GetMessagesReceived());
                 
-                Array<ArchipelagoPlayer> players = ArchipelagoManager.GetPlayers();
-                Console.Printf("Players in multiworld: %d", players.Size());
+                int playerCount = ArchipelagoManager.GetPlayerCount();
+                Console.Printf("Players in multiworld: %d", playerCount);
             }
         }
         else if (cmd == "ap_check")
@@ -537,15 +491,13 @@ class ArchipelagoConsoleCommands : EventHandler
         }
         else if (cmd == "ap_items")
         {
-            Array<ArchipelagoItem> items = ArchipelagoManager.GetPendingItems();
-            Console.Printf("Pending items: %d", items.Size());
+            int itemCount = ArchipelagoManager.GetPendingItemCount();
+            Console.Printf("Pending items: %d", itemCount);
             
-            for (int i = 0; i < items.Size(); i++)
+            for (int i = 0; i < itemCount; i++)
             {
-                ArchipelagoItem item = items[i];
-                Console.Printf("  Item %d: ID=%d, Location=%d, Player=%d, Flags=%d",
-                             i + 1, item.itemId, item.locationId, 
-                             item.playerId, item.flags);
+                String itemInfo = ArchipelagoManager.GetPendingItemInfo(i);
+                Console.Printf("  Item %d: %s", i + 1, itemInfo);
             }
         }
         else if (cmd == "ap_process_items")
