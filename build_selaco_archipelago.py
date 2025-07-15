@@ -50,6 +50,7 @@ class SelacoSetup:
         self.clean = args.clean
         self.verbose = args.verbose
         self.quick = args.quick
+        self.skip_checks = args.skip_checks
         
     def log(self, message: str, color: str = Colors.WHITE):
         """Print colored log message"""
@@ -101,6 +102,10 @@ class SelacoSetup:
         """Check if all required tools are available"""
         self.log_info("Checking prerequisites...")
         
+        if self.skip_checks:
+            self.log_warning("Skipping prerequisite checks as requested")
+            return
+        
         required_tools = []
         
         # Check for CMake
@@ -123,21 +128,34 @@ class SelacoSetup:
         except FileNotFoundError:
             required_tools.append("git")
         
-        # Platform-specific compiler checks
+        # Platform-specific build tool checks
         if self.is_windows:
-            # Check for Visual Studio or build tools
+            # Check for MSBuild (more reliable than cl on Windows)
+            msbuild_found = False
+            try:
+                result = self.run_command(["msbuild", "-version"], check=False)
+                if result.returncode == 0:
+                    self.log_success("MSBuild found")
+                    msbuild_found = True
+            except FileNotFoundError:
+                pass
+            
+            # Check for Visual Studio compiler (optional since we're not compiling)
             try:
                 result = self.run_command(["cl"], check=False)
                 if result.returncode != 0:  # cl returns non-zero when no input files
                     self.log_success("Visual Studio compiler found")
                 else:
-                    self.log_warning("Visual Studio compiler not found in PATH")
-                    self.log_warning("Make sure to run this from Visual Studio Developer Command Prompt")
+                    self.log_info("Visual Studio compiler not found in PATH (this is okay)")
             except FileNotFoundError:
-                self.log_warning("Visual Studio compiler not found")
-                self.log_warning("Make sure to run this from Visual Studio Developer Command Prompt")
+                self.log_info("Visual Studio compiler not found in PATH (this is okay)")
+            
+            # Only require MSBuild if we can't find it
+            if not msbuild_found:
+                self.log_warning("MSBuild not found - Visual Studio may not be properly installed")
+                self.log_info("You can still continue, but you'll need Visual Studio to build")
         else:
-            # Check for GCC/Clang
+            # Check for GCC/Clang on Unix systems
             gcc_found = False
             clang_found = False
             
@@ -159,29 +177,29 @@ class SelacoSetup:
             
             if not gcc_found and not clang_found:
                 required_tools.append("gcc or clang")
-        
-        # Check for Make/Ninja
-        make_found = False
-        ninja_found = False
-        
-        try:
-            result = self.run_command(["make", "--version"], check=False)
-            if result.returncode == 0:
-                self.log_success("Make found")
-                make_found = True
-        except FileNotFoundError:
-            pass
-        
-        try:
-            result = self.run_command(["ninja", "--version"], check=False)
-            if result.returncode == 0:
-                self.log_success("Ninja found")
-                ninja_found = True
-        except FileNotFoundError:
-            pass
-        
-        if not make_found and not ninja_found:
-            required_tools.append("make or ninja")
+            
+            # Check for Make/Ninja on Unix systems
+            make_found = False
+            ninja_found = False
+            
+            try:
+                result = self.run_command(["make", "--version"], check=False)
+                if result.returncode == 0:
+                    self.log_success("Make found")
+                    make_found = True
+            except FileNotFoundError:
+                pass
+            
+            try:
+                result = self.run_command(["ninja", "--version"], check=False)
+                if result.returncode == 0:
+                    self.log_success("Ninja found")
+                    ninja_found = True
+            except FileNotFoundError:
+                pass
+            
+            if not make_found and not ninja_found:
+                required_tools.append("make or ninja")
         
         if required_tools:
             self.log_error("Missing required tools:")
@@ -193,9 +211,12 @@ class SelacoSetup:
             if self.is_windows:
                 self.log_info("Windows:")
                 self.log_info("  - Install Visual Studio 2019 or 2022 with C++ development tools")
-                self.log_info("  - Or install Visual Studio Build Tools")
+                self.log_info("  - Make sure to include 'MSBuild' and 'Windows SDK' components")
+                self.log_info("  - Or install Visual Studio Build Tools (standalone)")
                 self.log_info("  - Install Git from https://git-scm.com/")
                 self.log_info("  - Install CMake from https://cmake.org/download/")
+                self.log_info("\nAlternatively, you can use --skip-checks to continue anyway:")
+                self.log_info("  python build_selaco_archipelago.py --skip-checks")
             elif self.is_linux:
                 self.log_info("Linux (Ubuntu/Debian):")
                 self.log_info("  sudo apt update")
@@ -209,7 +230,8 @@ class SelacoSetup:
                 self.log_info("  xcode-select --install")
                 self.log_info("  brew install cmake git")
             
-            raise SelacoBuildError("Missing required tools")
+            if not self.skip_checks:
+                raise SelacoBuildError("Missing required tools")
         
         self.log_success("All prerequisites found")
     
@@ -585,6 +607,7 @@ Examples:
   python build_selaco_archipelago.py                    # Default setup (RelWithDebInfo)
   python build_selaco_archipelago.py --build-type Release --clean
   python build_selaco_archipelago.py --verbose --clean
+  python build_selaco_archipelago.py --skip-checks      # Skip prerequisite checks
   
 This script sets up the build environment but doesn't compile. 
 After running this, you can build in Visual Studio or with make.
@@ -612,6 +635,11 @@ For more information, see BUILD_ARCHIPELAGO.md
         "--quick", 
         action="store_true",
         help="Skip dependency setup for faster configuration (use only if dependencies are already set up)"
+    )
+    parser.add_argument(
+        "--skip-checks", 
+        action="store_true",
+        help="Skip prerequisite checks (continue even if tools are missing)"
     )
     
     args = parser.parse_args()
