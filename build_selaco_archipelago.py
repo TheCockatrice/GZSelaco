@@ -281,11 +281,55 @@ class SelacoSetup:
         
         # Install dependencies using manifest mode
         self.log_info("Installing dependencies from manifest...")
-        self.run_command([
-            str(vcpkg_path), "install"
-        ], cwd=self.root_dir)
+        try:
+            self.run_command([
+                str(vcpkg_path), "install"
+            ], cwd=self.root_dir)
+            self.log_success("All dependencies installed")
+        except SelacoBuildError as e:
+            self.log_warning("Manifest mode failed, trying classic mode...")
+            # Fall back to classic mode if manifest fails
+            self.install_dependencies_classic()
+    
+    def install_dependencies_classic(self):
+        """Install dependencies using classic vcpkg mode"""
+        vcpkg_exe = "vcpkg.exe" if self.is_windows else "vcpkg"
+        vcpkg_path = self.vcpkg_dir / vcpkg_exe
         
-        self.log_success("All dependencies installed")
+        # Determine triplet
+        if self.is_windows:
+            triplet = "x64-windows"
+        elif self.is_linux:
+            triplet = "x64-linux"
+        elif self.is_macos:
+            triplet = "x64-osx"
+        else:
+            triplet = "x64-linux"  # Default fallback
+        
+        # Dependencies to install
+        dependencies = [
+            "rapidjson",
+            "zlib",
+            "bzip2",
+            "libjpeg-turbo",
+            "libpng",
+            "openal-soft",
+            "libvorbis",
+            "libflac",
+            "libsndfile",
+            "mpg123"
+        ]
+        
+        for dep in dependencies:
+            self.log_info(f"Installing {dep}...")
+            try:
+                self.run_command([
+                    str(vcpkg_path), "install", f"{dep}:{triplet}", "--classic"
+                ], cwd=self.vcpkg_dir)
+            except SelacoBuildError:
+                self.log_warning(f"Failed to install {dep}, continuing...")
+        
+        self.log_success("Classic mode dependency installation complete")
     
     def create_vcpkg_configuration(self):
         """Create vcpkg-configuration.json file for triplet specification"""
@@ -306,17 +350,30 @@ class SelacoSetup:
         else:
             triplet = "x64-linux"  # Default fallback
         
+        # Get proper baseline SHA
+        baseline_sha = None
+        try:
+            result = self.run_command(["git", "rev-parse", "HEAD"], cwd=self.vcpkg_dir, check=False)
+            if result.returncode == 0 and result.stdout:
+                baseline_sha = result.stdout.strip()
+        except Exception:
+            pass
+        
+        # Create configuration with proper format
         config = {
-            "default-triplet": triplet,
-            "registries": [
+            "default-triplet": triplet
+        }
+        
+        # Only add registries if we have a proper baseline
+        if baseline_sha and len(baseline_sha) == 40:  # Valid SHA
+            config["registries"] = [
                 {
                     "kind": "git",
                     "repository": "https://github.com/Microsoft/vcpkg",
-                    "baseline": "master",
+                    "baseline": baseline_sha,
                     "packages": ["*"]
                 }
             ]
-        }
         
         try:
             with open(config_path, 'w') as f:
@@ -342,7 +399,7 @@ class SelacoSetup:
         try:
             # Get the current vcpkg baseline (commit hash)
             result = self.run_command(["git", "rev-parse", "HEAD"], cwd=self.vcpkg_dir, check=False)
-            baseline = result.stdout.strip() if result.returncode == 0 else None
+            baseline = result.stdout.strip() if result.returncode == 0 and result.stdout else None
             
             # Create vcpkg.json manifest
             manifest = {
@@ -363,9 +420,12 @@ class SelacoSetup:
                 ]
             }
             
-            # Add baseline if we got it
-            if baseline:
+            # Add baseline if we got a valid SHA (40 hex characters)
+            if baseline and len(baseline) == 40 and all(c in '0123456789abcdef' for c in baseline.lower()):
                 manifest["builtin-baseline"] = baseline
+                self.log_info(f"Using vcpkg baseline: {baseline[:8]}...")
+            else:
+                self.log_warning("No valid vcpkg baseline found, using version constraints")
             
             with open(manifest_path, 'w') as f:
                 json.dump(manifest, f, indent=2)
@@ -453,10 +513,18 @@ class SelacoSetup:
             vcpkg_manifest = self.root_dir / "vcpkg.json"
             if vcpkg_manifest.exists():
                 vcpkg_manifest.unlink()
+                self.log_info("Removed existing vcpkg.json")
             
             vcpkg_config = self.root_dir / "vcpkg-configuration.json"
             if vcpkg_config.exists():
                 vcpkg_config.unlink()
+                self.log_info("Removed existing vcpkg-configuration.json")
+            
+            # Also clean vcpkg installed directory
+            vcpkg_installed = self.root_dir / "vcpkg_installed"
+            if vcpkg_installed.exists():
+                shutil.rmtree(vcpkg_installed)
+                self.log_info("Removed vcpkg_installed directory")
         
         self.build_dir.mkdir(parents=True, exist_ok=True)
         
@@ -471,8 +539,9 @@ class SelacoSetup:
         vcpkg_toolchain = self.vcpkg_dir / "scripts" / "buildsystems" / "vcpkg.cmake"
         if vcpkg_toolchain.exists():
             cmake_args.append(f"-DCMAKE_TOOLCHAIN_FILE={vcpkg_toolchain}")
+            self.log_info(f"Using vcpkg toolchain: {vcpkg_toolchain}")
         elif not self.quick:
-            self.log_warning("vcpkg toolchain not found, dependencies may not be available")
+            self.log_warning("vcpkg toolchain not found, building without it")
         
         # Platform-specific settings
         if self.is_windows:
