@@ -318,8 +318,9 @@ enum EFxType
 	EFX_LocalArrayDeclaration,
 	EFX_OutVarDereference,
 	EFX_ToVector,
-	EFX_COUNT,
 	EFX_FStateOffset,
+
+	EFX_COUNT
 };
 
 //==========================================================================
