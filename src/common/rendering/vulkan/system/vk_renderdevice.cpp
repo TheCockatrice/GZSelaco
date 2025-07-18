@@ -286,7 +286,8 @@ static void TempUploadTexture(VkCommandBufferManager *cmd, VkHardwareTexture *te
 		size_t mipSize = pixelDataSize, dataPos = 0;
 		const int startMip = allowQualityReduction ? min((int)gl_texture_quality, (int)numMipLevels - 1) : 0;
 		int mipCnt = 0, maxMips = mipmap ? numMipLevels - startMip : 1;
-		
+		//int channels = fmt == VK_FORMAT_BC1_RGB_UNORM_BLOCK ? 3 : 4;			// Pretty much unused here
+		uint32_t blockSize = fmt == VK_FORMAT_BC1_RGB_UNORM_BLOCK ? 8 : 16;
 
 		assert(indexed == false);
 
@@ -298,11 +299,11 @@ static void TempUploadTexture(VkCommandBufferManager *cmd, VkHardwareTexture *te
 				mipCnt++;
 				if (x == startMip) {
 					// Base texture
-					tex->BackgroundCreateTexture(cmd, mipWidth, mipHeight, 4, fmt, pixelData + dataPos, numMipLevels - startMip, false, mipSize);
+					tex->BackgroundCreateTexture(cmd, mipWidth, mipHeight, 0, fmt, pixelData + dataPos, numMipLevels - startMip, false, mipSize);
 				}
 				else {
 					// Mip
-					tex->BackgroundCreateTextureMipMap(cmd, x - startMip, mipWidth, mipHeight, 4, fmt, pixelData + dataPos, mipSize);
+					tex->BackgroundCreateTextureMipMap(cmd, x - startMip, mipWidth, mipHeight, 0, fmt, pixelData + dataPos, mipSize);
 				}
 			}
 				
@@ -310,7 +311,7 @@ static void TempUploadTexture(VkCommandBufferManager *cmd, VkHardwareTexture *te
 
 			mipWidth = std::max(1u, (mipWidth >> 1));
 			mipHeight = std::max(1u, (mipHeight >> 1));
-			mipSize = (size_t)std::max(1u, ((mipWidth + 3) / 4)) * std::max(1u, ((mipHeight + 3) / 4)) * 16;
+			mipSize = (size_t)std::max(1u, ((mipWidth + 3) / 4)) * std::max(1u, ((mipHeight + 3) / 4)) * blockSize;
 		}
 	}
 	else {
@@ -383,7 +384,7 @@ bool VkTexLoadThread::loadResource(VkTexLoadIn &input, VkTexLoadOut &output) {
 			output.isTranslucent = src->ReadCompressedPixels(&reader, &pixelData, totalSize, pixelDataSize, numMipLevels);
 			reader.Close();
 			mipmap = false;
-			fmt = VK_FORMAT_BC7_UNORM_BLOCK;
+			fmt = (VkFormat)src->getVKFormat(); //VK_FORMAT_BC7_UNORM_BLOCK;
 
 			output.totalDataSize = totalSize;
 
@@ -749,7 +750,7 @@ void VulkanRenderDevice::UploadLoadedTextures(bool flush) {
 		if (!flush && bytesUploaded > 20971520) break;	// Limit to ~20mb per call unless flushing
 
 		bool gpuOnly = loaded.imgSource->IsGPUOnly();
-		VkFormat fmt = gpuOnly ? VK_FORMAT_BC7_UNORM_BLOCK : VK_FORMAT_B8G8R8A8_UNORM;
+		VkFormat fmt = gpuOnly ? (VkFormat)loaded.imgSource->getVKFormat() : VK_FORMAT_B8G8R8A8_UNORM;
 
 		assert(loaded.pixels);
 
