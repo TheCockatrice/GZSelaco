@@ -20,7 +20,9 @@
 #ifndef __VSMatrix__
 #define __VSMatrix__
 
+#include <immintrin.h>
 #include <stdlib.h>
+#include <xmmintrin.h>
 #include "vectors.h"
 
 #ifdef USE_DOUBLE
@@ -114,7 +116,8 @@ class VSMatrix {
 
 class Matrix3x4	// used like a 4x4 matrix with the last row always being (0,0,0,1)
 {
-	float m[3][4];
+	//float m[3][4];
+	__m128 m[4]; //4 x Vec4
 
 public:
 
@@ -213,11 +216,25 @@ public:
  		other.m[2][2] = c;
 
 		*this = *this * other;
-}
+	}
 
 	Matrix3x4 operator *(const Matrix3x4 &other)
 	{
 		Matrix3x4 result;
+
+		for (int i = 0; i < 4; ++i)
+		{
+			//Linear Combination
+			__m128 row = m[i];
+			row = _mm_mul_ps(_mm_shuffle_ps(row, row, 0x00), other.m[0]);
+			row = _mm_add_ps(row, _mm_mul_ps(_mm_shuffle_ps(row, row, 0x55), other.m[1]));
+			row = _mm_add_ps(row, _mm_mul_ps(_mm_shuffle_ps(row, row, 0xaa), other.m[2]));
+			row = _mm_add_ps(row, _mm_mul_ps(_mm_shuffle_ps(row, row, 0xff), other.m[3]));
+
+			m[i] = row;
+		}
+
+		return result;
 
 		result.m[0][0] = m[0][0]*other.m[0][0] + m[0][1]*other.m[1][0] + m[0][2]*other.m[2][0];
 		result.m[0][1] = m[0][0]*other.m[0][1] + m[0][1]*other.m[1][1] + m[0][2]*other.m[2][1];
