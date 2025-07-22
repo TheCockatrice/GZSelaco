@@ -222,7 +222,7 @@ public:
 	{
 		Matrix3x4 result;
 
-		for (int i = 0; i < 4; ++i)
+		for (int i = 0; i < 4; i += 1)
 		{
 			//Linear Combination
 			__m128 row = m[i];
@@ -231,7 +231,7 @@ public:
 			row = _mm_add_ps(row, _mm_mul_ps(_mm_shuffle_ps(row, row, 0xaa), other.m[2]));
 			row = _mm_add_ps(row, _mm_mul_ps(_mm_shuffle_ps(row, row, 0xff), other.m[3]));
 
-			m[i] = row;
+			result.m[i] = row;
 		}
 
 		return result;
