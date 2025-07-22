@@ -194,9 +194,18 @@ public:
 	{
  		Matrix3x4 other{};
 
+
 		float rads = angle * (pi::pif() / 180.0f);
 		float c = cosf(rads);
 		float s = sinf(rads);
+
+		other.m[0] = _mm_set_ps(0.0f, 0.0f, 0.0f, 1.0f);
+		other.m[1] = _mm_set_ps(0.0f, -s,   c,    0.0f);
+		other.m[2] = _mm_set_ps(0.0f, c,    s,    0.0f);
+		other.m[3] = _mm_set_ps(1.0f, 0.0f, 0.0f, 0.0f);
+
+		*this = *this * other;
+		return;
 
  		other.m[0][0] = 1.0f;
  		
@@ -216,6 +225,14 @@ public:
 		float rads = angle * (pi::pif() / 180.0f);
 		float c = cosf(rads);
 		float s = sinf(rads);
+
+		other.m[0] = _mm_set_ps(0.0f,    s, 0.0f, c);
+		other.m[1] = _mm_set_ps(0.0f, 0.0f, 1.0f, 0.0f);
+		other.m[2] = _mm_set_ps(0.0f,    c, 0.0f, -s);
+		other.m[3] = _mm_set_ps(1.0f, 0.0f, 0.0f, 0.0f);
+
+		*this = *this * other;
+		return;
 
  		other.m[0][0] = c;
  		other.m[0][2] = s;
