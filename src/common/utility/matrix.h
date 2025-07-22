@@ -136,6 +136,16 @@ public:
 
 	void Scale(float x, float y, float z)
 	{
+		__m128 scale_vec = _mm_set_ps(z, y, x, 1.0f);
+
+		for (int i = 0; i < 4; i += 1)
+		{
+			__m128 row = m[i];
+			row = _mm_mul_ps(row, scale_vec);
+			m[i] = row;
+		}
+
+		return;
 		m[0][0] *=x;
 		m[1][0] *=x;
 		m[2][0] *=x;
