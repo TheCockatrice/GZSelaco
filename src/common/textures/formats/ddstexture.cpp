@@ -322,8 +322,9 @@ public:
 	int ReadCompressedPixels(FileReader* reader, unsigned char** data, size_t& size, size_t& unitSize, int& mipLevels) override;
 
 	bool IsGPUOnly() override { return true; }
+	int getGLFormat() const override { return glFormat; }
+	int getVKFormat() const override { return vkFormat; }
 
-	//int32_t vkFormat, glFormat;
 
 	bool SerializeForTextureDef(FILE* fp, FString& name, int useType, FGameTexture* gameTex)  override {
 		const char* fullName = fileSystem.GetFileFullName(SourceLump);
@@ -392,9 +393,14 @@ protected:
 	uint8_t RShiftL, GShiftL, BShiftL, AShiftL;
 	uint8_t RShiftR, GShiftR, BShiftR, AShiftR;
 
+	int32_t BlockSize = 16;
 	int32_t Pitch;
 	uint32_t LinearSize;
 	uint8_t storedMips;
+	bool hasDX10Header = false;
+
+	int glFormat = 0x8E8C;	// GL_COMPRESSED_RGBA_BPTC_UNORM
+	int vkFormat = 145;		// VK_FORMAT_BC7_UNORM_BLOCK
 
 	static void CalcBitShift (uint32_t mask, uint8_t *lshift, uint8_t *rshift);
 
@@ -463,7 +469,8 @@ FImageSource *DDSImage_TryCreate (FileReader &data, int lumpnum)
 		DDHEADERDX10 dx10header;
 		uint32_t	 dx10Byteswapping[sizeof(DDHEADERDX10) / 4];
 	};
-	
+
+	memset(&dx10header, 0, sizeof(dx10header));
 
 	if (!CheckDDS(data)) return NULL;
 
@@ -480,14 +487,28 @@ FImageSource *DDSImage_TryCreate (FileReader &data, int lumpnum)
 	surfdesc.PixelFormat.FourCC = LittleLong(surfdesc.PixelFormat.FourCC);
 #endif
 
-	bool hasDX10 = surfdesc.Flags & 0x4 && surfdesc.PixelFormat.FourCC == ID_DX10;
+	bool hasDX10 = surfdesc.PixelFormat.Flags & 0x4 && surfdesc.PixelFormat.FourCC == ID_DX10;
 
 	if (!hasDX10) {
-		FString lumpname = fileSystem.GetFileFullName(lumpnum);
-		I_FatalError("DDS File Error (%s) Invalid Format: No DX10 header specified!", lumpname.GetChars());
+		// Verify type
+		if (surfdesc.PixelFormat.FourCC != ID_DXT1 && surfdesc.PixelFormat.FourCC != ID_DXT3) {
+			FString lumpname = fileSystem.GetFileFullName(lumpnum);
+			I_FatalError("DDS File Error (%s) Invalid Format: No DX10 header specified!", lumpname.GetChars());
+		}
+		else {
+			if (surfdesc.PixelFormat.FourCC == ID_DXT1) {
+				dx10header.dxgiFormat = DXGI_FORMAT_BC1_UNORM;	// Assume RGB for now, SRGB can come later
+			}
+			else if (surfdesc.PixelFormat.FourCC == ID_DXT3) {
+				dx10header.dxgiFormat = DXGI_FORMAT_BC3_UNORM;	// Assume RGB for now, SRGB can come later
+	}
+			dx10header.resourceDimension = D3D10_RESOURCE_DIMENSION_TEXTURE2D;
+}
+	}
+	else {
+		data.Read(&dx10header, sizeof(dx10header));
 	}
 
-	data.Read(&dx10header, sizeof(dx10header));
 
 #ifdef __BIG_ENDIAN__
 	// Every single element of the dx10header is also a uint32_t
@@ -497,61 +518,20 @@ FImageSource *DDSImage_TryCreate (FileReader &data, int lumpnum)
 	}
 #endif
 
-	/*if (surfdesc.MipMapCount > 0) {
-		FString lumpname = fileSystem.GetFileFullName(lumpnum);
-		I_FatalError("DDS File Error (%s) Invalid Format: Embedded mipmaps are currently unsupported!", lumpname.GetChars());
-	} else*/ if (surfdesc.LinearSize > 20971520) {
+	if (surfdesc.LinearSize > 20971520) {
 		FString lumpname = fileSystem.GetFileFullName(lumpnum);
 		I_FatalError("DDS File Error (%s) Invalid Format: File is too large! This error should probably go away.", lumpname.GetChars());
 	} else if(dx10header.arraySize > 1) {
 		FString lumpname = fileSystem.GetFileFullName(lumpnum);
 		I_FatalError("DDS File Error (%s) Invalid Format: Multiple layers or images is currently unsupported!", lumpname.GetChars());
-	} else if (dx10header.dxgiFormat != DXGI_FORMAT_BC7_UNORM) {
+	} else if (dx10header.dxgiFormat != DXGI_FORMAT_BC7_UNORM && dx10header.dxgiFormat != DXGI_FORMAT_BC1_UNORM && dx10header.dxgiFormat != DXGI_FORMAT_BC3_UNORM) {
 		FString lumpname = fileSystem.GetFileFullName(lumpnum);
-		I_FatalError("DDS File Error (%s) Invalid Format: Currently only DXGI_FORMAT_BC7_UNORM format is supported! BCx Formats should eventually be included when I'm not lazy.", lumpname.GetChars());
+		I_FatalError("DDS File Error (%s) Invalid Format: Currently only DXGI_FORMAT_BC7_UNORM, DXGI_FORMAT_BC1_UNORM  and DXGI_FORMAT_BC3_UNORM formats are supported! More Formats should eventually be included when I'm not lazy.", lumpname.GetChars());
 	} else if (dx10header.resourceDimension != D3D10_RESOURCE_DIMENSION_TEXTURE2D) {
 		FString lumpname = fileSystem.GetFileFullName(lumpnum);
 		I_FatalError("DDS File Error (%s) Invalid Format: Only 2D textures are supported!", lumpname.GetChars());
 	}
 
-
-	/*if (surfdesc.PixelFormat.Flags & DDPF_FOURCC)
-	{
-		// Check for supported FourCC
-		if (surfdesc.PixelFormat.FourCC != ID_DXT1 &&
-			surfdesc.PixelFormat.FourCC != ID_DXT2 &&
-			surfdesc.PixelFormat.FourCC != ID_DXT3 &&
-			surfdesc.PixelFormat.FourCC != ID_DXT4 &&
-			surfdesc.PixelFormat.FourCC != ID_DXT5)
-		{
-			return NULL;
-		}
-		if (!(surfdesc.Flags & DDSD_LINEARSIZE))
-		{
-			return NULL;
-		}
-	}
-	else {
-		FString lumpname = fileSystem.GetFileFullName(lumpnum);
-		I_FatalError("DDS File Error (%s) Invalid Format: NO-FOURCC FLAG SET", lumpname.GetChars());
-	}*/
-		
-		/*if (surfdesc.PixelFormat.Flags & DDPF_RGB)
-	{
-		if ((surfdesc.PixelFormat.RGBBitCount >> 3) < 1 ||
-			(surfdesc.PixelFormat.RGBBitCount >> 3) > 4)
-		{
-			return NULL;
-		}
-		if ((surfdesc.Flags & DDSD_PITCH) && (surfdesc.Pitch <= 0))
-		{
-			return NULL;
-		}
-	}
-	else
-	{
-		return NULL;
-	}*/
 	return new FDDSTexture (data, lumpnum, &surfdesc, &dx10header);
 }
 
@@ -570,18 +550,40 @@ FDDSTexture::FDDSTexture (FileReader &lump, int lumpnum, void *vsurfdesc, void* 
 	bMasked = false;
 	Width = uint16_t(surf->Width);
 	Height = uint16_t(surf->Height);
+	hasDX10Header = surf->PixelFormat.Flags & 0x4 && surf->PixelFormat.FourCC == ID_DX10;
 
-	//vkFormat = 146;		// VK_FORMAT_BC7_SRGB_BLOCK;
-	//glFormat = 0x8E8C;	// GL_COMPRESSED_RGBA_BPTC_UNORM
+	// @Cockatrice - Only supporting BC1 and BC7 RGB/ARGB at the moment
+	// There is no use case for the other formats since BC1 with no alpha is the smallest size
+	// And BC7 with alpha is the most robust format for sprites
+	// Also throwing in BC3 with alpha support as a fallback for GPUs that don't support BC7
+	switch (dx10->dxgiFormat) {
+		case DXGI_FORMAT_BC1_UNORM:
+			vkFormat = 131;		// VK_FORMAT_BC1_RGB_UNORM_BLOCK
+			glFormat = 0x83F0;	// GL_COMPRESSED_RGB_S3TC_DXT1_EXT
+			BlockSize = 8;
+			break;
+		case DXGI_FORMAT_BC3_UNORM:
+			vkFormat = 137;		// VK_FORMAT_BC3_UNORM_BLOCK
+			glFormat = 0x83F2;  // GL_COMPRESSED_RGBA_S3TC_DXT3_EXT
+			BlockSize = 16;
+			break;
+		case DXGI_FORMAT_BC7_UNORM:
+		default:
+			// By default assume BC7, since it's the most useful for sprites
+			vkFormat = 145;		// VK_FORMAT_BC7_UNORM_BLOCK
+			glFormat = 0x8E8C;	// GL_COMPRESSED_RGBA_BPTC_UNORM
+			BlockSize = 16;
+			break;
+	}
 
 	LinearSize = surf->LinearSize;
-	Format = ID_DX10;
+	Format = surf->PixelFormat.FourCC;
 	Pitch = 0;
 
 	// This is a bit backwards, but this value should be set by Offsetter. 
 	// We want translucency by default, and most exporters will set this value to zero
 	// So 0 = translucent  1 = not translucent
-	bTranslucent = surf->Offsets[2] == 0;	
+	bTranslucent = dx10->dxgiFormat == DXGI_FORMAT_BC1_UNORM ? false : surf->Offsets[2] == 0;
 	storedMips = surf->MipMapCount;
 	SetOffsets(surf->Offsets[0], surf->Offsets[1]);
 }
@@ -608,7 +610,7 @@ FDDSTexture::FDDSTexture(int lumpnum) : FImageSource(lumpnum)
 
 // Data must be interpreted, this may include mipmap data which may be used or discarded at will
 int FDDSTexture::ReadCompressedPixels(FileReader* reader, unsigned char** data, size_t& size, size_t& unitSize, int& mipLevels) {
-	const size_t headerSize = sizeof(DDSURFACEDESC2) + sizeof(DDHEADERDX10) + 4;
+	const size_t headerSize = sizeof(DDSURFACEDESC2) + (hasDX10Header ? sizeof(DDHEADERDX10) : 0) + 4;
 	
 	// TODO: Read remapped/translated version here when necessary!
 	int lumpSize = fileSystem.FileLength(SourceLump);
@@ -622,11 +624,14 @@ int FDDSTexture::ReadCompressedPixels(FileReader* reader, unsigned char** data, 
 	reader->Read(cacheData, lumpSize);
 	
 	*data = (unsigned char *)malloc(pixelDataSize);
-	unitSize = LinearSize;
+	//unitSize = LinearSize;
+	//linearSize is wrong most of the time with non DX10 images
+	//calculate manually
+	unitSize = std::max(1, ((Width + 3) / 4)) * std::max(1, ((Height + 3) / 4)) * BlockSize;
 	size = pixelDataSize;
 	mipLevels = storedMips;
 
-	if (pixelDataSize >= LinearSize) {
+	if (pixelDataSize >= unitSize) {
 		// Copy data from file
 		memcpy(*data, cacheData + headerSize, pixelDataSize);
 		delete[]cacheData;

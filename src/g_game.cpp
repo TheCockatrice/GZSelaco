@@ -124,6 +124,7 @@ CVAR (Bool, cl_waitforsave, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
 CVAR (Bool, enablescriptscreenshot, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
 CVAR (Bool, cl_restartondeath, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
 EXTERN_CVAR (Float, con_midtime);
+EXTERN_CVAR(String, save_dir);
 
 //==========================================================================
 //
@@ -2274,6 +2275,27 @@ int G_BuildSaveNames(const char* prefix, TArray<FString> &outputAr) {
 		name << prefix;
 
 		outputAr.Push(name);
+	}
+
+
+	// If +save_dir or -savedir is specified, add that
+	// command argument overrides CVAR
+	FString savedir;
+	if (const char* const dir = Args->CheckValue("-savedir")) {
+		savedir = dir;
+	} else if(**save_dir) {
+		savedir = FString(save_dir);
+	}
+	
+	const size_t len = savedir.Len();
+	if (len) {
+		FixPathSeperator(savedir);
+		if (savedir[len - 1] != '/')
+			savedir << '/';
+
+		savedir = NicePath(savedir.GetChars());
+
+		outputAr.Push(savedir);
 	}
 
 	return paths.Size();
