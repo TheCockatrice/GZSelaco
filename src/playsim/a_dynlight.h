@@ -244,7 +244,31 @@ struct FDynamicLight
 	void Deactivate() { m_active = false; }
 	void Activate();
 
-	void SetActor(AActor *ac, bool isowned) { target = ac; owned = isowned; }
+	void AddPlayerLight() {
+		auto idx = Level->playerLights.Find(this);
+		if (idx >= Level->playerLights.size()) {
+			Level->playerLights.Push(this);
+		}
+	}
+
+	void RemovePlayerLight() {
+		auto idx = Level->playerLights.Find(this);
+		if (idx < Level->playerLights.size())
+			Level->playerLights.Delete(idx);
+	}
+
+	void SetActor(AActor *ac, bool isowned) { 
+		target = ac; 
+		owned = isowned; 
+
+		if (target && target->master && target->master == players[consoleplayer].mo) {
+			AddPlayerLight();
+		}
+		else {
+			RemovePlayerLight();
+		}
+	}
+
 	double X() const { return Pos.X; }
 	double Y() const { return Pos.Y; }
 	double Z() const { return Pos.Z; }

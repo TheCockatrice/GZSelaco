@@ -216,7 +216,7 @@ bool GlTexLoadThread::loadResource(GlTexLoadIn & input, GlTexLoadOut & output) {
 			reader.Close();
 
 			if (uploadPossible) {
-				output.tex->BackgroundCreateCompressedTexture(pixelData, (uint32_t)pixelDataSize, (uint32_t)output.totalDataSize, buffWidth, buffHeight, input.texUnit, numMipLevels, "GlTexLoadThread::loadResource(Compressed)", !allowMips, input.flags.AllowQualityReduction);
+				output.tex->BackgroundCreateCompressedTexture(pixelData, (uint32_t)pixelDataSize, (uint32_t)output.totalDataSize, buffWidth, buffHeight, src->getGLFormat(), input.texUnit, numMipLevels, "GlTexLoadThread::loadResource(Compressed)", !allowMips, input.flags.AllowQualityReduction);
 			}
 
 			if (input.spi.generateSpi) {
@@ -586,7 +586,7 @@ void OpenGLFrameBuffer::UpdateBackgroundCache(bool flush) {
 			// If we have pixels to upload, upload them here
 			if (loaded.pixels) {
 				if (loaded.imgSource->IsGPUOnly()) {
-					loaded.tex->BackgroundCreateCompressedTexture(loaded.pixels, loaded.pixelsSize, loaded.totalDataSize, loaded.pixelW, loaded.pixelH, loaded.texUnit, loaded.mipLevels, "OpenGLFrameBuffer::UpdateBackgroundCache()", !loaded.flags.CreateMips, loaded.flags.AllowQualityReduction);
+					loaded.tex->BackgroundCreateCompressedTexture(loaded.pixels, loaded.pixelsSize, loaded.totalDataSize, loaded.pixelW, loaded.pixelH, loaded.imgSource->getGLFormat(), loaded.texUnit, loaded.mipLevels, "OpenGLFrameBuffer::UpdateBackgroundCache()", !loaded.flags.CreateMips, loaded.flags.AllowQualityReduction);
 				}
 				else {
 					loaded.tex->BackgroundCreateTexture(loaded.pixels, loaded.pixelW, loaded.pixelH, loaded.texUnit, loaded.flags.CreateMips, false, "OpenGLFrameBuffer::UpdateBackgroundCache()", !loaded.flags.CreateMips);

@@ -183,6 +183,31 @@ void HWFlat::SetupLights(HWDrawInfo *di, FLightNode * node, FDynLightData &light
 		node = node->nextLight;
 	}
 
+	// @Cockatrice - Add any player lights to every flat. This is a hack to prevent the big hit to CPU power by constantly linking and unlinking moving spotlights
+	// BRUTE FORCE FOR NOW: TODO: Keep a list of player lights!
+	AActor *mo = players[consoleplayer].mo;
+	if (mo) {
+		for (auto* l : level.playerLights) {
+			if (!l->IsActive() || l->DontLightMap() || !l->target || l->target->master != mo) {
+				continue;
+			}
+
+			iter_dlightf++;
+
+			// we must do the side check here because gl_GetLight needs the correct plane orientation
+			// which we don't have for Legacy-style 3D-floors
+			double planeh = plane.plane.ZatPoint(l->Pos);
+			if ((planeh < l->Z() && ceiling) || (planeh > l->Z() && !ceiling))
+			{
+				continue;
+			}
+
+			p.Set(plane.plane.Normal(), plane.plane.fD());
+
+			draw_dlightf += GetLight(lightdata, portalgroup, p, l, false, di->Viewpoint.TicFrac);
+		}
+	}
+
 	dynlightindex = screen->mLights->UploadLights(lightdata);
 }
 

@@ -175,6 +175,9 @@ void VkHardwareTexture::CreateImage(FTexture *tex, int translation, int flags)
 				hwState = READY;
 				return;
 			}
+			
+			VkFormat fmt = (VkFormat)src->getVKFormat();
+			uint32_t blockSize = fmt == VK_FORMAT_BC1_RGB_UNORM_BLOCK ? 8 : 16;
 
 			// Read pixels
 			src->ReadCompressedPixels(&reader, &pixelData, totalDataSize, pixelDataSize, mipLevels);
@@ -196,22 +199,22 @@ void VkHardwareTexture::CreateImage(FTexture *tex, int translation, int flags)
 					if (x >= mipStart) {
 						if (x == mipStart) {
 							// Base texture
-							CreateTexture(fb->GetCommands(), mImage.get(), mipWidth, mipHeight, 4, VK_FORMAT_BC7_UNORM_BLOCK, pixelData + dataPos, expectedMipLevels - mipStart, false, mipSize);
+							CreateTexture(fb->GetCommands(), mImage.get(), mipWidth, mipHeight, 0, fmt, pixelData + dataPos, expectedMipLevels - mipStart, false, mipSize);
 						}
 						else {
 							// Mip
-							CreateTextureMipMap(fb->GetCommands(), mImage.get(), x - mipStart, mipWidth, mipHeight, 4, VK_FORMAT_BC7_UNORM_BLOCK, pixelData + dataPos, mipSize);
+							CreateTextureMipMap(fb->GetCommands(), mImage.get(), x - mipStart, mipWidth, mipHeight, 0, fmt, pixelData + dataPos, mipSize);
 						}
 					}
 
 					dataPos += mipSize;
 					mipWidth = std::max(1u, (mipWidth >> 1));
 					mipHeight = std::max(1u, (mipHeight >> 1));
-					mipSize = (size_t)std::max(1u, ((mipWidth + 3) / 4)) * std::max(1u, ((mipHeight + 3) / 4)) * 16;
+					mipSize = (size_t)std::max(1u, ((mipWidth + 3) / 4)) * std::max(1u, ((mipHeight + 3) / 4)) * blockSize;
 				}
 			}
 			else {
-				CreateTexture(fb->GetCommands(), mImage.get(), src->GetWidth(), src->GetHeight(), 4, VK_FORMAT_BC7_UNORM_BLOCK, pixelData, false, false, (int)pixelDataSize);
+				CreateTexture(fb->GetCommands(), mImage.get(), src->GetWidth(), src->GetHeight(), 4, fmt, pixelData, false, false, (int)pixelDataSize);
 			}
 
 			
