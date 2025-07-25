@@ -119,6 +119,8 @@ public:
 	virtual bool SupportRemap0() { return false; }		// Unfortunate hackery that's needed for Hexen's skies. Only the image can know about the needed parameters
 	virtual bool IsRawCompatible() { return true; }		// Same thing for mid texture compatibility handling. Can only be determined by looking at the composition data which is private to the image.
 	virtual bool IsGPUOnly() { return false; }			// @Cockatrice - Image can only exist on the GPU, and CPU manipulation of this image will not be possible. Used for DDS Compressed Textures
+	virtual int getGLFormat() const { return 0; }
+	virtual int getVKFormat() const { return 0; }
 
 	void CopySize(FImageSource &other) noexcept
 	{
