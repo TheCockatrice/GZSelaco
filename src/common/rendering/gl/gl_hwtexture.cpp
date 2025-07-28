@@ -247,14 +247,14 @@ unsigned int FHardwareTexture::BackgroundCreateCompressedTexture(unsigned char* 
 			mipCnt++;
 			if (x == startMip) {
 				// Base texture
-				glCompressedTexImage2D(GL_TEXTURE_2D, 0, GL_COMPRESSED_RGBA_BPTC_UNORM, mipWidth, mipHeight, 0, mipSize, buffer + dataPos);
+				glCompressedTexImage2D(GL_TEXTURE_2D, 0, format, mipWidth, mipHeight, 0, mipSize, buffer + dataPos);
 			}
 			else {
 				glInfo.mipmapped = true;
 				glInfo.forcenofilter = false;
 
 				// Mip
-				CreateCompressedMipmap(glInfo.glTexID, buffer + dataPos, x - startMip, mipWidth, mipHeight, mipSize, texunit);
+				CreateCompressedMipmap(glInfo.glTexID, buffer + dataPos, x - startMip, mipWidth, mipHeight, format, mipSize, texunit);
 			}
 		}
 
@@ -321,14 +321,14 @@ unsigned int FHardwareTexture::CreateCompressedTexture(unsigned char* buffer, ui
 			mipCnt++;
 			if (x == startMip) {
 				// Base texture
-				glCompressedTexImage2D(GL_TEXTURE_2D, 0, GL_COMPRESSED_RGBA_BPTC_UNORM, mipWidth, mipHeight, 0, mipSize, buffer + dataPos);
+				glCompressedTexImage2D(GL_TEXTURE_2D, 0, format, mipWidth, mipHeight, 0, mipSize, buffer + dataPos);
 			}
 			else {
 				glInfo.mipmapped = true;
 				glInfo.forcenofilter = false;
 
 				// Mip
-				CreateCompressedMipmap(glInfo.glTexID, buffer + dataPos, x - startMip, mipWidth, mipHeight, mipSize, texunit);
+				CreateCompressedMipmap(glInfo.glTexID, buffer + dataPos, x - startMip, mipWidth, mipHeight, format, mipSize, texunit);
 			}
 		}
 
@@ -427,7 +427,7 @@ unsigned int FHardwareTexture::BackgroundCreateTexture(unsigned char* buffer, in
 }
 
 
-bool FHardwareTexture::CreateCompressedMipmap(unsigned int texID, unsigned char* buffer, int mipLevel, int w, int h, int32_t size, int texunit) {
+bool FHardwareTexture::CreateCompressedMipmap(unsigned int texID, unsigned char* buffer, int mipLevel, int w, int h, int format, int32_t size, int texunit) {
 	int rh, rw;
 
 	if (texID == 0)
@@ -443,7 +443,7 @@ bool FHardwareTexture::CreateCompressedMipmap(unsigned int texID, unsigned char*
 	if (rw < w || rh < h)
 		return false;	// We can't create a mipmap of this size, so just bail since we can't work with the pixel data to shrink it
 
-	glCompressedTexImage2D(GL_TEXTURE_2D, mipLevel, GL_COMPRESSED_RGBA_BPTC_UNORM, w, h, 0, size, buffer);
+	glCompressedTexImage2D(GL_TEXTURE_2D, mipLevel, format, w, h, 0, size, buffer);
 
 	//if (texunit > 0) glActiveTexture(GL_TEXTURE0);
 
