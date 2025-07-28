@@ -51,6 +51,7 @@
 #include "m_argv.h"
 #include "engineerrors.h"
 #include "filesystem.h"
+#include <set>
 
 using namespace FileSys;
 
@@ -335,6 +336,156 @@ int FTextureManager::FindTextures(const char* search, TArray<FTextureID> *list, 
 	}
 
 	return found;
+}
+
+
+//==========================================================================
+//
+// FTextureManager :: AnalyzeTextures
+//
+//==========================================================================
+
+static const char* getUseTypeName(ETextureType  type) {
+	switch (type) {
+	case ETextureType::Any:
+		return "Any";
+	case ETextureType::Wall:
+		return "Wall";
+	case ETextureType::Flat:
+		return "Flat";
+	case ETextureType::Sprite:
+		return "Sprite";
+	case ETextureType::WallPatch:
+		return "WallPatch";
+	case ETextureType::Decal:
+		return "Decal";
+	default:
+		return "Unknown";
+	}
+}
+
+
+
+// @Cockatrice - Go through all textures to find the ones that most need optimization
+// Designed to help reduce VRAM usage
+void FTextureManager::AnalyzeTextures(int limit, bool recommendOnly) {
+	auto cmp = [](TextureDescriptor* a, TextureDescriptor* b) { return (a->Texture->GetTexelWidth() * a->Texture->GetTexelHeight()) > (b->Texture->GetTexelWidth() * b->Texture->GetTexelHeight()); };
+	std::set<TextureDescriptor*, decltype(cmp)> list(cmp);
+
+	Printf("\nAnalyzing %d textures...\n\n", Textures.size());
+
+	size_t totalEstimatedTextureSize = 0;
+	size_t totalEstimatedTextureSizeWithoutCompression = 0;
+	size_t totalWallSize = 0;
+	size_t totalFlatSize = 0;
+	size_t totalSpriteSize = 0;
+	size_t totalMiscSize = 0, totalFontSize = 0;
+
+	int numFiles = fileSystem.GetNumEntries();
+
+
+	for (auto& tx : Textures)
+	{
+		auto tex = tx.Texture;
+
+		// If we look for short names, we must ignore any long name texture.
+		auto texUseType = tex->GetUseType();
+		int fmt = tex->GetTexture()->GetImage() ? tex->GetTexture()->GetImage()->getGLFormat() : 0;
+
+		size_t pixels = tex->GetTexelWidth() * tex->GetTexelHeight();
+		size_t size = 0;
+		if (fmt == 0x83F0) {
+			size = pixels / 2;
+		}
+		else if (fmt == 0x8E8C) {
+			size = pixels;
+		}
+		else {
+			size = pixels * 4;
+		}
+
+		totalEstimatedTextureSize += size;
+		totalEstimatedTextureSizeWithoutCompression += pixels * 4;
+
+		switch (texUseType) {
+			case ETextureType::WallPatch:
+			case ETextureType::Wall:
+				totalWallSize += size;
+				break;
+			case ETextureType::Flat:
+				totalFlatSize += size;
+				break;
+			case ETextureType::Decal:
+			case ETextureType::Sprite:
+			case ETextureType::MiscPatch:
+			case ETextureType::SkinSprite:
+				totalSpriteSize += size;
+				break;
+			case ETextureType::Override:
+			case ETextureType::Special:
+			case ETextureType::Any:
+				totalMiscSize += size;
+				break;
+			case ETextureType::FontChar:
+				totalFontSize += size;
+				break;
+				
+			default:
+				Printf("  [%d]  ", texUseType);
+				break;
+		}
+
+
+		// We can't compress level textures yet so skip these
+		if (texUseType == ETextureType::Wall || texUseType == ETextureType::Flat || texUseType == ETextureType::WallPatch) continue;
+
+		list.insert(&tx);
+	}
+
+	Printf("Estimated VRAM Total (Minus mips):\n   %.2fMB current VS %.2fMB without any compression\n", (double)totalEstimatedTextureSize / 1024.0 / 1024.0, (double)totalEstimatedTextureSizeWithoutCompression / 1024.0 / 1024.0);
+
+	Printf("      Misc: %.2fMB\n", (double)totalMiscSize / 1024.0 / 1024.0);
+	Printf("     Walls: %.2fMB\n", (double)totalWallSize / 1024.0 / 1024.0);
+	Printf("     Flats: %.2fMB\n", (double)totalFlatSize / 1024.0 / 1024.0);
+	Printf("     Fonts: %.2fMB\n", (double)totalFontSize / 1024.0 / 1024.0);
+	Printf("   Sprites: %.2fMB\n\n", (double)totalSpriteSize / 1024.0 / 1024.0);
+
+	// Check the first (limit)
+	int cnt = 0;
+	if (limit > 0) {
+		Printf("Possible Optimizations...\n");
+		for (auto tx : list) {
+			auto tex = tx->Texture;
+			const char* name = tex->GetSourceLump() > 0 ? fileSystem.GetFileFullName(tex->GetSourceLump()) : tex->GetName().GetChars();
+			bool shouldBC1 = !tex->GetTranslucency();
+			bool shouldBC7 = tex->GetTranslucency();
+			bool shouldShrink = (tex->GetTexelWidth() * tex->GetTexelHeight()) >= (1920 * 1080);
+			if (name == 0) continue;
+
+			bool isGPU = tex->GetTexture()->GetImage()->IsGPUOnly();
+			int format = tex->GetTexture()->GetImage()->getGLFormat();
+			bool shouldChangeCompression = (format == 0x83F0 && shouldBC7) || (format == 0x8E8C && shouldBC1);
+			bool hasRecommendations = shouldShrink || !isGPU || shouldChangeCompression;
+
+			if (recommendOnly && !hasRecommendations) continue;
+
+
+			if (hasRecommendations) {
+				Printf(TEXTCOLOR_RED "#%d  (%s) [%s]: [%d x %d]\n", cnt, name, getUseTypeName(tex->GetUseType()), tex->GetTexelWidth(), tex->GetTexelHeight());
+				Printf("Recommendations: \n");
+				if (!isGPU) Printf("   Encode with %s as .DDS file\n", shouldBC1 ? "BC1-RGB" : "BC7-ARGB");
+				else if (shouldChangeCompression) Printf("\t\tChange encoding to %s\n", shouldBC1 ? "BC1-RGB or BC1a: Alpha channel not necessary, image is not translucent" : "BC7-ARGB: Image is translucent and requires more precision");
+				if (shouldShrink) Printf("   Consider reducing resolution\n");
+			}
+			else {
+				Printf("#%d  (%s): [%d x %d]\n", cnt, name, tex->GetTexelWidth(), tex->GetTexelHeight());
+			}
+
+			if (cnt++ >= limit) {
+				break;
+			}
+		}
+	}
 }
 
 //==========================================================================
@@ -2127,4 +2278,9 @@ CCMD(flushtextures)
 CCMD(listtexturealiases)
 {
 	TexMan.Listaliases();
+}
+
+CCMD(analyzetextures)
+{	
+	TexMan.AnalyzeTextures(argv.argc() > 1 ? atoi(argv[1]) : 100, argv.argc() > 2 ? atoi(argv[2]) : 0);
 }

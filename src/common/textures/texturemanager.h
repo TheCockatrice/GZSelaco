@@ -126,6 +126,7 @@ public:
 	FTextureID GetTextureID (const char *name, ETextureType usetype, BITFIELD flags=0);
 	int FindTextures(const char* search, TArray<FTextureID>* list, ETextureType usetype, BITFIELD flags = TEXMAN_ShortNameOnly);
 	int ListTextures (const char *name, TArray<FTextureID> &list, bool listall = false);
+	void AnalyzeTextures(int limit = 100, bool recommendOnly = true);
 
 	void AddGroup(int wadnum, int ns, ETextureType usetype);
 	void AddPatches (int lumpnum);
