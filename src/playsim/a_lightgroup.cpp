@@ -156,6 +156,7 @@ void RenderMasterLightmap(FLevelLocals* level, int index)
 
 	state->SetMaterial(master.base, UF_Texture, 0, CLAMP_NONE, 0, -1);
 	state->SetRenderStyle(STYLE_Normal);
+	state->SetObjectColor(0xffffffff);
 
 	// Draw the master lightmap
 	state->SetVertexBuffer(&master.quadBuffer);

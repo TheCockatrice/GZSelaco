@@ -272,7 +272,7 @@ void VkTextureManager::BlitLightmap(VkHardwareTexture* lightmap, int lightmapInd
 	blit.srcSubresource.baseArrayLayer = 0;
 	blit.srcSubresource.layerCount = 1;
 	blit.dstOffsets[0] = { 0, 0, 0 };
-	blit.dstOffsets[1] = { lightmapImage->width, lightmapImage->height, 1 };
+	blit.dstOffsets[1] = { Lightmap.Image->width, Lightmap.Image->height, 1 };
 	blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	blit.dstSubresource.mipLevel = 0;
 	blit.dstSubresource.baseArrayLayer = lightmapIndex;

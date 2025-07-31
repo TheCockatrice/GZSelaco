@@ -3570,7 +3570,7 @@ void MapLoader::LoadLightmap(MapData *map)
 		// Create the lightmap texture
 		FWrapperTexture* wrapper = new FWrapperTexture(textureSize, textureSize);
 		IHardwareTexture* texture = wrapper->GetHardwareTexture(0, 0);
-		texture->CreateTexture(data + i * (textureSize * textureSize), textureSize, textureSize, -1, false, "Lightmap");
+		texture->CreateTexture(data + i * (textureSize * textureSize) * sizeof(int32_t), textureSize, textureSize, -1, false, "Lightmap");
 		FGameTexture* lightmap = Level->Lightmaps[i] = new FGameTexture(wrapper, "Lightmap");
 
 		// Create the Master lightmap (For rendering to)
