@@ -1195,10 +1195,6 @@ void FTextureManager::ParseTextureDef(int lump, FMultipatchTextureBuilder &build
 				int th = tex->GetTexelHeight();
 				bool sizeMatch = (width == tw && height == th);
 
-				if (name.CompareNoCase("RIF2A0") == 0) {
-					Printf("RIF2A0");
-				}
-
 				if (width > 0 && height > 0 && !sizeMatch && (tw <= width && th <= height)) {
 					//if (sizeMatch || (tw > width && th > height)) {
 					//	tex->SetDisplaySize(width / scalex, height / scaley);
