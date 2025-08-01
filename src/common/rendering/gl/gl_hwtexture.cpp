@@ -204,12 +204,19 @@ void FHardwareTexture::DestroyLoadedImage() {
 	glInfo = GLLoadInfo();
 }
 
+void FHardwareTexture::CreateInvalid(int texUnit) {
+	unsigned char buff[4] = {255, 0, 255, 255};
+	if (glInfo.glTexID >= 0) DestroyLoadedImage();
+	CreateTexture(buff, 1, 1, texUnit, false, "FailedTexture");
+}
+
 // Add a BC7 compressed texture and mipmaps
-unsigned int FHardwareTexture::BackgroundCreateCompressedTexture(unsigned char* buffer, uint32_t dataSize, uint32_t totalSize, int w, int h, int format, int texunit, int numMips, const char* name, bool forceNoMips, bool allowQualityReduction) {
+unsigned int FHardwareTexture::BackgroundCreateCompressedTexture(GLsync* fence, unsigned char* buffer, uint32_t dataSize, uint32_t totalSize, int w, int h, int format, int texunit, int numMips, const char* name, bool forceNoMips, bool allowQualityReduction) {
 	int rh, rw;
 	uint32_t blockSize = format == GL_COMPRESSED_RGB_S3TC_DXT1_EXT ? 8 : 16;
 
 	glGetError();
+
 	bool firstCall = glInfo.glTexID == 0;
 	if (firstCall)
 	{
@@ -222,6 +229,7 @@ unsigned int FHardwareTexture::BackgroundCreateCompressedTexture(unsigned char* 
 
 	if (texunit > 0) glActiveTexture(GL_TEXTURE0 + texunit);
 	glBindTexture(GL_TEXTURE_2D, glInfo.glTexID);
+	glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 
 	FGLDebug::LabelObject(GL_TEXTURE, glInfo.glTexID, name);
 
@@ -271,9 +279,16 @@ unsigned int FHardwareTexture::BackgroundCreateCompressedTexture(unsigned char* 
 
 	if (texunit > 0) glActiveTexture(GL_TEXTURE0);
 
-	glFinish();
 
-	return glTexID;
+	if (fence != nullptr) {
+		*fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+		glFlush();
+	}
+	else {
+		glFinish();
+	}
+
+	return glInfo.glTexID;
 }
 
 
@@ -282,6 +297,7 @@ unsigned int FHardwareTexture::CreateCompressedTexture(unsigned char* buffer, ui
 	uint32_t blockSize = format == GL_COMPRESSED_RGB_S3TC_DXT1_EXT ? 8 : 16;
 
 	glGetError();
+
 	bool firstCall = glTexID == 0;
 	if (firstCall)
 	{
@@ -296,6 +312,7 @@ unsigned int FHardwareTexture::CreateCompressedTexture(unsigned char* buffer, ui
 	if (texunit > 0) glActiveTexture(GL_TEXTURE0 + texunit);
 	if (texunit >= 0) lastbound[texunit] = glTexID;
 	glBindTexture(GL_TEXTURE_2D, glTexID);
+	glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 
 	FGLDebug::LabelObject(GL_TEXTURE, glTexID, name);
 
@@ -354,7 +371,7 @@ unsigned int FHardwareTexture::CreateCompressedTexture(unsigned char* buffer, ui
 // I do not yet understand why we use different texture units for material layers, perhaps it's because the tex unit
 // is used as a slot in the shader? 
 // This code will have to be significantly refactored for thread safety if it turns out there will be more than one texture load per glTexID
-unsigned int FHardwareTexture::BackgroundCreateTexture(unsigned char* buffer, int w, int h, int texunit, bool mipmap, bool indexed, const char* name, bool forceNoMips)
+unsigned int FHardwareTexture::BackgroundCreateTexture(GLsync* fence, unsigned char* buffer, int w, int h, int texunit, bool mipmap, bool indexed, const char* name, bool forceNoMips)
 {
 	// See todotodo.txt
 	int rh, rw;
@@ -362,6 +379,7 @@ unsigned int FHardwareTexture::BackgroundCreateTexture(unsigned char* buffer, in
 	bool deletebuffer = false;
 
 	glGetError();
+	
 	bool firstCall = glInfo.glTexID == 0;
 	if (firstCall)
 	{
@@ -373,6 +391,7 @@ unsigned int FHardwareTexture::BackgroundCreateTexture(unsigned char* buffer, in
 
 	if (texunit > 0) glActiveTexture(GL_TEXTURE0 + texunit);
 	glBindTexture(GL_TEXTURE_2D, glInfo.glTexID);
+	glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 
 	FGLDebug::LabelObject(GL_TEXTURE, glInfo.glTexID, name);
 
@@ -390,6 +409,8 @@ unsigned int FHardwareTexture::BackgroundCreateTexture(unsigned char* buffer, in
 			buffer = scaledbuffer;
 		}
 	}
+
+
 
 	// store the physical size.
 	int sourcetype;
@@ -421,9 +442,15 @@ unsigned int FHardwareTexture::BackgroundCreateTexture(unsigned char* buffer, in
 
 	if (texunit > 0) glActiveTexture(GL_TEXTURE0);
 
-	glFinish();
-
-	return glTexID;
+	if (fence != nullptr) {
+		*fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+		glFlush();
+	}
+	else {
+		glFinish();
+	}
+	
+	return glInfo.glTexID;
 }
 
 
@@ -505,7 +532,7 @@ unsigned int FHardwareTexture::Bind(int texunit, bool needmipmap)
 		lastbound[texunit] = glTexID;
 		if (texunit != 0) glActiveTexture(GL_TEXTURE0 + texunit);
 		glBindTexture(GL_TEXTURE_2D, glTexID);
-		// Check if we need mipmaps on a texture that was creted without them.
+		// Check if we need mipmaps on a texture that was created without them.
 		if (needmipmap && !mipmapped && TexFilter[gl_texture_filter].mipmapping && !forcenofilter)
 		{
 			glGenerateMipmap(GL_TEXTURE_2D);

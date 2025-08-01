@@ -82,8 +82,8 @@ public:
 	uint8_t* MapBuffer();
 
 	unsigned int CreateTexture(unsigned char* buffer, int w, int h, int texunit, bool mipmap, const char* name);
-	unsigned int BackgroundCreateTexture(unsigned char* buffer, int w, int h, int texunit, bool mipmap, bool indexed, const char* name, bool forceNoMips = false);
-	unsigned int BackgroundCreateCompressedTexture(unsigned char* buffer, uint32_t dataSize, uint32_t totalSize, int w, int h, int format, int texunit, int numMips, const char* name, bool forceNoMips = false, bool allowQualityReduction = false);
+	unsigned int BackgroundCreateTexture(GLsync* fence, unsigned char* buffer, int w, int h, int texunit, bool mipmap, bool indexed, const char* name, bool forceNoMips = false);
+	unsigned int BackgroundCreateCompressedTexture(GLsync *fence, unsigned char* buffer, uint32_t dataSize, uint32_t totalSize, int w, int h, int format, int texunit, int numMips, const char* name, bool forceNoMips = false, bool allowQualityReduction = false);
 	unsigned int CreateCompressedTexture(unsigned char* buffer, uint32_t dataSize, uint32_t totalSize, int w, int h, int format, int texunit, int numMips, const char* name, bool forceNoMips = false, bool allowQualityReduction = false);
 	bool CreateCompressedMipmap(unsigned int glTexID, unsigned char* buffer, int mipLevel, int w, int h, int format, int32_t size, int texunit);
 	unsigned int GetTextureHandle()
@@ -94,6 +94,7 @@ public:
 	int numChannels() { return glTextureBytes; }
 
 	bool SwapToLoadedImage();
+	void CreateInvalid(int texUnit);
 	void DestroyLoadedImage();
 	HardwareState GetState(int texUnit) override { return hwStates[texUnit]; }
 	void SetHardwareState(HardwareState hws, int texUnit = 0) override { 
