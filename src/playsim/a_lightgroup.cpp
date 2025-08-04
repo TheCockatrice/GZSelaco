@@ -154,7 +154,7 @@ void RenderMasterLightmap(FLevelLocals* level, int index)
 	state->SetViewport(0, 0, width, height);
 	screen->mViewpoints->Set2D(*state, width, height);
 
-	state->SetMaterial(master.base, UF_Texture, 0, CLAMP_NONE, 0, -1);
+	state->SetMaterial(master.base, UF_Texture, 0, CLAMP_NONE, 0, SHADER_LightmapComposite);
 	state->SetRenderStyle(STYLE_Normal);
 	state->SetObjectColor(0xffffffff);
 
@@ -181,7 +181,7 @@ void RenderMasterLightmap(FLevelLocals* level, int index)
 				int color = r | (g << 8) | (b << 16) | 0xff000000;
 
 				FGameTexture* lightmap = level->Lightmaps[mesh.sourceLightmapIndex];
-				state->SetMaterial(lightmap, UF_Texture, 0, CLAMP_NONE, 0, -1);
+				state->SetMaterial(lightmap, UF_Texture, 0, CLAMP_NONE, 0, SHADER_LightmapComposite);
 				state->SetObjectColor(color);
 				state->SetRenderStyle(STYLE_Add);
 				state->SetVertexBuffer(&mesh.buffers);

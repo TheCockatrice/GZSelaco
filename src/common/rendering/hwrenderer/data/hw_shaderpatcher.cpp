@@ -290,6 +290,7 @@ const FDefaultShader defaultshaders[] =
 	{"Noise Fuzz", "shaders/glsl/fuzz_noise.fp", "shaders/glsl/material_normal.fp", ""},
 	{"Smooth Noise Fuzz", "shaders/glsl/fuzz_smoothnoise.fp", "shaders/glsl/material_normal.fp", ""},
 	{"Software Fuzz", "shaders/glsl/fuzz_software.fp", "shaders/glsl/material_normal.fp", ""},
+	{"Lightmap Composite", "shaders/glsl/lightmap_composite.fp", "shaders/glsl/material_nolight.fp", "#define DIRECT_COPY"},
 	{nullptr,nullptr,nullptr,nullptr}
 };
 

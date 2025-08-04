@@ -837,6 +837,7 @@ void main()
 	if (frag.a <= uAlphaThreshold) discard;
 #endif
 
+#ifndef DIRECT_COPY
 	if (uFogEnabled != -3)	// check for special 2D 'fog' mode.
 	{
 		float fogdist = 0.0;
@@ -886,6 +887,8 @@ void main()
 			frag = frag * ProcessLight(material, vColor);
 		frag.rgb = frag.rgb + uFogColor.rgb;
 	}
+#endif
+
 	FragColor = frag;
 
 #ifdef DITHERTRANS

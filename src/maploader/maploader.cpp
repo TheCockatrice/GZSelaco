@@ -3591,8 +3591,6 @@ void MapLoader::LoadLightmap(MapData *map)
 
 	for (int i = 0; i < numTextures; i++)
 	{
-		// TODO: Make sure all lightmap data is properly destroyed when level gets destroyed!
-
 		// Create the lightmap texture
 		FWrapperTexture* wrapper = new FWrapperTexture(textureSize, textureSize);
 		IHardwareTexture* texture = wrapper->GetHardwareTexture(0, 0);
