@@ -1015,6 +1015,35 @@ void VulkanRenderDevice::RenderTextureView(FCanvasTexture* tex, std::function<vo
 	tex->SetUpdated(true);
 }
 
+void VulkanRenderDevice::RenderLightmapSlice(int slice, std::function<void(IntRect&)> renderFunc)
+{
+	VkTextureManager* texman = GetTextureManager();
+	VkTextureImage* lightmap = &texman->Lightmap;
+
+	mRenderState->EndRenderPass();
+
+	VkImageTransition()
+		.AddImage(lightmap, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, false)
+		.Execute(mCommands->GetDrawCommands());
+
+	mRenderState->SetRenderTarget(&texman->LightmapSlices[slice], nullptr, lightmap->Image->width, lightmap->Image->height, VK_FORMAT_R8G8B8A8_UNORM, VK_SAMPLE_COUNT_1_BIT);
+
+	IntRect bounds;
+	bounds.left = bounds.top = 0;
+	bounds.width = lightmap->Image->width;
+	bounds.height = lightmap->Image->height;
+
+	renderFunc(bounds);
+
+	mRenderState->EndRenderPass();
+
+	VkImageTransition()
+		.AddImage(lightmap, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, false)
+		.Execute(mCommands->GetDrawCommands());
+
+	mRenderState->SetRenderTarget(&GetBuffers()->SceneColor, GetBuffers()->SceneDepthStencil.View.get(), GetBuffers()->GetWidth(), GetBuffers()->GetHeight(), VK_FORMAT_R16G16B16A16_SFLOAT, GetBuffers()->GetSceneSamples());
+}
+
 void VulkanRenderDevice::PostProcessScene(bool swscene, int fixedcm, float flash, const std::function<void()> &afterBloomDrawEndScene2D)
 {
 	if (!swscene) mPostprocess->BlitSceneToPostprocess(); // Copy the resulting scene to the current post process texture

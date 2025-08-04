@@ -40,7 +40,8 @@ public:
 
 	VkTextureImage Shadowmap;
 	VkTextureImage Lightmap;
-
+	std::vector<VkTextureImageView> LightmapSlices;
+	
 private:
 	void CreateNullTexture();
 	void CreateShadowmap();

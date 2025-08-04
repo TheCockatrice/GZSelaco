@@ -522,8 +522,22 @@ void VkRenderState::SetRenderTarget(VkTextureImage *image, VulkanImageView *dept
 {
 	EndRenderPass();
 
-	mRenderTarget.Image = image;
+	mRenderTarget.ImageView = image->View.get();
 	mRenderTarget.DepthStencil = depthStencilView;
+	mRenderTarget.FrameBuffers = &image->RSFramebuffers;
+	mRenderTarget.Width = width;
+	mRenderTarget.Height = height;
+	mRenderTarget.Format = format;
+	mRenderTarget.Samples = samples;
+}
+
+void VkRenderState::SetRenderTarget(VkTextureImageView* imageView, VulkanImageView* depthStencilView, int width, int height, VkFormat format, VkSampleCountFlagBits samples)
+{
+	EndRenderPass();
+
+	mRenderTarget.ImageView = imageView->View.get();
+	mRenderTarget.DepthStencil = depthStencilView;
+	mRenderTarget.FrameBuffers = &imageView->RSFramebuffers;
 	mRenderTarget.Width = width;
 	mRenderTarget.Height = height;
 	mRenderTarget.Format = format;
@@ -540,14 +554,14 @@ void VkRenderState::BeginRenderPass(VulkanCommandBuffer *cmdbuffer)
 
 	mPassSetup = fb->GetRenderPassManager()->GetRenderPass(key);
 
-	auto &framebuffer = mRenderTarget.Image->RSFramebuffers[key];
+	auto &framebuffer = (*mRenderTarget.FrameBuffers)[key];
 	if (!framebuffer)
 	{
 		auto buffers = fb->GetBuffers();
 		FramebufferBuilder builder;
 		builder.RenderPass(mPassSetup->GetRenderPass(0));
 		builder.Size(mRenderTarget.Width, mRenderTarget.Height);
-		builder.AddAttachment(mRenderTarget.Image->View.get());
+		builder.AddAttachment(mRenderTarget.ImageView);
 		if (key.DrawBuffers > 1)
 			builder.AddAttachment(buffers->SceneFog.View.get());
 		if (key.DrawBuffers > 2)

@@ -470,7 +470,6 @@ public:
 	struct MasterLightmapInfo
 	{
 		FGameTexture* base;
-		FCanvasTexture* canvas;
 		F2DVertexBuffer quadBuffer;
 	};
 

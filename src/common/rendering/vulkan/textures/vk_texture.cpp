@@ -197,6 +197,7 @@ void VkTextureManager::SetLightmap(int LMTextureSize, int LMTextureCount, const 
 	int pixelsize = 4;
 
 	Lightmap.Reset(fb);
+	LightmapSlices.clear();
 
 	Lightmap.Image = ImageBuilder()
 		.Size(w, h, 1, count)
@@ -207,9 +208,21 @@ void VkTextureManager::SetLightmap(int LMTextureSize, int LMTextureCount, const 
 
 	Lightmap.View = ImageViewBuilder()
 		.Type(VK_IMAGE_VIEW_TYPE_2D_ARRAY)
-		.Image(Lightmap.Image.get(), VK_FORMAT_B8G8R8A8_UNORM) // We intentionally flip the RGB/BGR order, since canvases use the BGR format
+		.Image(Lightmap.Image.get(), VK_FORMAT_R8G8B8A8_UNORM)
 		.DebugName("VkRenderBuffers.LightmapView")
 		.Create(fb->device.get());
+
+	for (int i = 0; i < LMTextureCount; i++)
+	{
+		VkTextureImageView slice;
+		slice.View = ImageViewBuilder()
+			.Type(VK_IMAGE_VIEW_TYPE_2D)
+			.Image(Lightmap.Image.get(), VK_FORMAT_B8G8R8A8_UNORM, 1, 0, i, 0, 1)
+			.DebugName("VkRenderBuffers.LightmapSlice")
+			.Create(fb->device.get());
+
+		LightmapSlices.emplace_back(std::move(slice));
+	}
 
 	auto cmdbuffer = fb->GetCommands()->GetTransferCommands();
 

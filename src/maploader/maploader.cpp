@@ -3591,9 +3591,8 @@ void MapLoader::LoadLightmap(MapData *map)
 		texture->CreateTexture(data + i * (textureSize * textureSize) * sizeof(int32_t), textureSize, textureSize, -1, false, "Lightmap");
 		FGameTexture* lightmap = Level->Lightmaps[i] = new FGameTexture(wrapper, "Lightmap");
 
-		// Create the Master lightmap (For rendering to)
+		// Create the Master lightmap (Base lightmap that everything renders on top of)
 		Level->MasterLightmaps[i].base = lightmap;
-		Level->MasterLightmaps[i].canvas = new FCanvasTexture(textureSize, textureSize);
 
 		// Create a Quad mesh to render the base lightmap to the Master lightmap
 		FVector2 p1 = FVector2(0, 0);
