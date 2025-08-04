@@ -3355,11 +3355,19 @@ void MapLoader::LoadLightmap(MapData *map)
 	Level->LMTextureData.Reset();
 	Level->LMTextureCount = 0;
 	Level->LMTextureSize = 0;
+	Level->LightGroups.Reset();
+	Level->MasterLightmaps.Reset();
 	Level->LPMinX = 0;
 	Level->LPMinY = 0;
 	Level->LPWidth = 0;
 	Level->LPHeight = 0;
 	Level->LPCellSize = 32;
+
+	for (size_t i = 0; i < Level->Lightmaps.size(); i++)
+	{
+		delete Level->Lightmaps[i];
+	}
+	Level->Lightmaps.Reset();
 
 	if (Args->CheckParm("-disablelightmaps"))
 		return;
