@@ -278,6 +278,7 @@ public:
 	virtual void CopyScreenToBuffer(int width, int height, uint8_t* buffer)	{ memset(buffer, 0, width* height); }
 	virtual bool FlipSavePic() const { return false; }
 	virtual void RenderTextureView(FCanvasTexture* tex, std::function<void(IntRect&)> renderFunc) {}
+	virtual void RenderLightmapSlice(int slice, std::function<void(IntRect&)> renderFunc) {};
 	virtual void SetActiveRenderTarget() {}
 
 	// Screen wiping

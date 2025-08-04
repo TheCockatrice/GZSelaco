@@ -3355,11 +3355,19 @@ void MapLoader::LoadLightmap(MapData *map)
 	Level->LMTextureData.Reset();
 	Level->LMTextureCount = 0;
 	Level->LMTextureSize = 0;
+	Level->LightGroups.Reset();
+	Level->MasterLightmaps.Reset();
 	Level->LPMinX = 0;
 	Level->LPMinY = 0;
 	Level->LPWidth = 0;
 	Level->LPHeight = 0;
 	Level->LPCellSize = 32;
+
+	for (size_t i = 0; i < Level->Lightmaps.size(); i++)
+	{
+		delete Level->Lightmaps[i];
+	}
+	Level->Lightmaps.Reset();
 
 	if (Args->CheckParm("-disablelightmaps"))
 		return;
@@ -3510,6 +3518,17 @@ void MapLoader::LoadLightmap(MapData *map)
 		offset += count * 2;
 	}
 
+	// [NL] Since the order of the sides can change during load, create a way
+	// to translate from the original UMDF sidedef index to the real sidenum
+	// TODO: Could probably optimize this into a flat array, but we need to know how 
+	// large to make the array, since the size could have changed.
+	TMap<int, int> umdfSideToSideNum;
+	for (size_t i = 0; i < Level->sides.size(); i++)
+	{
+		const side_t& side = Level->sides[i];
+		umdfSideToSideNum.Insert(side.UDMFIndex, side.sidenum);
+	}
+
 	// Load the surfaces we have lightmap data for
 
 	for (uint32_t i = 0; i < numSurfaces; i++)
@@ -3538,8 +3557,15 @@ void MapLoader::LoadLightmap(MapData *map)
 		}
 		else if (type != ST_NULL)
 		{
-			surface.Side = &Level->sides[typeIndex];
-			SetSideLightmap(surface);
+			if (int* sideIndex = umdfSideToSideNum.CheckKey(typeIndex))
+			{
+				surface.Side = &Level->sides[*sideIndex];
+				SetSideLightmap(surface);
+			}
+			else
+			{
+				Printf(PRINT_HIGH, "Couldn't find sidedef %d to apply lightmap to\n", typeIndex);
+			}
 		}
 	}
 
@@ -3573,9 +3599,8 @@ void MapLoader::LoadLightmap(MapData *map)
 		texture->CreateTexture(data + i * (textureSize * textureSize) * sizeof(int32_t), textureSize, textureSize, -1, false, "Lightmap");
 		FGameTexture* lightmap = Level->Lightmaps[i] = new FGameTexture(wrapper, "Lightmap");
 
-		// Create the Master lightmap (For rendering to)
+		// Create the Master lightmap (Base lightmap that everything renders on top of)
 		Level->MasterLightmaps[i].base = lightmap;
-		Level->MasterLightmaps[i].canvas = new FCanvasTexture(textureSize, textureSize);
 
 		// Create a Quad mesh to render the base lightmap to the Master lightmap
 		FVector2 p1 = FVector2(0, 0);

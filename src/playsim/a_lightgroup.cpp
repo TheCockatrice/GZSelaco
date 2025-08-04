@@ -146,8 +146,8 @@ void RenderMasterLightmap(FLevelLocals* level, int index)
 	const FLevelLocals::MasterLightmapInfo& master = level->MasterLightmaps[index];
 	FRenderState* state = screen->RenderState();
 
-	int width = master.canvas->GetWidth();
-	int height = master.canvas->GetHeight();
+	int width = master.base->GetTexelWidth();
+	int height = master.base->GetTexelHeight();
 
 	IntRect bounds = IntRect{ 0, 0, width, height };
 	screen->SetViewportRects(&bounds);
@@ -189,10 +189,6 @@ void RenderMasterLightmap(FLevelLocals* level, int index)
 			}
 		}
 	}
-
-	// Copy the rendered lightmap to the one used in the level
-	// TODO: This shouldn't be required; we should just be using the master textures directly in the level
-	screen->BlitLightmap(master.canvas->GetHardwareTexture(0, 0), index);
 }
 
 void P_RenderLightGroups(FLevelLocals* level)
@@ -218,7 +214,7 @@ void P_RenderLightGroups(FLevelLocals* level)
 
 	for (int i = 0; i < level->MasterLightmaps.size(); i++)
 	{
-		screen->RenderTextureView(level->MasterLightmaps[i].canvas,
+		screen->RenderLightmapSlice(i,
 			[level, i](IntRect& bounds)
 			{
 				RenderMasterLightmap(level, i);
