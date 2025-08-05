@@ -96,7 +96,18 @@ void VkSamplerManager::CreateHWSamplers()
 		builder.MipmapMode(TexFilter[filter].mipfilter);
 		if (TexFilter[filter].mipmapping)
 		{
-			builder.Anisotropy(gl_texture_filter_anisotropic);
+			// @Cockatrice - Special case for Intel ARC GPU, any level of anisotropy creates linear sampling, so we have to turn it off when we have different min/mag modes
+			if( TexFilter[filter].magFilter != TexFilter[filter].minFilter && 
+				fb->device->PhysicalDevice.Properties.Properties.vendorID == 0x8086 &&
+				strstr(fb->device->PhysicalDevice.Properties.Properties.deviceName, "Arc")
+				) { 
+				builder.Anisotropy(1);
+				builder.MipLodBias(-0.75);	// Try to push the blurry textures away from the camera so it's not just blur-city without anisotropy
+			}
+			else {
+				builder.Anisotropy(gl_texture_filter_anisotropic);
+			}
+			
 			builder.MaxLod(100.0f); // According to the spec this value is clamped so something high makes it usable for all textures.
 		}
 		else
@@ -145,8 +156,8 @@ void VkSamplerManager::CreateHWSamplers()
 		builder.MagFilter(VK_FILTER_LINEAR);
 		builder.MinFilter(VK_FILTER_LINEAR);
 		builder.AddressMode(VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_REPEAT);
-		builder.MipmapMode(VK_SAMPLER_MIPMAP_MODE_NEAREST);
-		builder.MaxLod(0.25f);
+		builder.MipmapMode(VK_SAMPLER_MIPMAP_MODE_LINEAR);
+		builder.MaxLod(100.0f);
 		mSamplers[CLAMP_NONE_FORCE_FILTER] = builder.Create(fb->device.get());
 		mSamplers[CLAMP_NONE_FORCE_FILTER]->SetDebugName("VkSamplerManager.mSamplers");
 	}

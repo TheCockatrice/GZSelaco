@@ -102,7 +102,7 @@ extern bool vid_hdr_active;
 
 ADD_STAT(glloader)
 {
-	static int maxQueue = 0, maxSecondaryQueue = 0, queue, secQueue, total, collisions, outSize, models;
+	static int maxQueue = 0, maxSecondaryQueue = 0, queue, secQueue, total, collisions, outSize, models, errors;
 	static double minLoad = 0, maxLoad = 0, avgLoad = 0;
 	static double minFG = 0, maxFG = 0, avgFG = 0;
 
@@ -112,18 +112,18 @@ ADD_STAT(glloader)
 		if (!sc->SupportsBackgroundCache()) {
 			return FString("OpenGL Texture Thread Disabled");
 		}
-		sc->GetBGQueueSize(queue, secQueue, collisions, maxQueue, maxSecondaryQueue, total, outSize, models);
+		sc->GetBGQueueSize(queue, secQueue, collisions, maxQueue, maxSecondaryQueue, total, outSize, models, errors);
 		sc->GetBGStats(minLoad, maxLoad, avgLoad);
 		sc->GetBGStats2(minFG, maxFG, avgFG);
 
 		FString out;
 		out.AppendFormat(
-			"[%d Threads] Queued: %3.3d - %3.3d Out: %3.3d  Col: %d\nMax: %3.3d Max Sec: %3.3d Tot: %d\n"
+			"[%d Threads] Queued: %3.3d - %3.3d Out: %3.3d  Col: %d  Err: %d\nMax: %3.3d Max Sec: %3.3d Tot: %d\n"
 			"Models: %d\n"
 			"Min: %.3fms  FG: %.3fms\n"
 			"Max: %.3fms  FG: %.3fms\n"
 			"Avg: %.3fms  FG: %.3fms\n",
-			sc->GetNumThreads(), queue, secQueue, outSize, collisions, maxQueue, maxSecondaryQueue, total, models, minLoad, minFG, maxLoad, maxFG, avgLoad, avgFG
+			sc->GetNumThreads(), queue, secQueue, outSize, collisions, errors, maxQueue, maxSecondaryQueue, total, models, minLoad, minFG, maxLoad, maxFG, avgLoad, avgFG
 		);
 		return out;
 	}
@@ -167,8 +167,9 @@ bool GlTexLoadThread::loadResource(GlTexLoadIn & input, GlTexLoadOut & output) {
 	output.mipLevels = -1;
 	output.texUnit = input.texUnit;
 	output.flags = input.flags;
+	output.error = GL_TEXLOAD_ERR_NONE;
+	output.lump = params->lump;
 
-	// Load pixels directly with the reader we copied on the main thread
 	auto* src = input.imgSource;
 	FBitmap pixels;
 
@@ -185,6 +186,11 @@ bool GlTexLoadThread::loadResource(GlTexLoadIn & input, GlTexLoadOut & output) {
 	unsigned char* pixelData = nullptr;
 	size_t pixelDataSize = 0;
 	
+	// TODO: Add memory checks
+
+	// For testing, introduce an artificial delay
+	// TODO: Comment out for production
+	//std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
 	if (exx && !gpu) {
 		pixelDataSize = 4u * (size_t)buffWidth * (size_t)buffHeight;
@@ -210,13 +216,35 @@ bool GlTexLoadThread::loadResource(GlTexLoadIn & input, GlTexLoadOut & output) {
 	else {
 		if (gpu) {
 			int numMipLevels;
-			FileReader reader = fileSystem.OpenFileReader(params->lump, FileSys::EReaderType::READER_NEW, FileSys::EReaderType::READERFLAG_SEEKABLE);
+			FileReader reader;
+			
+			try { reader = fileSystem.OpenFileReader(params->lump, FileSys::EReaderType::READER_NEW, FileSys::EReaderType::READERFLAG_SEEKABLE); }
+			catch (std::exception &e) {
+				output.error = GL_TEXLOAD_ERR_FILE;
+				return true;
+			}
+
+			// Verify file reader
+			if (!reader.isOpen() || reader.GetLength() <= 0) {
+				output.error = GL_TEXLOAD_ERR_FILE;
+				return true;
+			}
+
 			output.flags.OutputIsTranslucent = src->ReadCompressedPixels(&reader, &pixelData, output.totalDataSize, pixelDataSize, numMipLevels);
 			output.mipLevels = numMipLevels;
 			reader.Close();
 
+			// Verify pixel data
+			if (pixelData == nullptr) {
+				output.error = GL_TEXLOAD_ERR_FORMAT;
+				return true;
+			}
+
 			if (uploadPossible) {
-				output.tex->BackgroundCreateCompressedTexture(pixelData, (uint32_t)pixelDataSize, (uint32_t)output.totalDataSize, buffWidth, buffHeight, src->getGLFormat(), input.texUnit, numMipLevels, "GlTexLoadThread::loadResource(Compressed)", !allowMips, input.flags.AllowQualityReduction);
+				if (output.tex->BackgroundCreateCompressedTexture(&output.uploadFence, pixelData, (uint32_t)pixelDataSize, (uint32_t)output.totalDataSize, buffWidth, buffHeight, src->getGLFormat(), input.texUnit, numMipLevels, "GlTexLoadThread::loadResource(Compressed)", !allowMips, input.flags.AllowQualityReduction) <= 0) {
+					output.error = GL_TEXLOAD_ERR_UPLOAD;
+					return true;
+				}
 			}
 
 			if (input.spi.generateSpi) {
@@ -254,8 +282,11 @@ bool GlTexLoadThread::loadResource(GlTexLoadIn & input, GlTexLoadOut & output) {
 		output.flags.CreateMips = mipmap;
 		output.pixels = nullptr;
 
-		if (!gpu)
-			output.tex->BackgroundCreateTexture(pixelData, buffWidth, buffHeight, input.texUnit, mipmap, indexed, "GlTexLoadThread::loadResource()", !allowMips);
+		if (!gpu) {
+			if (output.tex->BackgroundCreateTexture(&output.uploadFence, pixelData, buffWidth, buffHeight, input.texUnit, mipmap, indexed, "GlTexLoadThread::loadResource()", !allowMips) <= 0) {
+				output.error = GL_TEXLOAD_ERR_UPLOAD;
+			}
+		}
 
 		free(pixelData);
 	}
@@ -281,7 +312,7 @@ bool GLModelLoadThread::loadResource(GLModelLoadIn& input, GLModelLoadOut& outpu
 
 // @Cockatrice - Background loader management =======================================
 // ==================================================================================
-void OpenGLFrameBuffer::GetBGQueueSize(int& current, int &secCurrent, int& collisions, int& max, int& maxSec, int& total, int &outSize, int &models) {
+void OpenGLFrameBuffer::GetBGQueueSize(int& current, int &secCurrent, int& collisions, int& max, int& maxSec, int& total, int &outSize, int &models, int &errs) {
 	max = maxSec = total = 0;
 	current = primaryTexQueue.size();
 	secCurrent = secondaryTexQueue.size();
@@ -290,6 +321,7 @@ void OpenGLFrameBuffer::GetBGQueueSize(int& current, int &secCurrent, int& colli
 	collisions = statCollisions;
 	outSize = outputTexQueue.size();
 	models = statModelsLoaded;
+	errs = statErrors;
 
 	for (auto& tfr : bgTransferThreads) {
 		total += tfr->statTotalLoaded();
@@ -324,6 +356,7 @@ void OpenGLFrameBuffer::ResetBGStats() {
 	statCollisions = 0;
 	fgTotalTime = fgTotalCount = fgMin = fgMax = 0;
 	statModelsLoaded = 0;
+	statErrors = 0;
 }
 
 void OpenGLFrameBuffer::PrequeueMaterial(FMaterial * mat, int translation)
@@ -552,6 +585,7 @@ void OpenGLFrameBuffer::FlushBackground() {
 
 void OpenGLFrameBuffer::UpdateBackgroundCache(bool flush) {
 	// Check for completed cache items and link textures to the data
+	static TArray<GlTexLoadOut> recycle;
 	GlTexLoadOut loaded;
 	int dequeueCount = 0;
 	size_t dataLoaded = 0;
@@ -563,6 +597,35 @@ void OpenGLFrameBuffer::UpdateBackgroundCache(bool flush) {
 		if (!outputTexQueue.dequeue(loaded)) break;
 
 		processed = true;
+
+		// Abort and log errors
+		if (loaded.error != GL_TEXLOAD_ERR_NONE) {
+			const char* name = loaded.gtex ? loaded.gtex->GetName().GetChars() : "[unknown]";
+			const char* err;
+			switch (loaded.error) {
+			case GL_TEXLOAD_ERR_FILE:
+				err = "File access Error";
+				break;
+			case GL_TEXLOAD_ERR_FORMAT:
+				err = "Texture format or load error";
+				break;
+			case GL_TEXLOAD_ERR_UPLOAD:
+				err = "Error uploading texture";
+				break;
+			case GL_TEXLOAD_ERR_MEM:
+				err = "Out of memory";
+				break;
+			default:
+				err = "Unknown Error";
+				break;
+			}
+
+			Printf(TEXTCOLOR_RED "OpenGLFrameBuffer: Error loading texture %s (%s)\n", name, err);
+			if (loaded.lump) {
+				Printf(TEXTCOLOR_RED "\t%s\n", fileSystem.GetFileFullPath(loaded.lump).c_str());
+			}
+			statErrors++;
+		}
 
 		// Set the sprite positioning if we loaded it and it hasn't already been applied
 		if (loaded.spi.generateSpi && loaded.gtex && !loaded.gtex->HasSpritePositioning()) {
@@ -583,24 +646,64 @@ void OpenGLFrameBuffer::UpdateBackgroundCache(bool flush) {
 			}
 		}
 		else {
-			// If we have pixels to upload, upload them here
-			if (loaded.pixels) {
-				if (loaded.imgSource->IsGPUOnly()) {
-					loaded.tex->BackgroundCreateCompressedTexture(loaded.pixels, loaded.pixelsSize, loaded.totalDataSize, loaded.pixelW, loaded.pixelH, loaded.imgSource->getGLFormat(), loaded.texUnit, loaded.mipLevels, "OpenGLFrameBuffer::UpdateBackgroundCache()", !loaded.flags.CreateMips, loaded.flags.AllowQualityReduction);
+			// Clean up if this is a failure
+			if (loaded.error != GL_TEXLOAD_ERR_NONE) {
+				if (loaded.pixels) free(loaded.pixels);
+
+				// Assign a generic texture so we know this was an error visually
+				loaded.tex->CreateInvalid(loaded.texUnit);
+				
+				// TODO: Set error state once that is handled correctly
+				loaded.tex->SetHardwareState(IHardwareTexture::HardwareState::READY, loaded.texUnit);
+			}
+			else {
+				// If we have pixels to upload, upload them here
+				if (loaded.pixels) {
+					if (loaded.imgSource->IsGPUOnly()) {
+						loaded.tex->BackgroundCreateCompressedTexture(&loaded.uploadFence, loaded.pixels, loaded.pixelsSize, loaded.totalDataSize, loaded.pixelW, loaded.pixelH, loaded.imgSource->getGLFormat(), loaded.texUnit, loaded.mipLevels, "OpenGLFrameBuffer::UpdateBackgroundCache()", !loaded.flags.CreateMips, loaded.flags.AllowQualityReduction);
+					}
+					else {
+						loaded.tex->BackgroundCreateTexture(&loaded.uploadFence, loaded.pixels, loaded.pixelW, loaded.pixelH, loaded.texUnit, loaded.flags.CreateMips, false, "OpenGLFrameBuffer::UpdateBackgroundCache()", !loaded.flags.CreateMips);
+					}
+
+					dataLoaded += loaded.totalDataSize;
+					free(loaded.pixels);
+					loaded.pixels = nullptr;
+				}
+
+				// If the texture isn't available yet, we need to recycle this object into the queue and check again next frame
+				if (loaded.uploadFence != GL_NONE) {
+					GLenum res = flush ? glClientWaitSync(loaded.uploadFence, GL_SYNC_FLUSH_COMMANDS_BIT, UINT64_MAX) : glClientWaitSync(loaded.uploadFence, 0, 0);
+					if (res == GL_ALREADY_SIGNALED || res == GL_CONDITION_SATISFIED) {
+						glDeleteSync(loaded.uploadFence);
+
+						// Resource should be available, swap to loaded image
+						bool swapped = loaded.tex->SwapToLoadedImage();
+						assert(swapped);
+
+						loaded.tex->SetHardwareState(IHardwareTexture::HardwareState::READY, loaded.texUnit);
+						if (loaded.gtex && loaded.texUnit == 0) loaded.gtex->SetTranslucent(loaded.flags.OutputIsTranslucent);
+					}
+					else if(res == GL_TIMEOUT_EXPIRED) {
+						// Recycle this texture into the queue at the end of this function
+						assert(!flush);
+						loaded.spi.generateSpi = false;		// We don't need to create SPI again
+						recycle.push_back(loaded);
+					}
+					else {
+						// Something went wrong, mark the texture as failed
+						loaded.tex->CreateInvalid(loaded.texUnit);
+
+						// TODO: Set error state once that is handled correctly
+						loaded.tex->SetHardwareState(IHardwareTexture::HardwareState::READY, loaded.texUnit);
+						Printf(TEXTCOLOR_YELLOW"glFrameBuffer: A texture failed to synchronize. (%s)\n", fileSystem.GetFileFullPath(loaded.lump).c_str() );
+					}
 				}
 				else {
-					loaded.tex->BackgroundCreateTexture(loaded.pixels, loaded.pixelW, loaded.pixelH, loaded.texUnit, loaded.flags.CreateMips, false, "OpenGLFrameBuffer::UpdateBackgroundCache()", !loaded.flags.CreateMips);
+					assert(0);
+					Printf(TEXTCOLOR_YELLOW"glFrameBuffer: A texture failed to create a fence. (%s)\n", fileSystem.GetFileFullPath(loaded.lump).c_str());
 				}
-
-				dataLoaded += loaded.totalDataSize;
-				free(loaded.pixels);
 			}
-
-			bool swapped = loaded.tex->SwapToLoadedImage();
-			assert(swapped);
-
-			loaded.tex->SetHardwareState(IHardwareTexture::HardwareState::READY, loaded.texUnit);
-			if (loaded.gtex) loaded.gtex->SetTranslucent(loaded.flags.OutputIsTranslucent);
 		}
 	}
 
@@ -630,6 +733,11 @@ void OpenGLFrameBuffer::UpdateBackgroundCache(bool flush) {
 		statModelsLoaded++;
 	}
 
+	// Move recycled objects back to the top of the queue
+	for (auto& i : recycle) {
+		outputTexQueue.push_back(i);
+	}
+	recycle.clear();
 
 	if (!flush && processed) {
 		timer.Unclock();
@@ -755,7 +863,7 @@ void OpenGLFrameBuffer::InitializeState()
 		bool canUpload = gl_texture_thread_upload && gl_numAUXContexts() > 0;
 
 		if(canUpload)
-			numThreads = min(4, min((int)gl_max_transfer_threads, gl_numAUXContexts()));
+			numThreads = min((int)gl_max_transfer_threads, gl_numAUXContexts());
 		
 		for (int x = 0; x < numThreads; x++) {
 			std::unique_ptr<GlTexLoadThread> ptr(new GlTexLoadThread(this, canUpload ? x : -1, &primaryTexQueue, &secondaryTexQueue, &outputTexQueue));

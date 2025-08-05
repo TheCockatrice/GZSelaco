@@ -26,6 +26,7 @@ class VkHardwareTexture : public IHardwareTexture
 {
 	friend class VkMaterial;
 	friend class VulkanRenderDevice;	// TODO: Fix this, this is lazy
+	friend class VkTexLoadThread;		// TODO: Same
 
 public:
 	VkHardwareTexture(VulkanRenderDevice* fb, int numchannels);
@@ -40,7 +41,8 @@ public:
 	void BackgroundCreateTexture(VkCommandBufferManager* bufManager, int w, int h, int pixelsize, VkFormat format, const void *pixels, int numMipLevels, bool createMips, int totalSize = -1);
 	void BackgroundCreateTextureMipMap(VkCommandBufferManager* bufManager, int mipLevel, int w, int h, int pixelsize, VkFormat format, const void* pixels, int totalSize);
 	void CreateTextureMipMap(VkCommandBufferManager* bufManager, VkTextureImage* img, int mipLevel, int w, int h, int pixelsize, VkFormat format, const void* pixels, int totalSize);
-
+	
+	void CheckFinalTransition(VulkanCommandBuffer* cmd, bool background);
 	void ReleaseLoadedFromQueue(VulkanCommandBuffer *cmd, int fromQueueFamily, int toQueueFamily);
 	void AcquireLoadedFromQueue(VulkanCommandBuffer *cmd, int fromQueueFamily, int toQueueFamily);
 

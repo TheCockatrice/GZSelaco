@@ -278,16 +278,16 @@ VkTexLoadThread::~VkTexLoadThread() {
 	}*/
 }
 
-
-static void TempUploadTexture(VkCommandBufferManager *cmd, VkHardwareTexture *tex, VkFormat fmt, int buffWidth, int buffHeight, unsigned char *pixelData, size_t pixelDataSize, size_t totalSize, bool mipmap = true, bool gpuOnly = false, bool indexed = false, bool allowQualityReduction = false) {
+// Return the number of used mip levels
+static int TempUploadTexture(VkCommandBufferManager *cmd, VkHardwareTexture *tex, VkFormat fmt, int buffWidth, int buffHeight, unsigned char *pixelData, size_t pixelDataSize, size_t totalSize, bool mipmap = true, bool gpuOnly = false, bool indexed = false, bool allowQualityReduction = false, bool allowFinalize = false) {
 	if (gpuOnly) {
 		uint32_t numMipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(buffWidth, buffHeight)))) + 1;
 		uint32_t mipWidth = buffWidth, mipHeight = buffHeight;
 		size_t mipSize = pixelDataSize, dataPos = 0;
 		const int startMip = allowQualityReduction ? min((int)gl_texture_quality, (int)numMipLevels - 1) : 0;
 		int mipCnt = 0, maxMips = mipmap ? numMipLevels - startMip : 1;
-		//int channels = fmt == VK_FORMAT_BC1_RGB_UNORM_BLOCK ? 3 : 4;			// Pretty much unused here
 		uint32_t blockSize = fmt == VK_FORMAT_BC1_RGB_UNORM_BLOCK ? 8 : 16;
+		int totalMipLevels = 0;
 
 		assert(indexed == false);
 
@@ -299,12 +299,13 @@ static void TempUploadTexture(VkCommandBufferManager *cmd, VkHardwareTexture *te
 				mipCnt++;
 				if (x == startMip) {
 					// Base texture
-					tex->BackgroundCreateTexture(cmd, mipWidth, mipHeight, 0, fmt, pixelData + dataPos, numMipLevels - startMip, false, mipSize);
+					tex->BackgroundCreateTexture(cmd, mipWidth, mipHeight, 0, fmt, pixelData + dataPos, std::min(maxMips, (int)numMipLevels - startMip), false, mipSize);
 				}
 				else {
 					// Mip
 					tex->BackgroundCreateTextureMipMap(cmd, x - startMip, mipWidth, mipHeight, 0, fmt, pixelData + dataPos, mipSize);
 				}
+				totalMipLevels++;
 			}
 				
 			dataPos += mipSize;
@@ -313,9 +314,16 @@ static void TempUploadTexture(VkCommandBufferManager *cmd, VkHardwareTexture *te
 			mipHeight = std::max(1u, (mipHeight >> 1));
 			mipSize = (size_t)std::max(1u, ((mipWidth + 3) / 4)) * std::max(1u, ((mipHeight + 3) / 4)) * blockSize;
 		}
+
+		// Make sure the image is in the correct layout
+		if (allowFinalize) tex->CheckFinalTransition(cmd->GetTransferCommands(), true);
+		return totalMipLevels;
 	}
 	else {
+		int numMipLevels = VkHardwareTexture::GetMipLevels(buffWidth, buffHeight);
 		tex->BackgroundCreateTexture(cmd, buffWidth, buffHeight, indexed ? 1 : 4, fmt, pixelData, mipmap ? -1 : 0, mipmap, (int)pixelDataSize);
+		if (allowFinalize) tex->CheckFinalTransition(cmd->GetTransferCommands(), true);
+		return numMipLevels;
 	}
 }
 
@@ -353,6 +361,7 @@ bool VkTexLoadThread::loadResource(VkTexLoadIn &input, VkTexLoadOut &output) {
 	size_t pixelDataSize = 0;
 
 	if (exx && !gpu) {
+		// Load a software texture with a border
 		pixelDataSize = 4u * (size_t)buffWidth * (size_t)buffHeight;
 		pixelData = (unsigned char*)malloc(pixelDataSize);
 		memset(pixelData, 0, pixelDataSize);
@@ -379,10 +388,30 @@ bool VkTexLoadThread::loadResource(VkTexLoadIn &input, VkTexLoadOut &output) {
 			size_t totalSize;
 			int numMipLevels;
 
+			FileReader reader;
+
 			assert(params->lump > 0);
-			FileReader reader = fileSystem.OpenFileReader(params->lump, FileSys::EReaderType::READER_NEW, 0);
+			try { reader = fileSystem.OpenFileReader(params->lump, FileSys::EReaderType::READER_NEW, 0); }
+			catch (std::exception& e) {
+				output.error = VK_TEXLOAD_ERR_FILE;
+				return true;
+			}
+
+			// Verify file reader
+			if (!reader.isOpen() || reader.GetLength() <= 0) {
+				output.error = VK_TEXLOAD_ERR_FILE;
+				return true;
+			}
+			
 			output.isTranslucent = src->ReadCompressedPixels(&reader, &pixelData, totalSize, pixelDataSize, numMipLevels);
 			reader.Close();
+			
+			// Verify pixel data
+			if (pixelData == nullptr) {
+				output.error = VK_TEXLOAD_ERR_FORMAT;
+				return true;
+			}
+			
 			mipmap = false;
 			fmt = (VkFormat)src->getVKFormat(); //VK_FORMAT_BC7_UNORM_BLOCK;
 
@@ -393,10 +422,16 @@ bool VkTexLoadThread::loadResource(VkTexLoadIn &input, VkTexLoadOut &output) {
 			// Only perform upload if we have a command buffer
 			if (cmd) {
 				mipmap = false;	// Don't generate mipmaps past this point
-				TempUploadTexture(cmd, output.tex, fmt, buffWidth, buffHeight, pixelData, pixelDataSize, totalSize, allowMips && numMipLevels == (int)expectedMipLevels && numMipLevels > 0, true, indexed, input.flags & TEXLOAD_ALLOWQUALITY);
+				output.mipmapCount = TempUploadTexture(cmd, output.tex, fmt, buffWidth, buffHeight, pixelData, pixelDataSize, totalSize, allowMips && numMipLevels == (int)expectedMipLevels && numMipLevels > 0, true, indexed, input.flags & TEXLOAD_ALLOWQUALITY, uploadQueue.familySupportsGraphics);
+			
+				if(output.mipmapCount <= 0 || output.tex->mLoadedImage.get() == nullptr) {
+					output.error = VK_TEXLOAD_ERR_UPLOAD;
+					return true;
+				}
 			}
 			else {
 				mipmap = allowMips && numMipLevels == (int)expectedMipLevels && numMipLevels > 0;	// Upload mipmaps if the science is correct
+				output.mipmapCount = -1;
 			}
 
 			if (input.spi.generateSpi) {
@@ -405,6 +440,7 @@ bool VkTexLoadThread::loadResource(VkTexLoadIn &input, VkTexLoadOut &output) {
 			}
 		}
 		else {
+			// Load a software texture without a border
 			pixelDataSize = 4u * (size_t)buffWidth * (size_t)buffHeight;
 			pixelData = (unsigned char*)malloc(pixelDataSize);
 			memset(pixelData, 0, pixelDataSize);
@@ -438,7 +474,15 @@ bool VkTexLoadThread::loadResource(VkTexLoadIn &input, VkTexLoadOut &output) {
 
 		// Upload non-gpu only textures
 		if (!gpu) {
+			output.mipmapCount = mipmap ? VkHardwareTexture::GetMipLevels(buffWidth, buffHeight) : 1;
 			output.tex->BackgroundCreateTexture(cmd, buffWidth, buffHeight, indexed ? 1 : 4, fmt, pixelData, mipmap ? -1 : 0, mipmap, (int)pixelDataSize);
+
+			if (!output.createMipmaps && uploadQueue.familySupportsGraphics) {
+				// We should be in the final state for the texture, ensure it has the correct layout
+				// This can only be done on a queue which supports graphics, since the spec seems to state that you can't transition an image to a state which is unsupported by the current queue
+				output.mipmapCount = mipmap ? VkHardwareTexture::GetMipLevels(buffWidth, buffHeight) : 1;
+				output.tex->CheckFinalTransition(cmd->GetTransferCommands(), true);
+			}
 		}
 
 		// Wait for operations to finish, since we can't maintain a regular loop of clearing the buffer
@@ -595,9 +639,37 @@ void VulkanRenderDevice::UpdateBackgroundCache(bool flush) {
 		while ((flush || (dequeueCount < gl_background_flush_count && uploadSize < 20971520L)) && outputTexQueue.dequeue(loaded)) {
 			dequeueCount++;
 
+			// Abort and log errors
+			if (loaded.error != VK_TEXLOAD_ERR_NONE) {
+				const char* name = loaded.gtex ? loaded.gtex->GetName().GetChars() : "[unknown]";
+				const char* err;
+				switch (loaded.error) {
+				case VK_TEXLOAD_ERR_FILE:
+					err = "File access Error";
+					break;
+				case VK_TEXLOAD_ERR_FORMAT:
+					err = "Texture format or load error";
+					break;
+				case VK_TEXLOAD_ERR_UPLOAD:
+					err = "Error uploading texture";
+					break;
+				case VK_TEXLOAD_ERR_MEM:
+					err = "Out of memory";
+					break;
+				default:
+					err = "Unknown Error";
+					break;
+				}
+
+				Printf(TEXTCOLOR_RED "vkRenderDevice: Error loading texture %s (%s)\n", name, err);
+				if (loaded.imgSource) {
+					Printf(TEXTCOLOR_RED "\t%s\n", fileSystem.GetFileFullPath(loaded.imgSource->LumpNum()).c_str());
+				}
+			}
+
+
 			if (loaded.tex->hwState == IHardwareTexture::HardwareState::READY) {
 				statCollisions++;
-				//Printf("Background proc Loaded an already-loaded image: %s What a farting mistake!\n", loaded.gtex ? loaded.gtex->GetName().GetChars() : "UNKNOWN");
 
 				// Set the sprite positioning if we loaded it and it hasn't already been applied
 				if (loaded.spi.generateSpi && loaded.gtex && !loaded.gtex->HasSpritePositioning()) {
@@ -613,8 +685,6 @@ void VulkanRenderDevice::UpdateBackgroundCache(bool flush) {
 				continue;
 			}
 
-			
-
 			// If this image was created in a different queue family, it now needs to be moved over to
 			// the graphics queue faimly
 			if (transferOwnership && loaded.tex->mLoadedImage) {
@@ -624,6 +694,7 @@ void VulkanRenderDevice::UpdateBackgroundCache(bool flush) {
 
 				// If we cannot create mipmaps in the background, tell the GPU to create them now
 				if (loaded.createMipmaps) {
+					assert(!loaded.imgSource->IsGPUOnly());
 					loaded.tex->mLoadedImage.get()->GenerateMipmaps(cmds.get());
 				}
 
@@ -631,6 +702,9 @@ void VulkanRenderDevice::UpdateBackgroundCache(bool flush) {
 					loaded.releaseSemaphore->SetDebugName("BGT::RlsA");
 					bgtSm4List.push_back(std::unique_ptr<VulkanSemaphore>(loaded.releaseSemaphore));
 				}
+
+				assert(loaded.mipmapCount > 0);
+				loaded.tex->CheckFinalTransition(cmds.get(), true);
 			}
 			else if (uploadOnMainThread && loaded.pixels) {
 				bgtUploads.push_back(std::move(loaded));
@@ -754,7 +828,7 @@ void VulkanRenderDevice::UploadLoadedTextures(bool flush) {
 
 		assert(loaded.pixels);
 
-		TempUploadTexture(mCommands.get(), loaded.tex, fmt, loaded.pixelW, loaded.pixelH, loaded.pixels, loaded.pixelsSize, loaded.totalDataSize, loaded.createMipmaps, gpuOnly, false, loaded.flags & TEXLOAD_ALLOWQUALITY);
+		loaded.mipmapCount = TempUploadTexture(mCommands.get(), loaded.tex, fmt, loaded.pixelW, loaded.pixelH, loaded.pixels, loaded.pixelsSize, loaded.totalDataSize, loaded.createMipmaps, gpuOnly, false, loaded.flags & TEXLOAD_ALLOWQUALITY, false);
 		free(loaded.pixels);
 		loaded.pixels = 0;
 
@@ -762,8 +836,10 @@ void VulkanRenderDevice::UploadLoadedTextures(bool flush) {
 		// so create manually now
 		if (!gpuOnly && loaded.createMipmaps && !device.get()->UploadFamilySupportsGraphics) {
 			loaded.tex->mLoadedImage.get()->GenerateMipmaps(mCommands->GetTransferCommands());
+			loaded.mipmapCount = VkHardwareTexture::GetMipLevels(loaded.tex->mLoadedImage->Image->width, loaded.tex->mLoadedImage->Image->height);
 		}
 
+		loaded.tex->CheckFinalTransition(mCommands->GetTransferCommands(), true);
 		loaded.tex->SwapToLoadedImage();
 		loaded.tex->SetHardwareState(IHardwareTexture::HardwareState::READY);
 		if (loaded.gtex) loaded.gtex->SetTranslucent(loaded.isTranslucent);

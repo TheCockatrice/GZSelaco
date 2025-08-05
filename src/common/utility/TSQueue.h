@@ -83,6 +83,11 @@ public:
 		mQueue.Insert(0, item);
 	}
 
+	void push_back(T& item) {
+		std::lock_guard lock(mQLock);
+		mQueue.push_back(item);
+	}
+
 	void clear() {
 		std::lock_guard lock(mQLock);
 		mQueue.Clear();
