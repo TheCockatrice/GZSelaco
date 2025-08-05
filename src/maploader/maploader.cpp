@@ -3650,7 +3650,7 @@ void MapLoader::LoadLightmap(MapData *map)
 		// Create the lightmap texture
 		FWrapperTexture* wrapper = new FWrapperTexture(width, height);
 		IHardwareTexture* texture = wrapper->GetHardwareTexture(0, 0);
-		texture->CreateTexture(data + i * (width * height) * sizeof(int32_t), width, height, -1, false, "GroupLightmap");
+		texture->CreateTexture(data, width, height, -1, false, "GroupLightmap");
 		FGameTexture* lightmap = Level->Lightmaps[i + numMasterTextures] = new FGameTexture(wrapper, "GroupLightmap");
 	}
 }
