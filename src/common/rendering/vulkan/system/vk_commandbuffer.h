@@ -61,6 +61,8 @@ public:
 
 	void DeleteFrameObjects(bool uploadOnly = false);
 
+	bool IsUploadOnly() const { return mIsUploadOnly; }
+
 private:
 	void FlushCommands(VulkanCommandBuffer** commands, size_t count, VkQueue *queue, bool finish, bool lastsubmit);
 
