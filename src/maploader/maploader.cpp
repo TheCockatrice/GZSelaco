@@ -3247,7 +3247,7 @@ void MapLoader::LoadLevel(MapData *map, const char *lumpname, int position)
 	Level->ClearDynamic3DFloorData();	// CreateVBO must be run on the plain 3D floor data.
 	CreateVBO(screen->mVertexData, Level->sectors);
 
-	screen->InitLightmap(Level->LMTextureSize, Level->LMTextureCount, Level->LMTextureData);
+	screen->InitLightmap(Level->LMMasterTextureSize, Level->LMTextureCount, Level->LMMasterTextureData);
 
 	for (auto &sec : Level->sectors)
 	{
@@ -3352,9 +3352,10 @@ void MapLoader::LoadLightmap(MapData *map)
 	Level->LPCells.Reset();
 	Level->LMTexCoords.Reset();
 	Level->LMSurfaces.Reset();
-	Level->LMTextureData.Reset();
+	Level->LMMasterTextureData.Reset();
+	Level->LMMasterTextureActualSizes.Reset();
 	Level->LMTextureCount = 0;
-	Level->LMTextureSize = 0;
+	Level->LMMasterTextureSize = IVector2(0, 0);
 	Level->LightGroups.Reset();
 	Level->MasterLightmaps.Reset();
 	Level->LPMinX = 0;
@@ -3381,22 +3382,25 @@ void MapLoader::LoadLightmap(MapData *map)
 
 
 	int version = fr.ReadInt32();
-	if (version != 0x5e1ac000) // 'Selaco' + Version XX
+	if (version != 0x5e1ac001) // 'Selaco' + Version XX
 	{
 		Printf(PRINT_HIGH, "LoadLightmap: unsupported lightmap lump version\n");
 		return;
 	}
 
-	uint16_t textureSize = fr.ReadUInt16();
-	uint16_t numTextures = fr.ReadUInt16();
+	IVector2 textureSize;
+	textureSize.X = fr.ReadUInt16();
+	textureSize.Y = fr.ReadUInt16();
+	uint16_t numMasterTextures = fr.ReadUInt16();
+	uint16_t numGroupTextures = fr.ReadUInt16();
 	uint32_t numSurfaces = fr.ReadUInt32();
 	uint32_t numTexCoords = fr.ReadUInt32();
 	int32_t numLightProbes = fr.ReadUInt32();
 	uint32_t numSubsectors = fr.ReadUInt32();
 	Level->LPCellSize = fr.ReadInt32();
-	uint32_t numTexBytes = numTextures * textureSize * textureSize * 4;
+	uint32_t numMasterTexBytes = numMasterTextures * textureSize.X * textureSize.Y * 4;
 
-	if (numSurfaces == 0 || numTexCoords == 0 || numTexBytes == 0)
+	if (numSurfaces == 0 || numTexCoords == 0 || numMasterTexBytes == 0)
 		return;
 
 	if (numSubsectors != Level->subsectors.Size())
@@ -3575,36 +3579,49 @@ void MapLoader::LoadLightmap(MapData *map)
 
 	// Load lightmap textures
 
-	Level->LMTextureCount = numTextures;
-	Level->LMTextureSize = textureSize;
-	Level->LMTextureData.Resize((numTexBytes + 1));
-	uint8_t* data = (uint8_t*)&Level->LMTextureData[0];
-	fr.Read(data, numTexBytes);
+	Level->LMTextureCount = numMasterTextures;
+	Level->LMMasterTextureSize = textureSize;
+	Level->LMMasterTextureActualSizes.Resize(numMasterTextures);
+
+	for (int i = 0; i < numMasterTextures; i++)
+	{
+		IVector2 actualSize;
+		actualSize.X = fr.ReadUInt16();
+		actualSize.Y = fr.ReadUInt16();
+		Level->LMMasterTextureActualSizes[i] = actualSize;
+	}
+
+	Level->LMMasterTextureData.Resize((numMasterTexBytes + 1));
+	uint8_t* data = (uint8_t*)&Level->LMMasterTextureData[0];
+	fr.Read(data, numMasterTexBytes);
 #if 0
 	// Apply compression predictor
 	for (uint32_t i = 1; i < numTexBytes; i++)
 		data[i] += data[i - 1];
 #endif
 
-	Level->Lightmaps.Resize(numTextures);
-	Level->MasterLightmaps.Resize(numTextures);
+	Level->Lightmaps.Resize(numMasterTextures + numGroupTextures);
+	Level->MasterLightmaps.Resize(numMasterTextures);
 
-	for (int i = 0; i < numTextures; i++)
+	size_t texDataOffset = 0;
+	for (int i = 0; i < numMasterTextures; i++)
 	{
 		// Create the lightmap texture
-		FWrapperTexture* wrapper = new FWrapperTexture(textureSize, textureSize);
+		FWrapperTexture* wrapper = new FWrapperTexture(textureSize.X, textureSize.Y);
 		IHardwareTexture* texture = wrapper->GetHardwareTexture(0, 0);
-		texture->CreateTexture(data + i * (textureSize * textureSize) * sizeof(int32_t), textureSize, textureSize, -1, false, "Lightmap");
-		FGameTexture* lightmap = Level->Lightmaps[i] = new FGameTexture(wrapper, "Lightmap");
+		texture->CreateTexture(data + i * (textureSize.X * textureSize.Y) * sizeof(int32_t), textureSize.X, textureSize.Y, -1, false, "MasterLightmap");
+		FGameTexture* lightmap = Level->Lightmaps[i] = new FGameTexture(wrapper, "MasterLightmap");
 
 		// Create the Master lightmap (Base lightmap that everything renders on top of)
 		Level->MasterLightmaps[i].base = lightmap;
 
+		IVector2 actualSize = Level->LMMasterTextureActualSizes[i];
+
 		// Create a Quad mesh to render the base lightmap to the Master lightmap
-		FVector2 p1 = FVector2(0, 0);
-		FVector2 p2 = FVector2(textureSize, textureSize);
-		FVector2 uv1 = FVector2(0, 1);
-		FVector2 uv2 = FVector2(1, 0);
+		FVector2 p1 = FVector2(0, (float)(textureSize.Y - actualSize.Y));
+		FVector2 p2 = FVector2((float)actualSize.X, (float)textureSize.Y);
+		FVector2 uv1 = FVector2(0, (float)actualSize.Y / (float)textureSize.Y);
+		FVector2 uv2 = FVector2((float)actualSize.X / (float)textureSize.X, 0);
 
 		F2DDrawer::TwoDVertex quadVerts[4] =
 		{
@@ -3617,6 +3634,24 @@ void MapLoader::LoadLightmap(MapData *map)
 		int quadIndices[6] = { 0, 1, 2, 0, 2, 3 };
 
 		Level->MasterLightmaps[i].quadBuffer.UploadData(quadVerts, 4, quadIndices, 6);
+	}
+
+	for (int i = 0; i < numGroupTextures; i++)
+	{
+		int width = fr.ReadUInt16();
+		int height = fr.ReadUInt16();
+
+		int dataSize = width * height * 4;
+
+		TArray<uint8_t> groupData(dataSize, true);
+		uint8_t* data = (uint8_t*)&groupData[0];
+		fr.Read(data, dataSize);
+
+		// Create the lightmap texture
+		FWrapperTexture* wrapper = new FWrapperTexture(width, height);
+		IHardwareTexture* texture = wrapper->GetHardwareTexture(0, 0);
+		texture->CreateTexture(data + i * (width * height) * sizeof(int32_t), width, height, -1, false, "GroupLightmap");
+		FGameTexture* lightmap = Level->Lightmaps[i + numMasterTextures] = new FGameTexture(wrapper, "GroupLightmap");
 	}
 }
 

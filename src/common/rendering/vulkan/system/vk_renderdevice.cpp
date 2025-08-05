@@ -1424,7 +1424,7 @@ void VulkanRenderDevice::BeginFrame()
 	UploadLoadedTextures();
 }
 
-void VulkanRenderDevice::InitLightmap(int LMTextureSize, int LMTextureCount, TArray<uint8_t>& LMTextureData)
+void VulkanRenderDevice::InitLightmap(IVector2 LMTextureSize, int LMTextureCount, TArray<uint8_t>& LMTextureData)
 {
 	if (LMTextureData.Size() > 0)
 	{

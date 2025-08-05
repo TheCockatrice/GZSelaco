@@ -951,7 +951,7 @@ void OpenGLFrameBuffer::BlurScene(float amount, bool force)
 	GLRenderer->BlurScene(amount, force);
 }
 
-void OpenGLFrameBuffer::InitLightmap(int LMTextureSize, int LMTextureCount, TArray<uint8_t>& LMTextureData)
+void OpenGLFrameBuffer::InitLightmap(IVector2 LMTextureSize, int LMTextureCount, TArray<uint8_t>& LMTextureData)
 {
 	if (LMTextureData.Size() > 0)
 	{
@@ -963,7 +963,7 @@ void OpenGLFrameBuffer::InitLightmap(int LMTextureSize, int LMTextureCount, TArr
 			glGenTextures(1, (GLuint*)&GLRenderer->mLightMapID);
 
 		glBindTexture(GL_TEXTURE_2D_ARRAY, GLRenderer->mLightMapID);
-		glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGB8UI, LMTextureSize, LMTextureSize, LMTextureCount, 0, GL_RGB, GL_UNSIGNED_BYTE, &LMTextureData[0]);
+		glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGB8UI, LMTextureSize.X, LMTextureSize.Y, LMTextureCount, 0, GL_RGB, GL_UNSIGNED_BYTE, &LMTextureData[0]);
 		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glGenerateMipmap(GL_TEXTURE_2D_ARRAY);

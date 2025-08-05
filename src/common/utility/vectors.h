@@ -1815,6 +1815,8 @@ inline TMatrix3x3<T>::TMatrix3x3(const TVector3<T> &axis, TAngle<T> degrees)
 	Cells[2][2] = T(     (t-txx-tyy) + c  );
 }
 
+typedef TVector2<int>		IVector2;
+
 typedef TVector2<float>		FVector2;
 typedef TVector3<float>		FVector3;
 typedef TVector4<float>		FVector4;

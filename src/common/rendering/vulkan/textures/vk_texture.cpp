@@ -186,13 +186,13 @@ void VkTextureManager::CreateLightmap()
 	data.Push(0);
 	data.Push(0);
 	data.Push(0xFF);
-	SetLightmap(1, 1, data);
+	SetLightmap(IVector2(1, 1), 1, data);
 }
 
-void VkTextureManager::SetLightmap(int LMTextureSize, int LMTextureCount, const TArray<uint8_t>& LMTextureData)
+void VkTextureManager::SetLightmap(IVector2 LMTextureSize, int LMTextureCount, const TArray<uint8_t>& LMTextureData)
 {
-	int w = LMTextureSize;
-	int h = LMTextureSize;
+	int w = LMTextureSize.X;
+	int h = LMTextureSize.Y;
 	int count = LMTextureCount;
 	int pixelsize = 4;
 

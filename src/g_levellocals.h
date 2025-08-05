@@ -476,8 +476,9 @@ public:
 	TArray<LightmapSurface> LMSurfaces;
 	TArray<float> LMTexCoords;
 	int LMTextureCount = 0;
-	int LMTextureSize = 0;
-	TArray<uint8_t> LMTextureData;
+	IVector2 LMMasterTextureSize;
+	TArray<uint8_t> LMMasterTextureData;
+	TArray<IVector2> LMMasterTextureActualSizes;
 	TArray<LightProbe> LightProbes;
 	TArray<FGameTexture*> Lightmaps;
 	TArray<MasterLightmapInfo> MasterLightmaps;
