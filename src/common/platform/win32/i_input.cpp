@@ -502,6 +502,7 @@ LRESULT CALLBACK WndProc (HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			SetPriorityClass (GetCurrentProcess (), IDLE_PRIORITY_CLASS);
 		}
 		S_SetSoundPaused (wParam);
+		if(screen) screen->OnApplicationActivated(wParam == TRUE);
 		break;
 
 	case WM_ERASEBKGND:

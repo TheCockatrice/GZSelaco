@@ -111,6 +111,8 @@ void VulkanDevice::CreateDevice(int numUploadSlots)
 	VulkanPrintLog("debug", "Present Family: " + std::to_string(PresentFamily));
 	VulkanPrintLog("debug", "Upload Family: " + std::to_string(UploadFamily));
 
+	// Detect ARC since it requires special handling due to immature drivers
+	isARC = PhysicalDevice.Properties.Properties.vendorID == 0x8086 && strstr(PhysicalDevice.Properties.Properties.deviceName, "Arc");
 
 	std::vector<const char*> extensionNames;
 	extensionNames.reserve(EnabledDeviceExtensions.size());
@@ -163,6 +165,10 @@ void VulkanDevice::CreateDevice(int numUploadSlots)
 
 	VkResult result = vkCreateDevice(PhysicalDevice.Device, &deviceCreateInfo, nullptr, &device);
 	CheckVulkanError(result, "Could not create vulkan device");
+
+	if (isARC) {
+		VulkanPrintLog("debug", "Detected Intel ARC!");
+	}
 
 	volkLoadDevice(device);
 

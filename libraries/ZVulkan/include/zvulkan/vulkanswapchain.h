@@ -27,6 +27,7 @@ public:
 
 	void Create(int width, int height, int imageCount, bool vsync, bool hdr, bool exclusivefullscreen);
 	bool Lost() const { return lost; }
+	void SetLost() { lost = true; }
 
 	int Width() const { return actualExtent.width; }
 	int Height() const { return actualExtent.height; }

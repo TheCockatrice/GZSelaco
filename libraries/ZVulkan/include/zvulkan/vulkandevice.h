@@ -53,6 +53,8 @@ public:
 	int PresentFamily = -1;
 	bool GraphicsTimeQueries = false;
 
+	bool isARC = false;
+
 	bool SupportsExtension(const char* ext) const;
 
 	void SetObjectName(const char* name, uint64_t handle, VkObjectType type);

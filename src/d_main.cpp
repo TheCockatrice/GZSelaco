@@ -934,6 +934,10 @@ void D_Display ()
 		return;
 	}
 
+	if (!screen->CanDisplay(AppActive)) {
+		return;
+	}
+
 	cycle_t cycles;
 	
 	cycles.Reset();
