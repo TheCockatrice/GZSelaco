@@ -18,6 +18,7 @@ VulkanDevice::VulkanDevice(std::shared_ptr<VulkanInstance> instance, std::shared
 	UploadFamily = selectedDevice.UploadFamily;
 	UploadFamilySupportsGraphics = selectedDevice.UploadFamilySupportsGraphics;
 	GraphicsTimeQueries = selectedDevice.GraphicsTimeQueries;
+	DebugLayerActive = instance->DebugLayerActive;
 
 	// Test to see if we can fit more upload queues
 	int rqt = (UploadFamily == GraphicsFamily ? 1 : 0) + (PresentFamily == UploadFamily ? 1 : 0);
