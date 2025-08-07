@@ -992,6 +992,8 @@ void VulkanRenderDevice::InitializeState()
 
 	// @Cockatrice - Init the background loader
 	bgTransferThreads.clear();
+	modelThread.reset(new VkModelLoadThread(&modelInQueue, &modelOutQueue));
+	
 	if (gl_texture_thread && vk_max_transfer_threads >= 0) {
 		int numThreads = 1;
 
@@ -1020,14 +1022,13 @@ void VulkanRenderDevice::InitializeState()
 				bgTransferThreads.push_back(std::move(ptr));
 			}
 		}
+
+		modelThread->start();
 	}
 	else {
 		bgUploadEnabled = false;
 		bgTransferEnabled = false;
 	}
-
-	modelThread.reset(new VkModelLoadThread(&modelInQueue, &modelOutQueue));
-	modelThread->start();
 }
 
 void VulkanRenderDevice::Update()
@@ -1550,7 +1551,13 @@ void VulkanRenderDevice::PrintStartupLog()
 	Printf("Max. texture size: %d\n", limits.maxImageDimension2D);
 	Printf("Max. uniform buffer range: %d\n", limits.maxUniformBufferRange);
 	Printf("Min. uniform buffer offset alignment: %" PRIu64 "\n", limits.minUniformBufferOffsetAlignment);
-	Printf("Graphics Queue Family: #%d\nPresent Queue Family:  #%d\nUpload Queue Family:   #%d\nUpload Queue Supports Graphics: %s\n", device->GraphicsFamily, device->PresentFamily, device->UploadFamily, device->UploadFamilySupportsGraphics ? "Yes" : "No");
+
+	if (this->bgTransferThreads.size() > 0) {
+		Printf("Graphics Queue Family: #%d\nPresent Queue Family:  #%d\nUpload Queue Family:   #%d\nUpload Queue Supports Graphics: %s\n", device->GraphicsFamily, device->PresentFamily, device->UploadFamily, device->UploadFamilySupportsGraphics ? "Yes" : "No");
+	}
+	else {
+		Printf("Graphics Queue Family: #%d\nPresent Queue Family:  #%d\Texture and Model Threads Disabled.\n", device->GraphicsFamily, device->PresentFamily);
+	}
 }
 
 void VulkanRenderDevice::SetLevelMesh(hwrenderer::LevelMesh* mesh)
