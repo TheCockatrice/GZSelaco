@@ -106,6 +106,14 @@ CUSTOM_CVAR(Int, vk_max_transfer_threads, 2, CVAR_ARCHIVE | CVAR_GLOBALCONFIG | 
 	Printf("This won't take effect until " GAMENAME " is restarted.\n");
 }
 
+CUSTOM_CVAR(Int, vk_present_type, 1, CVAR_ARCHIVE | CVAR_GLOBALCONFIG | CVAR_NOINITCALL)
+{
+	if (self < 0) self = 0;
+	else if (self > 1) self = 1;
+
+	Printf("This won't take effect until " GAMENAME " is restarted.\n");
+}
+
 CCMD(vk_listdevices)
 {
 	for (size_t i = 0; i < SupportedDevices.size(); i++)
@@ -891,7 +899,10 @@ VulkanRenderDevice::VulkanRenderDevice(void *hMonitor, bool fullscreen, std::sha
 	builder.Surface(surface);
 	builder.SelectDevice(vk_device);
 	SupportedDevices = builder.FindDevices(surface->Instance);
-	device = builder.Create(surface->Instance, gl_texture_thread ? vk_max_transfer_threads : 0);
+
+	int flags = 0;
+	if (vk_present_type == 0) flags |= VK_DEVICE_FLAG_FORCE_EXCLUSIVE_PRESENT;
+	device = builder.Create(surface->Instance, gl_texture_thread ? vk_max_transfer_threads : 0, flags);
 }
 
 VulkanRenderDevice::~VulkanRenderDevice()
@@ -1056,7 +1067,7 @@ void VulkanRenderDevice::Update()
 
 void VulkanRenderDevice::OnApplicationActivated(bool active) {
 	// Intel ARC drivers do not work properly, we need to signal the swapchain that it has been invalidated
-	if (device && device->isARC && mFramebufferManager && mFramebufferManager->SwapChain) {
+	/*if (device && device->isARC && mFramebufferManager && mFramebufferManager->SwapChain) {
 		vkDeviceWaitIdle(device->device);
 		mFramebufferManager->SwapChain->SetLost();
 
@@ -1065,7 +1076,7 @@ void VulkanRenderDevice::OnApplicationActivated(bool active) {
 			// Not ideal, but sometimes quite necessary or we lose the vulkan device
 			std::this_thread::sleep_for(std::chrono::milliseconds(300));
 		}
-	}
+	}*/
 }
 
 bool VulkanRenderDevice::CanDisplay(bool active) {
@@ -1556,7 +1567,7 @@ void VulkanRenderDevice::PrintStartupLog()
 		Printf("Graphics Queue Family: #%d\nPresent Queue Family:  #%d\nUpload Queue Family:   #%d\nUpload Queue Supports Graphics: %s\n", device->GraphicsFamily, device->PresentFamily, device->UploadFamily, device->UploadFamilySupportsGraphics ? "Yes" : "No");
 	}
 	else {
-		Printf("Graphics Queue Family: #%d\nPresent Queue Family:  #%d\Texture and Model Threads Disabled.\n", device->GraphicsFamily, device->PresentFamily);
+		Printf("Graphics Queue Family: #%d\nPresent Queue Family:  #%d\nTexture and Model Threads Disabled.\n", device->GraphicsFamily, device->PresentFamily);
 	}
 }
 

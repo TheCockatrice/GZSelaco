@@ -7,7 +7,7 @@
 #include <string>
 
 
-VulkanDevice::VulkanDevice(std::shared_ptr<VulkanInstance> instance, std::shared_ptr<VulkanSurface> surface, const VulkanCompatibleDevice& selectedDevice, int numUploadSlots) : Instance(instance), Surface(surface)
+VulkanDevice::VulkanDevice(std::shared_ptr<VulkanInstance> instance, std::shared_ptr<VulkanSurface> surface, const VulkanCompatibleDevice& selectedDevice, int numUploadSlots, int flags) : Instance(instance), Surface(surface)
 {
 	PhysicalDevice = *selectedDevice.Device;
 	EnabledDeviceExtensions = selectedDevice.EnabledDeviceExtensions;
@@ -19,6 +19,14 @@ VulkanDevice::VulkanDevice(std::shared_ptr<VulkanInstance> instance, std::shared
 	UploadFamilySupportsGraphics = selectedDevice.UploadFamilySupportsGraphics;
 	GraphicsTimeQueries = selectedDevice.GraphicsTimeQueries;
 	DebugLayerActive = instance->DebugLayerActive;
+
+	// Detect ARC since it requires special handling due to immature drivers
+	isARC = PhysicalDevice.Properties.Properties.vendorID == 0x8086 && strstr(PhysicalDevice.Properties.Properties.deviceName, "Arc");
+	
+	// @Cockatrice - Special case for ARC GPU, try not to use concurrent mode swapchain
+	if (isARC || flags & VK_DEVICE_FLAG_FORCE_EXCLUSIVE_PRESENT) {
+		PresentFamily = -2;
+	}
 
 	// Test to see if we can fit more upload queues
 	int rqt = (UploadFamily == GraphicsFamily ? 1 : 0) + (PresentFamily == UploadFamily ? 1 : 0);
@@ -111,9 +119,6 @@ void VulkanDevice::CreateDevice(int numUploadSlots)
 	VulkanPrintLog("debug", "Graphics Family: " + std::to_string(GraphicsFamily));
 	VulkanPrintLog("debug", "Present Family: " + std::to_string(PresentFamily));
 	VulkanPrintLog("debug", "Upload Family: " + std::to_string(UploadFamily));
-
-	// Detect ARC since it requires special handling due to immature drivers
-	isARC = PhysicalDevice.Properties.Properties.vendorID == 0x8086 && strstr(PhysicalDevice.Properties.Properties.deviceName, "Arc");
 
 	std::vector<const char*> extensionNames;
 	extensionNames.reserve(EnabledDeviceExtensions.size());

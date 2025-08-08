@@ -2012,7 +2012,7 @@ std::vector<VulkanCompatibleDevice> VulkanDeviceBuilder::FindDevices(const std::
 	return supportedDevices;
 }
 
-std::shared_ptr<VulkanDevice> VulkanDeviceBuilder::Create(std::shared_ptr<VulkanInstance> instance, int numUploadSlots)
+std::shared_ptr<VulkanDevice> VulkanDeviceBuilder::Create(std::shared_ptr<VulkanInstance> instance, int numUploadSlots, int flags)
 {
 	if (instance->PhysicalDevices.empty())
 		VulkanError("No Vulkan devices found. The graphics card may have no vulkan support or the driver may be too old.");
@@ -2024,7 +2024,7 @@ std::shared_ptr<VulkanDevice> VulkanDeviceBuilder::Create(std::shared_ptr<Vulkan
 	size_t selected = deviceIndex;
 	if (selected >= supportedDevices.size())
 		selected = 0;
-	return std::make_shared<VulkanDevice>(instance, surface, supportedDevices[selected], numUploadSlots);
+	return std::make_shared<VulkanDevice>(instance, surface, supportedDevices[selected], numUploadSlots, flags);
 }
 
 /////////////////////////////////////////////////////////////////////////////

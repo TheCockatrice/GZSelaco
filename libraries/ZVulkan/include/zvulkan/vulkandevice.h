@@ -23,10 +23,15 @@ struct VulkanUploadSlot {
 };
 
 
+enum VulkanDeviceFlags {
+	VK_DEVICE_FLAG_FORCE_EXCLUSIVE_PRESENT = 1
+};
+
+
 class VulkanDevice
 {
 public:
-	VulkanDevice(std::shared_ptr<VulkanInstance> instance, std::shared_ptr<VulkanSurface> surface, const VulkanCompatibleDevice& selectedDevice, int numUploadSlots = 2);
+	VulkanDevice(std::shared_ptr<VulkanInstance> instance, std::shared_ptr<VulkanSurface> surface, const VulkanCompatibleDevice& selectedDevice, int numUploadSlots = 2, int flags = 0);
 	~VulkanDevice();
 
 	std::set<std::string> EnabledDeviceExtensions;
