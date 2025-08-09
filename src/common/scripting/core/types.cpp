@@ -2385,7 +2385,11 @@ PDynArray *NewDynArray(PType *type)
 	{
 		FString backingname;
 
-		switch (type->GetRegType())
+		if(type->isStruct() && static_cast<PStruct*>(type)->TypeName == "TRS")
+		{
+			backingname.Format("DynArray_TRS");
+		}
+		else switch (type->GetRegType())
 		{
 		case REGT_INT:
 			backingname.Format("DynArray_I%d", type->Size * 8);
