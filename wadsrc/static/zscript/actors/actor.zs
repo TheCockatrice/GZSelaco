@@ -1584,7 +1584,7 @@ class Actor : Thinker native
 
 	//================================================
 	// 
-	// Animation Sequence/Frame Getters
+	// Animation Sequence
 	// 
 	//================================================
 	
@@ -1593,6 +1593,11 @@ class Actor : Thinker native
 	
 	native version("4.15.1") AnimationLayer SetAnimationLayerFrameRate(AnimationLayer layer, double framerate);
 	native version("4.15.1") ui AnimationLayer SetAnimationLayerFrameRateUI(AnimationLayer layer, double framerate);
+
+	native version("4.15.1") PrecalculatedAnimationFrame CalculateAnimation(AnimationLayer layer);
+	native version("4.15.1") ui PrecalculatedAnimationFrame CalculateAnimationUI(AnimationLayer layer);
+
+	native version("4.15.1") static clearscope PrecalculatedAnimationFrame BlendAnimationFrames(PrecalculatedAnimationFrame a, PrecalculatedAnimationFrame b, double t);
 
 	//================================================
 	// 
