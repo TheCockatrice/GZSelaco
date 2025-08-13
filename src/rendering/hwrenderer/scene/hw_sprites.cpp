@@ -335,6 +335,14 @@ void HWSprite::DrawSprite(HWDrawInfo *di, FRenderState &state, bool translucent)
 		{
 			SetHeavyProbe(state, &level, actor);
 
+			if(actor && (actor->flags9 & MF9_DECOUPLEDANIMATIONS))
+			{
+				IFVIRTUALPTR(actor, AActor, AnimateBones)
+				{
+					CallVM<void>(func, actor, di->Viewpoint.TicFrac);
+				}
+			}
+
 			FHWModelRenderer renderer(di, state, dynlightindex);
 			RenderModel(&renderer, x, y, z, modelframe, actor, di->Viewpoint.TicFrac);
 			state.SetVertexBuffer(screen->mVertexData);
