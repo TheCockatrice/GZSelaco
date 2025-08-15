@@ -860,7 +860,7 @@ VSMatrix WorldToClip()
 
 	float yaw = (float)r_viewpoint.HWAngles.Yaw.Degrees();
 	float pitch = (float)r_viewpoint.HWAngles.Pitch.Degrees();
-	float roll = (float)r_viewpoint.Angles.Roll.Degrees();
+	float roll = (float)r_viewpoint.HWAngles.Roll.Degrees();
 
 	VSMatrix vM(0);
 	vM.rotate(roll, 0.0f, 0.0f, 1.0f);
