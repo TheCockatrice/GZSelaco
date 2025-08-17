@@ -1563,12 +1563,7 @@ void VulkanRenderDevice::PrintStartupLog()
 	Printf("Max. uniform buffer range: %d\n", limits.maxUniformBufferRange);
 	Printf("Min. uniform buffer offset alignment: %" PRIu64 "\n", limits.minUniformBufferOffsetAlignment);
 
-	if (this->bgTransferThreads.size() > 0) {
-		Printf("Graphics Queue Family: #%d\nPresent Queue Family:  #%d\nUpload Queue Family:   #%d\nUpload Queue Supports Graphics: %s\n", device->GraphicsFamily, device->PresentFamily, device->UploadFamily, device->UploadFamilySupportsGraphics ? "Yes" : "No");
-	}
-	else {
-		Printf("Graphics Queue Family: #%d\nPresent Queue Family:  #%d\nTexture and Model Threads Disabled.\n", device->GraphicsFamily, device->PresentFamily);
-	}
+	Printf("Graphics Queue Family: #%d\nPresent Queue Family:  #%d\nUpload Queue Family:   #%d\nUpload Queue Supports Graphics: %s\n", device->GraphicsFamily, device->PresentFamily, device->UploadFamily, device->UploadFamilySupportsGraphics ? "Yes" : "No");
 }
 
 void VulkanRenderDevice::SetLevelMesh(hwrenderer::LevelMesh* mesh)

@@ -1951,32 +1951,32 @@ std::vector<VulkanCompatibleDevice> VulkanDeviceBuilder::FindDevices(const std::
 			}
 		}
 
-		// Now find a Present family. In the end the Present and Graphics queue CAN be the same queue, but we need to treat that specially
-		// The original Vulkan implementation accidentally always ended up with the same queue for graphics and present anyways 
+
+		// Check if the graphics queue supports Present, this should usually be true but in rare cases...
 		if (surface) {
-			for (int i = 0; i < (int)info.QueueFamilies.size(); i++) {
-				const auto& queueFamily = info.QueueFamilies[i];
-				VkBool32 presentSupport = false;
-				VkResult result = vkGetPhysicalDeviceSurfaceSupportKHR(info.Device, i, surface->Surface, &presentSupport);
-				if (result == VK_SUCCESS && queueFamily.queueCount > 0 && presentSupport) {
-					// Make sure there is enough room in this queue
-					uint32_t requiredCount = 1;
-					if (i == dev.GraphicsFamily) requiredCount++;
-					if (i == dev.UploadFamily) requiredCount++;
-					if (requiredCount > queueFamily.queueCount) continue;
-
-					dev.PresentFamily = i;
-					break;
-				}
-			}
-		}
-
-		// If we didn't find a present family with enough room, let's make sure the graphics queue family supports it
-		if (dev.PresentFamily < 0 && dev.GraphicsFamily >= 0) {
 			VkBool32 presentSupport = false;
+
 			VkResult result = vkGetPhysicalDeviceSurfaceSupportKHR(info.Device, dev.GraphicsFamily, surface->Surface, &presentSupport);
 			if (result == VK_SUCCESS && presentSupport) {
 				dev.PresentFamily = -2;
+			}
+			else {
+				// Search for a new family
+				for (int i = 0; i < (int)info.QueueFamilies.size(); i++) {
+					const auto& queueFamily = info.QueueFamilies[i];
+					presentSupport = false;
+					VkResult result = vkGetPhysicalDeviceSurfaceSupportKHR(info.Device, i, surface->Surface, &presentSupport);
+					if (result == VK_SUCCESS && queueFamily.queueCount > 0 && presentSupport) {
+						// Make sure there is enough room in this queue
+						uint32_t requiredCount = 1;
+						if (i == dev.GraphicsFamily) requiredCount++;
+						if (i == dev.UploadFamily) requiredCount++;
+						if (requiredCount > queueFamily.queueCount) continue;
+
+						dev.PresentFamily = i;
+						break;
+					}
+				}
 			}
 		}
 
