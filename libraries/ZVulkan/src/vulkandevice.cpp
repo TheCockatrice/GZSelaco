@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <set>
 #include <string>
-
+#include <cstring>
 
 VulkanDevice::VulkanDevice(std::shared_ptr<VulkanInstance> instance, std::shared_ptr<VulkanSurface> surface, const VulkanCompatibleDevice& selectedDevice, int numUploadSlots, int flags) : Instance(instance), Surface(surface)
 {
