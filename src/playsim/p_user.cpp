@@ -908,10 +908,21 @@ double player_t::DepthToViewScale(double depth, double size)
 		return 0;
 	}
 
-	double fov = r_viewpoint.FieldOfView.Radians();
+	float fovaspect;
+	float aspect = r_viewwindow.WidescreenRatio;
+	if (r_viewwindow.WidescreenRatio >= 1.3f)
+	{
+		fovaspect = 1.333333f;
+	}
+	else
+	{
+		fovaspect = aspect;
+	}
+
+	float fovy = (float)(2 * atan(tan(r_viewpoint.FieldOfView.Radians() / 2) / fovaspect));
 	double normalDepth = (depth - znear) / (zfar - znear);
 	
-	double scale = (size / 2) / (depth / tan(fov / 2));
+	double scale = (size / 2) / (depth * tan(fovy / 2));
 	return scale;
 }
 
