@@ -164,6 +164,8 @@ public:
 	virtual void InitializeState() = 0;	// For stuff that needs 'screen' set.
 	virtual bool IsVulkan() { return false; }
 	virtual bool IsPoly() { return false; }
+	virtual void OnApplicationActivated(bool active) {};
+	virtual bool CanDisplay(bool active) { return true; }
 	virtual int GetShaderCount();
 	virtual bool CompileNextShader() { return true; }
 	void SetAABBTree(hwrenderer::LevelAABBTree * tree)

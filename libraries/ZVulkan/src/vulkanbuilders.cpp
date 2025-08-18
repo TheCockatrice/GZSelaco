@@ -1886,7 +1886,7 @@ std::vector<VulkanCompatibleDevice> VulkanDeviceBuilder::FindDevices(const std::
 		// a bit slower, so avoid this when possible.
 		for (int i = 0; i < (int)info.QueueFamilies.size(); i++) {
 			const auto& queueFamily = info.QueueFamilies[i];
-			if (queueFamily.queueCount > 0 && (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) && (queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT)) {
+			if (queueFamily.queueCount > 0 && (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)) {
 				// Make sure the family has room for another queue
 				if (i == dev.GraphicsFamily && queueFamily.queueCount < 2) {
 					continue;
@@ -1929,32 +1929,54 @@ std::vector<VulkanCompatibleDevice> VulkanDeviceBuilder::FindDevices(const std::
 			}
 		}
 
-		// Now find a Present family. In the end the Present and Graphics queue CAN be the same queue, but we need to treat that specially
-		// The original Vulkan implementation accidentally always ended up with the same queue for graphics and present anyways 
-		if (surface) {
+		// Last chance, we didn't find a dedicated TRANSFER queue, but maybe we can use a COMPUTE queue
+		if (dev.UploadFamily == -1) {
 			for (int i = 0; i < (int)info.QueueFamilies.size(); i++) {
 				const auto& queueFamily = info.QueueFamilies[i];
-				VkBool32 presentSupport = false;
-				VkResult result = vkGetPhysicalDeviceSurfaceSupportKHR(info.Device, i, surface->Surface, &presentSupport);
-				if (result == VK_SUCCESS && queueFamily.queueCount > 0 && presentSupport) {
-					// Make sure there is enough room in this queue
-					uint32_t requiredCount = 1;
-					if (i == dev.GraphicsFamily) requiredCount++;
-					if (i == dev.UploadFamily) requiredCount++;
-					if (requiredCount > queueFamily.queueCount) continue;
 
-					dev.PresentFamily = i;
+				if (i == dev.GraphicsFamily && queueFamily.queueCount < 2) {
+					continue;
+				}
+
+				// We have LOTS of misalignments between our textures, so we NEED a granularity of 1.
+				if (queueFamily.minImageTransferGranularity.width > 1 || queueFamily.minImageTransferGranularity.depth > 1) {
+					continue;
+				}
+
+				if (queueFamily.queueCount > 0 && (queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT)) {
+					dev.UploadFamily = i;
+					dev.UploadFamilySupportsGraphics = false;
 					break;
 				}
 			}
 		}
 
-		// If we didn't find a present family with enough room, let's make sure the graphics queue family supports it
-		if (dev.PresentFamily < 0 && dev.GraphicsFamily >= 0) {
+
+		// Check if the graphics queue supports Present, this should usually be true but in rare cases...
+		if (surface) {
 			VkBool32 presentSupport = false;
+
 			VkResult result = vkGetPhysicalDeviceSurfaceSupportKHR(info.Device, dev.GraphicsFamily, surface->Surface, &presentSupport);
 			if (result == VK_SUCCESS && presentSupport) {
 				dev.PresentFamily = -2;
+			}
+			else {
+				// Search for a new family
+				for (int i = 0; i < (int)info.QueueFamilies.size(); i++) {
+					const auto& queueFamily = info.QueueFamilies[i];
+					presentSupport = false;
+					VkResult result = vkGetPhysicalDeviceSurfaceSupportKHR(info.Device, i, surface->Surface, &presentSupport);
+					if (result == VK_SUCCESS && queueFamily.queueCount > 0 && presentSupport) {
+						// Make sure there is enough room in this queue
+						uint32_t requiredCount = 1;
+						if (i == dev.GraphicsFamily) requiredCount++;
+						if (i == dev.UploadFamily) requiredCount++;
+						if (requiredCount > queueFamily.queueCount) continue;
+
+						dev.PresentFamily = i;
+						break;
+					}
+				}
 			}
 		}
 
@@ -1990,7 +2012,7 @@ std::vector<VulkanCompatibleDevice> VulkanDeviceBuilder::FindDevices(const std::
 	return supportedDevices;
 }
 
-std::shared_ptr<VulkanDevice> VulkanDeviceBuilder::Create(std::shared_ptr<VulkanInstance> instance, int numUploadSlots)
+std::shared_ptr<VulkanDevice> VulkanDeviceBuilder::Create(std::shared_ptr<VulkanInstance> instance, int numUploadSlots, int flags)
 {
 	if (instance->PhysicalDevices.empty())
 		VulkanError("No Vulkan devices found. The graphics card may have no vulkan support or the driver may be too old.");
@@ -2002,7 +2024,7 @@ std::shared_ptr<VulkanDevice> VulkanDeviceBuilder::Create(std::shared_ptr<Vulkan
 	size_t selected = deviceIndex;
 	if (selected >= supportedDevices.size())
 		selected = 0;
-	return std::make_shared<VulkanDevice>(instance, surface, supportedDevices[selected], numUploadSlots);
+	return std::make_shared<VulkanDevice>(instance, surface, supportedDevices[selected], numUploadSlots, flags);
 }
 
 /////////////////////////////////////////////////////////////////////////////

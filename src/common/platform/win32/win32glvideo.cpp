@@ -90,7 +90,7 @@ PFNWGLCHOOSEPIXELFORMATARBPROC myWglChoosePixelFormatARB; // = (PFNWGLCHOOSEPIXE
 PFNWGLCREATECONTEXTATTRIBSARBPROC myWglCreateContextAttribsARB;
 
 // @Cockatrice - Additional contexts may be fetched for background loading
-HGLRC gl_auxContexts[4] = { NULL, NULL, NULL, NULL };		
+HGLRC gl_auxContexts[10] = { NULL };
 
 
 //==========================================================================
@@ -250,6 +250,7 @@ bool Win32GLVideo::SetPixelFormat()
 
 	myWglChoosePixelFormatARB = (PFNWGLCHOOSEPIXELFORMATARBPROC)zd_wglGetProcAddress("wglChoosePixelFormatARB");
 	myWglCreateContextAttribsARB = (PFNWGLCREATECONTEXTATTRIBSARBPROC)zd_wglGetProcAddress("wglCreateContextAttribsARB");
+
 	// any extra stuff here?
 
 	zd_wglMakeCurrent(NULL, NULL);
@@ -386,6 +387,23 @@ bool Win32GLVideo::SetupPixelFormat(int multisample)
 //
 //==========================================================================
 
+static const char* getGLErrorStr(GLenum err) {
+	switch (err) {
+		case GL_NO_ERROR:                      return "GL_NO_ERROR";
+		case GL_INVALID_ENUM:                  return "GL_INVALID_ENUM";
+		case GL_INVALID_VALUE:                 return "GL_INVALID_VALUE";
+		case GL_INVALID_OPERATION:             return "GL_INVALID_OPERATION";
+		case GL_OUT_OF_MEMORY:                 return "GL_OUT_OF_MEMORY";
+		case GL_STACK_UNDERFLOW:               return "GL_STACK_UNDERFLOW";
+		case GL_STACK_OVERFLOW:                return "GL_STACK_OVERFLOW";
+#ifdef GL_CONTEXT_LOST
+		case GL_CONTEXT_LOST:				   return "GL_CONTEXT_LOST";
+#endif
+		default:                               return "Unknown OpenGL Error";
+	}
+}
+
+
 bool Win32GLVideo::InitHardware(HWND Window, int multisample)
 {
 	static int versions[] = { 46, 45, 44, 43, 42, 41, 40, 33, -1 };
@@ -428,6 +446,10 @@ bool Win32GLVideo::InitHardware(HWND Window, int multisample)
 			}
 		}
 
+		// Identify calculated version
+		if (version > 0) Printf("R_OPENGL: Version - %d.%d\n", version / 10, version % 10);
+		else Printf("R_OPENGL: Fallback Version - %d\n", version);
+
 		if (m_hRC == NULL && prof == WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB)
 		{
 			m_hRC = zd_wglCreateContext(m_hDC);
@@ -437,72 +459,80 @@ bool Win32GLVideo::InitHardware(HWND Window, int multisample)
 			}
 		}
 
+
+		if (!zd_wglMakeCurrent(m_hDC, m_hRC)) {
+			I_FatalError("R_OPENGL: Unable to activate the OpenGL render context.\n");
+		}
+
+		
+		Printf("R_OPENGL: Creating additional contexts...\n");
+
+		char err[256] = { '\0' };
+		const int numAux = min((int)gl_max_transfer_threads, 10);
+		int numCreated = 0;
+
 		// @Cockatrice - Attempt to create additional contexts to be used as background loaders
 		// It's critical these be created and shared before the contexts are used so there is no better place to do it
-		if (m_hRC != NULL)
-		{
-			zd_wglMakeCurrent(m_hDC, m_hRC);
-			Printf("R_OPENGL: Creating additional contexts...\n");
-
-			char err[256] = {'\0'};
-			const int numAux = min((int)gl_max_transfer_threads, 4);
-			int numCreated = 0;
-
+		if (myWglCreateContextAttribsARB != NULL && version > 0) {
 			for (int x = 0; x < numAux; x++) {
-				if (version > -2) {
-					int ctxAttribs[] = {
-						WGL_CONTEXT_MAJOR_VERSION_ARB, version / 10,
-						WGL_CONTEXT_MINOR_VERSION_ARB, version % 10,
-						WGL_CONTEXT_FLAGS_ARB, gl_debug ? WGL_CONTEXT_DEBUG_BIT_ARB : 0,
-						WGL_CONTEXT_PROFILE_MASK_ARB, prof,
-						0
-					};
+				int ctxAttribs[] = {
+					WGL_CONTEXT_MAJOR_VERSION_ARB, version / 10,
+					WGL_CONTEXT_MINOR_VERSION_ARB, version % 10,
+					WGL_CONTEXT_FLAGS_ARB, gl_debug ? WGL_CONTEXT_DEBUG_BIT_ARB : 0,
+					WGL_CONTEXT_PROFILE_MASK_ARB, prof,
+					0
+				};
 
-					gl_auxContexts[x] = myWglCreateContextAttribsARB(m_hDC, m_hRC, ctxAttribs);
-				}
-				else {
-					gl_auxContexts[x] = zd_wglCreateContext(m_hDC);
-				}
+				gl_auxContexts[x] = myWglCreateContextAttribsARB(m_hDC, m_hRC, ctxAttribs);
 
-				
 				if (gl_auxContexts[x] == NULL) {
+					FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, GetLastError(), 0, err, 255, NULL);
+					Printf(TEXTCOLOR_ORANGE"R_OPENGL: Warning - Unable to create additional context [%d] (%d : %s)\n", x + 1, GetLastError(), err);
 					break;
 				}
-				else {
-					if (version <= -2 && !zd_wglShareContext(gl_auxContexts[x], m_hRC)) {
-						FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, GetLastError(), 0, err, 255, NULL);
-						Printf("R_OPENGL: Warning - Unable to share additional context [%d] (%d : %s)\n", x + 1, GetLastError(), err);
-						zd_wglDeleteContext(gl_auxContexts[x]);
-						gl_auxContexts[x] = NULL;
-						break;
-					}
-					else {
-						numCreated++;
-					}
-				}
+
+				numCreated++;
 			}
 
-			if (numAux > 0) {
-				if (numCreated < numAux) {
+		} else {
+			for (int x = 0; x < numAux; x++) {
+				gl_auxContexts[x] = zd_wglCreateContext(m_hDC);
+
+				if (gl_auxContexts[x] == NULL) {
 					FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, GetLastError(), 0, err, 255, NULL);
+					Printf(TEXTCOLOR_ORANGE"R_OPENGL: Warning - Unable to create additional context [%d] (%d : %s)\n", x + 1, GetLastError(), err);
+					break;
+				}
 
-					if (numCreated == 0) {
-						Printf("R_OPENGL: Warning - Unable to create any additional context(s) [0/%d] (%d : %s) \n\tTexture loading may be main-thread only.\n", numAux, GetLastError(), err);
-					} else {
-						Printf("R_OPENGL: Warning - %d Contexts could not be created. Created %d of %d requested.\n\t(%d : %s)\n", numAux - numCreated, numCreated, numAux, GetLastError(), err);
-					}
+				if (!zd_wglShareContext(m_hRC, gl_auxContexts[x])) {
+					FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, GetLastError(), 0, err, 255, NULL);
+					Printf(TEXTCOLOR_ORANGE"R_OPENGL: Warning - Unable to share additional context [%d] (%d : %s)\n", x + 1, GetLastError(), err);
+					zd_wglDeleteContext(gl_auxContexts[x]);
+					gl_auxContexts[x] = NULL;
+					break;
 				}
-				else {
-					Printf("R_OPENGL: Created %d additional contexts\n", numCreated);
-				}
+
+				numCreated++;
 			}
 		}
 
-		if (m_hRC != NULL)
-		{
-			zd_wglMakeCurrent(m_hDC, m_hRC);
-			return true;
+		if (numAux > 0) {
+			if (numCreated < numAux) {
+				FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, GetLastError(), 0, err, 255, NULL);
+
+				if (numCreated == 0) {
+					Printf(TEXTCOLOR_YELLOW"R_OPENGL: Warning - Unable to create any + context(s) [0/%d] (%d : %s) \n\tPerformance will be significantly impacted.\n", numAux, GetLastError(), err);
+				} else {
+					Printf(TEXTCOLOR_YELLOW"R_OPENGL: Warning - %d Contexts not created. %d of %d Succeeded.\n\t(%d : %s)\n", numAux - numCreated, numCreated, numAux, GetLastError(), err);
+				}
+			}
+			else {
+				Printf("R_OPENGL: Created %d additional contexts\n", numCreated);
+			}
 		}
+
+
+		return true;
 	}
 	// We get here if the driver doesn't support the modern context creation API which always means an old driver.
 	I_FatalError("R_OPENGL: Unable to create an OpenGL render context. Insufficient driver support for context creation\n");
@@ -544,7 +574,7 @@ void Win32GLVideo::setAuxContext(int index) {
 
 int Win32GLVideo::numAuxContexts() {
 	int num = 0;
-	for (int x = 0; x < 4; x++) if (gl_auxContexts[x] != NULL) num++;
+	for (auto &ctx : gl_auxContexts) if (ctx != NULL) num++;
 	return num;
 }
 

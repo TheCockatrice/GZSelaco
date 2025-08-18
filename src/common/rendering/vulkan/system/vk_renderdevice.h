@@ -42,6 +42,16 @@ enum VkTexLoadInFlags {
 	TEXLOAD_ALLOWQUALITY	= 1 << 1
 };
 
+
+enum vkTexLoadError {
+	VK_TEXLOAD_ERR_NONE = 0,
+	VK_TEXLOAD_ERR_FILE,		// File could not be found or opened
+	VK_TEXLOAD_ERR_FORMAT,		// Image data could not be understood or fully read
+	VK_TEXLOAD_ERR_UPLOAD,		// Texture failed to upload in background thread when the hardware should have been capable
+	VK_TEXLOAD_ERR_MEM,			// Ran out of memory when trying to load the file, unused so far
+	VK_TEXLOAD_ERR_UNKNOWN		// Any other error
+};
+
 struct VkTexLoadIn {
 	FImageSource* imgSource;
 	FImageLoadParams* params;
@@ -64,6 +74,8 @@ struct VkTexLoadOut {
 	size_t pixelsSize = 0, totalDataSize = 0;
 	int pixelW = 0, pixelH = 0;
 	int8_t flags;
+	int mipmapCount = 1;
+	vkTexLoadError error = VK_TEXLOAD_ERR_NONE;
 };
 
 struct VkModelLoadIn {
@@ -183,6 +195,8 @@ public:
 	float CacheProgress() override;
 	void UpdateBackgroundCache(bool flush = false) override;
 	void UploadLoadedTextures(bool flush = false);
+	void OnApplicationActivated(bool active) override;
+	bool CanDisplay(bool active) override;
 	void UpdatePalette() override;
 	const char* DeviceName() const override;
 	int Backend() override { return 1; }
