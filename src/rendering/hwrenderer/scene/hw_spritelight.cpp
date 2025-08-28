@@ -53,16 +53,12 @@ LightProbe* FindLightProbe(FLevelLocals* level, float x, float y, float z, float
 	{
 #if 1
 		double rcpCellSize = 1.0 / level->LPCellSize;
-		int gridCenterX = (int)std::floor(x * rcpCellSize) - level->LPMinX;
-		int gridCenterY = (int)std::floor(y * rcpCellSize) - level->LPMinY;
+		int gridX = (int)std::floor(x * rcpCellSize) - level->LPMinX;
+		int gridY = (int)std::floor(y * rcpCellSize) - level->LPMinY;
 		int gridWidth = level->LPWidth;
 		int gridHeight = level->LPHeight;
 		float lastdist = 0.0f;
 
-		for (int gridY = gridCenterY - 1; gridY <= gridCenterY + 1; gridY++)
-		{
-			for (int gridX = gridCenterX - 1; gridX <= gridCenterX + 1; gridX++)
-			{
 		if (gridX >= 0 && gridY >= 0 && gridX < gridWidth && gridY < gridHeight)
 		{
 			const LightProbeCell& cell = level->LPCells[gridX + (size_t)gridY * gridWidth];
@@ -82,8 +78,6 @@ LightProbe* FindLightProbe(FLevelLocals* level, float x, float y, float z, float
 						lastdist = dist;
 					}
 				}
-			}
-		}
 			}
 		}
 #else
