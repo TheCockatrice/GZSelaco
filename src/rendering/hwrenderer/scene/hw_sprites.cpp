@@ -333,19 +333,6 @@ void HWSprite::DrawSprite(HWDrawInfo *di, FRenderState &state, bool translucent)
 		}
 		else
 		{
-			if (actor && di->Level->LightProbes.Size() > 0)
-			{
-				FVector3 probeColor;
-				if (TryGetLightProbeColor(di->Level, actor, probeColor))
-				{
-					state.SetLightProbe(probeColor.X, probeColor.Y, probeColor.Z);
-				}
-				else
-				{
-					state.SetLightProbe(0, 0, 0);
-				}
-			}
-
 			FHWModelRenderer renderer(di, state, dynlightindex);
 			RenderModel(&renderer, x, y, z, modelframe, actor, di->Viewpoint.TicFrac);
 			state.SetVertexBuffer(screen->mVertexData);
