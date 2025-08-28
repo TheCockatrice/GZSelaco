@@ -98,9 +98,7 @@ void VkSamplerManager::CreateHWSamplers()
 		{
 			// @Cockatrice - Special case for Intel ARC GPU, any level of anisotropy creates linear sampling, so we have to turn it off when we have different min/mag modes
 			if( TexFilter[filter].magFilter != TexFilter[filter].minFilter && 
-				fb->device->PhysicalDevice.Properties.Properties.vendorID == 0x8086 &&
-				strstr(fb->device->PhysicalDevice.Properties.Properties.deviceName, "Arc")
-				) { 
+				fb->device->isARC ) { 
 				builder.Anisotropy(1);
 				builder.MipLodBias(-0.75);	// Try to push the blurry textures away from the camera so it's not just blur-city without anisotropy
 			}

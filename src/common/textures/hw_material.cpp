@@ -74,6 +74,17 @@ FMaterial::FMaterial(FGameTexture * tx, int scaleflags)
 			mShaderIndex = tx->GetShaderIndex();
 		}
 		mTextureLayers.Last().clampflags = CLAMP_CAMTEX;
+
+		// @Cockatrice - Hack to add a brightmap onto a camera/canvas texture
+		if (tx->GetBrightmap()) {
+			FGameTexture *placeholder = TexMan.GameByIndex(1);
+			mTextureLayers.Push({ placeholder->GetTexture(), 0, -1 });
+			mTextureLayers.Push({ placeholder->GetTexture(), 0, -1 });
+			mTextureLayers.Push({ tx->Brightmap.get(), scaleflags, -1 });
+			mLayerFlags |= TEXF_Brightmap;
+			mShaderIndex = SHADER_Specular;
+		}
+
 		// no additional layers for cameratexture
 	}
 	else
