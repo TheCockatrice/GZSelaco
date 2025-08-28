@@ -63,27 +63,27 @@ LightProbe* FindLightProbe(FLevelLocals* level, float x, float y, float z, float
 		{
 			for (int gridX = gridCenterX - 1; gridX <= gridCenterX + 1; gridX++)
 			{
-				if (gridX >= 0 && gridY >= 0 && gridX < gridWidth && gridY < gridHeight)
+		if (gridX >= 0 && gridY >= 0 && gridX < gridWidth && gridY < gridHeight)
+		{
+			const LightProbeCell& cell = level->LPCells[gridX + (size_t)gridY * gridWidth];
+			for (int i = 0; i < cell.NumProbes; i++)
+			{
+				LightProbe* probe = cell.FirstProbe + i;
+				// Check the probe isn't under the floor, which can happen with thin 3D floors
+				if (floorz < probe->Z)
 				{
-					const LightProbeCell& cell = level->LPCells[gridX + (size_t)gridY * gridWidth];
-					for (int i = 0; i < cell.NumProbes; i++)
+					float dx = probe->X - x;
+					float dy = probe->Y - y;
+					float dz = probe->Z - z;
+					float dist = dx * dx + dy * dy + dz * dz;
+					if (!foundprobe || dist < lastdist)
 					{
-						LightProbe* probe = cell.FirstProbe + i;
-						// Check the probe isn't under the floor, which can happen with thin 3D floors
-						if (floorz < probe->Z)
-						{
-							float dx = probe->X - x;
-							float dy = probe->Y - y;
-							float dz = probe->Z - z;
-							float dist = dx * dx + dy * dy + dz * dz;
-							if (!foundprobe || dist < lastdist)
-							{
-								foundprobe = probe;
-								lastdist = dist;
-							}
-						}
+						foundprobe = probe;
+						lastdist = dist;
 					}
 				}
+			}
+		}
 			}
 		}
 #else
@@ -113,7 +113,9 @@ bool TryGetLightProbeColor(FLevelLocals* level, AActor* actor, FVector3& out)
 		return false;
 	}
 
-	return TryGetLightProbeColor(level, actor->X(), actor->Y(), actor->Center(), out, actor->floorz);
+	DVector3 samplePos = actor->GetLightProbeSamplePosition(level->LPCellSize);
+
+	return TryGetLightProbeColor(level, samplePos.X, samplePos.Y, samplePos.Z, out, actor->floorz);
 }
 
 bool TryGetLightProbeColor(FLevelLocals* level, float x, float y, float z, FVector3& out, float floorz /* = -FLT_MAX */)

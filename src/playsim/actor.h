@@ -444,7 +444,7 @@ enum ActorFlag9
 	MF9_SHADOWBLOCK				= 0x00000004,	// [inkoalawetrust] Actors in the line of fire with this flag trigger the MF_SHADOW aiming penalty.
 	MF9_SHADOWAIMVERT			= 0x00000008,	// [inkoalawetrust] Monster aim is also offset vertically when aiming at shadow actors.
 	MF9_DECOUPLEDANIMATIONS	= 0x00000010,	// [RL0] Decouple model animations from states
-
+	
 	MF9_MINVISIBLE			= 0x10000000,	// Actor not visible to monsters 								(@Cockatrice - Moved from MF8 during merge to prevent conflicts)
 	MF9_MVISBLOCKED			= 0x20000000,	// Monster(only) sight checks to actor always fail 				(@Cockatrice - Moved from MF8 during merge to prevent conflicts)
 	MF9_ONLYSLAMSOLID		= 0x40000000,		// [B] Things with skullfly will ignore non-solid Actors.	(@Cockatrice - Moved from MF8 during merge to prevent conflicts)
@@ -1656,6 +1656,20 @@ public:
 	double DistanceBySpeed(AActor *dest, double speed) const
 	{
 		return max(1., Distance2D(dest) / speed);
+	}
+
+	DVector3 GetLightProbeSamplePosition(double wallOffsetDist)
+	{
+		double zPos = __Pos.Z + Height / 2;
+
+		if (renderflags & RF_WALLSPRITE)
+		{
+			return DVector3(__Pos.X + Angles.Yaw.Cos() * wallOffsetDist, __Pos.Y + Angles.Yaw.Sin() * wallOffsetDist, zPos);
+		}
+		else
+		{
+			return DVector3(__Pos.X, __Pos.Y, zPos);
+		}
 	}
 
 	int GetLightLevel(sector_t* rendersector);
