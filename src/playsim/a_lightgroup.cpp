@@ -15,8 +15,7 @@ CVAR(Bool, lm_masterlightmaps, true, 0);
 
 CCMD(lm_info)
 {
-	Printf("Lightmap Info: \n");
-	Printf("Loaded Lightmap version: %d\n", level.LMVersion);
+	Printf("Version: %d\n", level.LMVersion);
 	Printf("Master Textures: %d (Actual size: %dx%d)\n", level.MasterLightmaps.Size(), level.LMMasterTextureSize.X, level.LMMasterTextureSize.Y);
 	for (unsigned int i = 0; i < level.MasterLightmaps.Size(); i++)
 	{
