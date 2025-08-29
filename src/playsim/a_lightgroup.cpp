@@ -16,19 +16,19 @@ CVAR(Bool, lm_masterlightmaps, true, 0);
 CCMD(lm_info)
 {
 	Printf("Lightmap Info: \n");
-	Printf("Master Lightmaps: %d\n", level.MasterLightmaps.Size());
+	Printf("Master Textures: %d (Actual size: %dx%d)\n", level.MasterLightmaps.Size(), level.LMMasterTextureSize.X, level.LMMasterTextureSize.Y);
 	for (unsigned int i = 0; i < level.MasterLightmaps.Size(); i++)
 	{
-		Printf("\t%dx%d\n", level.MasterLightmaps[i].base->GetTexelWidth(), level.MasterLightmaps[i].base->GetTexelHeight());
+		Printf("\t%dx%d\n", level.LMMasterTextureActualSizes[i].X, level.LMMasterTextureActualSizes[i].Y);
 	}
-	Printf("Lightgroup Textures: %d\n", level.Lightmaps.Size());
-	for (unsigned int i = 0; i < level.Lightmaps.Size(); i++)
+	Printf("Lightgroups: %d\n", level.LightGroups.Size());
+	Printf("Lightgroup Textures: %d\n", level.Lightmaps.Size() - level.MasterLightmaps.Size());
+	for (unsigned int i = level.MasterLightmaps.Size(); i < level.Lightmaps.Size(); i++)
 	{
 		Printf("\t%dx%d\n", level.Lightmaps[i]->GetTexelWidth(), level.Lightmaps[i]->GetTexelHeight());
 	}
-	Printf("Lightgroups: %d\n", level.LightGroups.Size());
 	Printf("Light Probes: %d\n", level.LightProbes.Size());
-	Printf("Light Probe Cell Size: ", level.LPCellSize);
+	Printf("Light Probe Cell Size: %d\n", level.LPCellSize);
 }
 
 FVector3 LightProbe::CalculateColor(FLevelLocals* level) const
