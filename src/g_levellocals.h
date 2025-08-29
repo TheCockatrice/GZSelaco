@@ -471,8 +471,13 @@ public:
 	{
 		FGameTexture* base;
 		F2DVertexBuffer quadBuffer;
+
+		int indexCount;
+		F2DVertexBuffer meshBuffers;
 	};
 
+	int LMVersion = -1;
+	bool LMNeedsRebuild = true;
 	TArray<LightmapSurface> LMSurfaces;
 	TArray<float> LMTexCoords;
 	int LMTextureCount = 0;

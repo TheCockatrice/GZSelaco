@@ -16,6 +16,7 @@ CVAR(Bool, lm_masterlightmaps, true, 0);
 CCMD(lm_info)
 {
 	Printf("Lightmap Info: \n");
+	Printf("Loaded Lightmap version: %d\n", level.LMVersion);
 	Printf("Master Textures: %d (Actual size: %dx%d)\n", level.MasterLightmaps.Size(), level.LMMasterTextureSize.X, level.LMMasterTextureSize.Y);
 	for (unsigned int i = 0; i < level.MasterLightmaps.Size(); i++)
 	{
@@ -189,9 +190,18 @@ void RenderMasterLightmap(FLevelLocals* level, int index)
 		state->SetRenderStyle(STYLE_Normal);
 		state->SetObjectColor(0xffffffff);
 
-		// Draw the master lightmap
-		state->SetVertexBuffer(&master.quadBuffer);
-		state->DrawIndexed(DT_Triangles, 0, 6, true);
+		if (level->LMNeedsRebuild || master.indexCount < 0)
+		{
+			// Redraw the entire master lightmap
+			state->SetVertexBuffer(&master.quadBuffer);
+			state->DrawIndexed(DT_Triangles, 0, 6, true);
+		}
+		else if (master.indexCount > 0)
+		{
+			// Only redraw non-static areas of the lightmap
+			state->SetVertexBuffer(&master.meshBuffers);
+			state->DrawIndexed(DT_Triangles, 0, master.indexCount, true);
+		}
 	}
 
 	// Render the additive lightgroups
@@ -277,4 +287,6 @@ void P_RenderLightGroups(FLevelLocals* level)
 	state.SetSoftLightLevel(255);
 	state.EnableTextureMatrix(false);
 	state.ResetColor();
+
+	level->LMNeedsRebuild = false;
 }

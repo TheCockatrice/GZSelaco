@@ -1732,7 +1732,8 @@ struct LightmapSurface
 	SurfaceType Type;
 	subsector_t *Subsector;
 	side_t *Side;
-	sector_t *ControlSector;
+	sector_t *OwnerSector;
+	sector_t* ControlSector;
 	uint32_t LightmapNum;
 	float *TexCoords;
 };
