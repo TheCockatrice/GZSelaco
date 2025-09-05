@@ -1141,8 +1141,8 @@ bool HWWall::SetWallCoordinates(seg_t * seg, FTexCoordInfo *tci, float textureto
 			tcs[LOLFT].v = tci->FloatToTexV(-zbottom[0] + texturetop);
 		}
 
-		lightuv[UPLFT].v = srclightuv[UPLFT].v;
-		lightuv[LOLFT].v = srclightuv[LOLFT].v;
+		//lightuv[UPLFT].v = srclightuv[UPLFT].v;
+		//lightuv[LOLFT].v = srclightuv[LOLFT].v;
 	}
 	else
 	{
@@ -1164,8 +1164,8 @@ bool HWWall::SetWallCoordinates(seg_t * seg, FTexCoordInfo *tci, float textureto
 			tcs[LOLFT].v = tcs[UPLFT].v = tci->FloatToTexV(-ztop[0] + texturetop);
 		}
 
-		lightuv[UPLFT].v = srclightuv[UPLFT].v + inter_x * (srclightuv[UPRGT].v - srclightuv[UPLFT].v);
-		lightuv[LOLFT].v = srclightuv[LOLFT].v + inter_x * (srclightuv[LORGT].v - srclightuv[LOLFT].v);
+		//lightuv[UPLFT].v = srclightuv[UPLFT].v + inter_x * (srclightuv[UPRGT].v - srclightuv[UPLFT].v);
+		//lightuv[LOLFT].v = srclightuv[LOLFT].v + inter_x * (srclightuv[LORGT].v - srclightuv[LOLFT].v);
 	}
 
 	//
@@ -1185,8 +1185,8 @@ bool HWWall::SetWallCoordinates(seg_t * seg, FTexCoordInfo *tci, float textureto
 			tcs[LORGT].v = tci->FloatToTexV(-zbottom[1] + texturetop + skew);
 		}
 
- 		lightuv[UPRGT].v = srclightuv[UPRGT].v;
- 		lightuv[LORGT].v = srclightuv[LORGT].v;
+// 		lightuv[UPRGT].v = srclightuv[UPRGT].v;
+// 		lightuv[LORGT].v = srclightuv[LORGT].v;
 	}
 	else
 	{
@@ -1207,8 +1207,8 @@ bool HWWall::SetWallCoordinates(seg_t * seg, FTexCoordInfo *tci, float textureto
 			tcs[LORGT].v = tcs[UPRGT].v = tci->FloatToTexV(-ztop[1] + texturetop + skew);
 		}
 
- 		lightuv[UPRGT].v = srclightuv[UPRGT].v + inter_x * (srclightuv[UPRGT].v - srclightuv[UPLFT].v);
- 		lightuv[LORGT].v = srclightuv[LORGT].v + inter_x * (srclightuv[LORGT].v - srclightuv[LOLFT].v);
+// 		lightuv[UPRGT].v = srclightuv[UPRGT].v + inter_x * (srclightuv[UPRGT].v - srclightuv[UPLFT].v);
+// 		lightuv[LORGT].v = srclightuv[LORGT].v + inter_x * (srclightuv[LORGT].v - srclightuv[LOLFT].v);
 	}
 
 	tcs[UPLFT].u = tcs[LOLFT].u = l_ul + texlength * glseg.fracleft;
