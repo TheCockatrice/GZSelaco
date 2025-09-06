@@ -6,6 +6,30 @@
 #include "flatvertices.h"
 #include "hw_bonebuffer.h"
 #include "hw_lightbuffer.h"
+#include "c_cvars.h"
+
+CVAR(Bool, lm_lightprobes, true, 0);
+CVAR(Bool, lm_dynamiclightmap, true, 0);
+CVAR(Int, lm_maxlightgroups, -1, 0);
+CVAR(Bool, lm_masterlightmaps, true, 0);
+
+CCMD(lm_info)
+{
+	Printf("Version: %d\n", level.LMVersion);
+	Printf("Master Textures: %d (Actual size: %dx%d)\n", level.MasterLightmaps.Size(), level.LMMasterTextureSize.X, level.LMMasterTextureSize.Y);
+	for (unsigned int i = 0; i < level.MasterLightmaps.Size(); i++)
+	{
+		Printf("\t%dx%d\n", level.LMMasterTextureActualSizes[i].X, level.LMMasterTextureActualSizes[i].Y);
+	}
+	Printf("Lightgroups: %d\n", level.LightGroups.Size());
+	Printf("Lightgroup Textures: %d\n", level.Lightmaps.Size() - level.MasterLightmaps.Size());
+	for (unsigned int i = level.MasterLightmaps.Size(); i < level.Lightmaps.Size(); i++)
+	{
+		Printf("\t%dx%d\n", level.Lightmaps[i]->GetTexelWidth(), level.Lightmaps[i]->GetTexelHeight());
+	}
+	Printf("Light Probes: %d\n", level.LightProbes.Size());
+	Printf("Light Probe Cell Size: %d\n", level.LPCellSize);
+}
 
 FVector3 LightProbe::CalculateColor(FLevelLocals* level) const
 {
@@ -143,6 +167,11 @@ void P_ClearLightgroupTicks(FLevelLocals* level)
 
 void RenderMasterLightmap(FLevelLocals* level, int index)
 {
+	if (lm_maxlightgroups == 0)
+	{
+		return;
+	}
+
 	const FLevelLocals::MasterLightmapInfo& master = level->MasterLightmaps[index];
 	FRenderState* state = screen->RenderState();
 
@@ -154,20 +183,40 @@ void RenderMasterLightmap(FLevelLocals* level, int index)
 	state->SetViewport(0, 0, width, height);
 	screen->mViewpoints->Set2D(*state, width, height);
 
-	state->SetMaterial(master.base, UF_Texture, 0, CLAMP_NONE, 0, SHADER_LightmapComposite);
-	state->SetRenderStyle(STYLE_Normal);
-	state->SetObjectColor(0xffffffff);
+	if (lm_masterlightmaps)
+	{
+		state->SetMaterial(master.base, UF_Texture, 0, CLAMP_NONE, 0, SHADER_LightmapComposite);
+		state->SetRenderStyle(STYLE_Normal);
+		state->SetObjectColor(0xffffffff);
 
-	// Draw the master lightmap
-	state->SetVertexBuffer(&master.quadBuffer);
-	state->DrawIndexed(DT_Triangles, 0, 6, true);
+		if (level->LMNeedsRebuild || master.indexCount < 0)
+		{
+			// Redraw the entire master lightmap
+			state->SetVertexBuffer(&master.quadBuffer);
+			state->DrawIndexed(DT_Triangles, 0, 6, true);
+		}
+		else if (master.indexCount > 0)
+		{
+			// Only redraw non-static areas of the lightmap
+			state->SetVertexBuffer(&master.meshBuffers);
+			state->DrawIndexed(DT_Triangles, 0, master.indexCount, true);
+		}
+	}
 
 	// Render the additive lightgroups
 	// [NL] HACK: This goes through each of the lightgroups for *every single master lightmap*, which could probably be precalculated to save some performance
+
+	int numRendered = 0;
+
 	for (LightGroupData& lightGroupData : level->LightGroups)
 	{
 		if (lightGroupData.TickedThisFrame)
 		{
+			if (lm_maxlightgroups >= 0 && numRendered >= lm_maxlightgroups)
+			{
+				return;
+			}
+
 			for (const LightGroupData::Mesh& mesh : lightGroupData.Meshes)
 			{
 				if (mesh.targetLightmapIndex != index)
@@ -187,12 +236,19 @@ void RenderMasterLightmap(FLevelLocals* level, int index)
 				state->SetVertexBuffer(&mesh.buffers);
 				state->DrawIndexed(DT_Triangles, 0, mesh.indexCount);
 			}
+
+			numRendered++;
 		}
 	}
 }
 
 void P_RenderLightGroups(FLevelLocals* level)
 {
+	if (!lm_dynamiclightmap)
+	{
+		return;
+	}
+
 	FRenderState& state = *screen->RenderState();
 	state.EnableStencil(false);
 	state.SetStencil(0, SOP_Keep, SF_AllOn);
@@ -230,4 +286,6 @@ void P_RenderLightGroups(FLevelLocals* level)
 	state.SetSoftLightLevel(255);
 	state.EnableTextureMatrix(false);
 	state.ResetColor();
+
+	level->LMNeedsRebuild = false;
 }

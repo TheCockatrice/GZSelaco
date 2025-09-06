@@ -39,6 +39,8 @@
 #include "models.h"
 #include <cmath>	// needed for std::floor on mac
 
+EXTERN_CVAR(Bool, lm_lightprobes);
+
 template<class T>
 T smoothstep(const T edge0, const T edge1, const T x)
 {
@@ -49,7 +51,7 @@ T smoothstep(const T edge0, const T edge1, const T x)
 LightProbe* FindLightProbe(FLevelLocals* level, float x, float y, float z, float floorz /* = -FLT_MAX */)
 {
 	LightProbe* foundprobe = nullptr;
-	if (level->LightProbes.Size() > 0)
+	if (lm_lightprobes && level->LightProbes.Size() > 0)
 	{
 #if 1
 		double rcpCellSize = 1.0 / level->LPCellSize;

@@ -3363,6 +3363,8 @@ void MapLoader::LoadLightmap(MapData *map)
 	Level->LPWidth = 0;
 	Level->LPHeight = 0;
 	Level->LPCellSize = 32;
+	Level->LMVersion = -1;
+	Level->LMNeedsRebuild = true;
 
 	for (size_t i = 0; i < Level->Lightmaps.size(); i++)
 	{
@@ -3382,11 +3384,16 @@ void MapLoader::LoadLightmap(MapData *map)
 
 
 	int version = fr.ReadInt32();
-	if (version != 0x5e1ac001) // 'Selaco' + Version XX
+	if ((version & 0x5e1ac000) != 0x5e1ac000) // 'Selaco' + Version XX
 	{
 		Printf(PRINT_HIGH, "LoadLightmap: unsupported lightmap lump version\n");
 		return;
 	}
+
+	// The *actual* version number, minus the 'Selaco' identifier
+	version = version & 0x000000FF;
+
+	Level->LMVersion = version;
 
 	IVector2 textureSize;
 	textureSize.X = fr.ReadUInt16();
@@ -3542,9 +3549,13 @@ void MapLoader::LoadLightmap(MapData *map)
 
 		SurfaceType type = (SurfaceType)fr.ReadUInt32();
 		uint32_t typeIndex = fr.ReadUInt32();
+		uint32_t ownerSector = (version >= 2) ? fr.ReadUInt32() : 0xffffffff;
 		uint32_t controlSector = fr.ReadUInt32();
 		uint32_t lightmapNum = fr.ReadUInt32();
 		uint32_t firstTexCoord = fr.ReadUInt32();
+
+		if (ownerSector != 0xffffffff)
+			surface.OwnerSector = &Level->sectors[ownerSector];
 
 		if (controlSector != 0xffffffff)
 			surface.ControlSector = &Level->sectors[controlSector];
@@ -3583,12 +3594,35 @@ void MapLoader::LoadLightmap(MapData *map)
 	Level->LMMasterTextureSize = textureSize;
 	Level->LMMasterTextureActualSizes.Resize(numMasterTextures);
 
+	Level->Lightmaps.Resize(numMasterTextures + numGroupTextures);
+	Level->MasterLightmaps.Resize(numMasterTextures);
+
 	for (int i = 0; i < numMasterTextures; i++)
 	{
 		IVector2 actualSize;
 		actualSize.X = fr.ReadUInt16();
 		actualSize.Y = fr.ReadUInt16();
 		Level->LMMasterTextureActualSizes[i] = actualSize;
+		Level->MasterLightmaps[i].indexCount = -1;
+
+		if (version >= 2)
+		{
+			uint32_t numVerts = fr.ReadUInt32();
+			int numIndices = fr.ReadInt32();
+
+			Level->MasterLightmaps[i].indexCount = numIndices;
+
+			if (numVerts > 0 && numIndices > 0)
+			{
+				TArray<F2DDrawer::TwoDVertex> verts(numVerts, true);
+				fr.Read(verts.Data(), numVerts * sizeof(F2DDrawer::TwoDVertex));
+
+				TArray<int> indices(numIndices, true);
+				fr.Read(indices.Data(), numIndices * sizeof(int));
+
+				Level->MasterLightmaps[i].meshBuffers.UploadData(verts.Data(), numVerts, indices.Data(), numIndices);
+			}
+		}
 	}
 
 	Level->LMMasterTextureData.Resize((numMasterTexBytes + 1));
@@ -3600,12 +3634,11 @@ void MapLoader::LoadLightmap(MapData *map)
 		data[i] += data[i - 1];
 #endif
 
-	Level->Lightmaps.Resize(numMasterTextures + numGroupTextures);
-	Level->MasterLightmaps.Resize(numMasterTextures);
-
 	size_t texDataOffset = 0;
 	for (int i = 0; i < numMasterTextures; i++)
 	{
+		assert(textureSize.X != 0 && textureSize.Y != 0);
+
 		// Create the lightmap texture
 		FWrapperTexture* wrapper = new FWrapperTexture(textureSize.X, textureSize.Y);
 		IHardwareTexture* texture = wrapper->GetHardwareTexture(0, 0);
@@ -3641,6 +3674,8 @@ void MapLoader::LoadLightmap(MapData *map)
 		int width = fr.ReadUInt16();
 		int height = fr.ReadUInt16();
 
+		assert(width != 0 && height != 0);
+
 		int dataSize = width * height * 4;
 
 		TArray<uint8_t> groupData(dataSize, true);
@@ -3663,11 +3698,6 @@ void MapLoader::LoadLightGroups(MapData* map)
 	FileReader& fr = map->Reader(ML_LIGHTGRP);
 
 	uint32_t version = fr.ReadUInt32();
-	if (version != 0)
-	{
-		Printf(PRINT_HIGH, "LoadLightmap: unsupported lightgroup lump version\n");
-		return;
-	}
 
 	uint32_t numLightGroups = fr.ReadUInt32();
 	for (uint32_t i = 0; i < numLightGroups; i++)
@@ -3698,6 +3728,12 @@ void MapLoader::LoadLightGroups(MapData* map)
 			fr.Read(indices.Data(), numIndices * sizeof(int));
 
 			lightGroup->Meshes[i].buffers.UploadData(verts.Data(), numVerts, indices.Data(), numIndices);
+		}
+
+		if (version >= 1)
+		{
+			int numAffectedSectors = fr.ReadUInt32();
+			// TODO: Load in affected sectors
 		}
 	}
 }

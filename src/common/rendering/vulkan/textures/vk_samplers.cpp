@@ -155,7 +155,7 @@ void VkSamplerManager::CreateHWSamplers()
 		builder.MinFilter(VK_FILTER_LINEAR);
 		builder.AddressMode(VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_REPEAT);
 		builder.MipmapMode(VK_SAMPLER_MIPMAP_MODE_LINEAR);
-		builder.MaxLod(100.0f);
+		builder.MaxLod(0.25f);
 		mSamplers[CLAMP_NONE_FORCE_FILTER] = builder.Create(fb->device.get());
 		mSamplers[CLAMP_NONE_FORCE_FILTER]->SetDebugName("VkSamplerManager.mSamplers");
 	}
