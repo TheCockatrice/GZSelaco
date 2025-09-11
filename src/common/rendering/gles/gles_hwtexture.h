@@ -72,6 +72,7 @@ public:
 	uint8_t* MapBuffer();
 
 	unsigned int CreateTexture(unsigned char* buffer, int w, int h, int texunit, bool mipmap, const char* name);
+	void Finalize() { }
 	unsigned int GetTextureHandle()
 	{
 		return glTexID;

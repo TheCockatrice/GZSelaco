@@ -273,6 +273,11 @@ void VkHardwareTexture::CreateTexture(int w, int h, int pixelsize, VkFormat form
 	hwState = READY;
 }
 
+void VkHardwareTexture::Finalize()
+{
+	CheckFinalTransition(fb->GetCommands()->GetTransferCommands(), false);
+}
+
 void VkHardwareTexture::CheckFinalTransition(VulkanCommandBuffer *cmd, bool background) {
 	assert(background ? mLoadedImage != nullptr : mImage != nullptr);
 

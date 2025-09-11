@@ -33,6 +33,7 @@ public:
 	virtual void AllocateBuffer(int w, int h, int texelsize) = 0;
 	virtual uint8_t *MapBuffer() = 0;
 	virtual unsigned int CreateTexture(unsigned char * buffer, int w, int h, int texunit, bool mipmap, const char *name) = 0;
+	virtual void Finalize() = 0;
 
 	// @Cockatrice - Used to determine if the texture is available to be used in rendering (loaded/uploaded)
 	virtual bool IsValid(int texUnit = 0) { return GetState(texUnit) == HardwareState::READY; }

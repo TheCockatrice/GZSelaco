@@ -38,6 +38,7 @@ public:
 	void AllocateBuffer(int w, int h, int texelsize) override;
 	uint8_t *MapBuffer() override;
 	unsigned int CreateTexture(unsigned char * buffer, int w, int h, int texunit, bool mipmap, const char *name) override;
+	void Finalize() override;
 	void BackgroundCreateTexture(VkCommandBufferManager* bufManager, int w, int h, int pixelsize, VkFormat format, const void *pixels, int numMipLevels, bool createMips, int totalSize = -1);
 	void BackgroundCreateTextureMipMap(VkCommandBufferManager* bufManager, int mipLevel, int w, int h, int pixelsize, VkFormat format, const void* pixels, int totalSize);
 	void CreateTextureMipMap(VkCommandBufferManager* bufManager, VkTextureImage* img, int mipLevel, int w, int h, int pixelsize, VkFormat format, const void* pixels, int totalSize);

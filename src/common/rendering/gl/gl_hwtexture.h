@@ -82,6 +82,7 @@ public:
 	uint8_t* MapBuffer();
 
 	unsigned int CreateTexture(unsigned char* buffer, int w, int h, int texunit, bool mipmap, const char* name);
+	void Finalize() { }
 	unsigned int BackgroundCreateTexture(GLsync* fence, unsigned char* buffer, int w, int h, int texunit, bool mipmap, bool indexed, const char* name, bool forceNoMips = false);
 	unsigned int BackgroundCreateCompressedTexture(GLsync *fence, unsigned char* buffer, uint32_t dataSize, uint32_t totalSize, int w, int h, int format, int texunit, int numMips, const char* name, bool forceNoMips = false, bool allowQualityReduction = false);
 	unsigned int CreateCompressedTexture(unsigned char* buffer, uint32_t dataSize, uint32_t totalSize, int w, int h, int format, int texunit, int numMips, const char* name, bool forceNoMips = false, bool allowQualityReduction = false);
