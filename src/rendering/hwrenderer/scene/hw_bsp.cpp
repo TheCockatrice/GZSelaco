@@ -729,13 +729,6 @@ void HWDrawInfo::DoSubsector(subsector_t * sub)
 	sector_t * sector;
 	sector_t * fakesector;
 	
-#ifdef _DEBUG
-	if (sub->sector->sectornum==931)
-	{
-		int a = 0;
-	}
-#endif
-
 	sector=sub->sector;
 	if (!sector) return;
 
@@ -968,6 +961,29 @@ void HWDrawInfo::DoSubsector(subsector_t * sub)
 					}
 				}
 			}
+		}
+	}
+
+	if (Level->LMVersion >= 3)
+	{
+		LMSectorInfo* sectorInfo = &Level->LMSectorInfos[sector->sectornum];
+		
+		if (sectorInfo->SectorIndex >= 0 && !sectorInfo->QueuedForRender)
+		{
+			if (Level->LMSectorFirst == nullptr)
+			{
+				Level->LMSectorFirst = sectorInfo;
+			}
+
+			if (Level->LMSectorLast != nullptr)
+			{
+				Level->LMSectorLast->Next = sectorInfo;
+			}
+
+			Level->LMSectorLast = sectorInfo;
+			Level->LMSectorLast->Next = nullptr;
+
+			sectorInfo->QueuedForRender = true;
 		}
 	}
 }

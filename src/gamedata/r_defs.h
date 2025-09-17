@@ -1761,21 +1761,39 @@ struct LightProbeCell
 	int NumProbes = 0;
 };
 
+struct LMSectorLightGroupInfo
+{
+	int LightGroupIndex;
+	int LightmapIndex;
+	
+	int MeshIndex;
+	int MeshIndexStart;
+	int MeshIndexCount;
+
+	LMSectorLightGroupInfo* RenderNext = nullptr;
+};
+
+struct LightGroupMesh
+{
+	int LightGroupIndex;
+	uint32_t sourceLightmapIndex;
+	uint32_t targetLightmapIndex;
+
+	int indexCount;
+	F2DVertexBuffer buffers;
+
+	LMSectorLightGroupInfo* SectorFirst = nullptr;
+	LMSectorLightGroupInfo* SectorLast = nullptr;
+
+	LightGroupMesh* RenderNext = nullptr;
+};
+
 struct LightGroupData
 {
 	uint32_t GroupID;
 	uint16_t ThingID;
 	FVector3 BoundsMin;
 	FVector3 BoundsMax;
-
-	struct Mesh
-	{
-		uint32_t sourceLightmapIndex;
-		uint32_t targetLightmapIndex;
-
-		int indexCount;
-		F2DVertexBuffer buffers;
-	};
 
 	struct ColorRGB
 	{
@@ -1785,11 +1803,53 @@ struct LightGroupData
 	};
 
 	ColorRGB TintColor = { 1, 1, 1 };
+	int RenderColor = -1;
 
-	TArray<Mesh> Meshes;
+	TArray<int> MeshIDs;
 
 	float Intensity;
 	bool TickedThisFrame;
+	uint32_t LastUpdateFrame = 0;
+};
+
+struct LMSectorInfo
+{
+	int SectorIndex = -1;
+	bool QueuedForRender = false;
+	uint32_t LastRenderFrame = -1;
+
+	LMSectorInfo* Next = nullptr;
+	LMSectorInfo* RenderNext = nullptr;
+
+	TArray<LMSectorLightGroupInfo> MasterInfos;
+	TArray<LMSectorLightGroupInfo> LightGroupInfos;
+};
+
+struct LightgroupLightmapInfo
+{
+	int LightmapIndex = -1;
+
+	LightGroupMesh* MeshFirst = nullptr;
+	LightGroupMesh* MeshLast = nullptr;
+
+	LightgroupLightmapInfo* RenderNext = nullptr;
+
+	bool AddedToMaster = false;
+};
+
+struct MasterLightmapInfo
+{
+	FGameTexture* base;
+	F2DVertexBuffer quadBuffer;
+
+	int indexCount;
+	F2DVertexBuffer meshBuffers;
+
+	LMSectorLightGroupInfo* MasterRenderSectorFirst = nullptr;
+	LMSectorLightGroupInfo* MasterRenderSectorLast = nullptr;
+
+	LightgroupLightmapInfo* LightGroupLightmapFirst = nullptr;
+	LightgroupLightmapInfo* LightGroupLightmapLast = nullptr;
 };
 
 //

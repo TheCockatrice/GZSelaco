@@ -466,18 +466,9 @@ public:
 	TArray<FSectorPortal> sectorPortals;
 	TArray<FLinePortal> linePortals;
 
-	// Lightmaps
-	struct MasterLightmapInfo
-	{
-		FGameTexture* base;
-		F2DVertexBuffer quadBuffer;
-
-		int indexCount;
-		F2DVertexBuffer meshBuffers;
-	};
-
 	int LMVersion = -1;
 	bool LMNeedsRebuild = true;
+	uint32_t LMRenderFrame = 0;
 	TArray<LightmapSurface> LMSurfaces;
 	TArray<float> LMTexCoords;
 	int LMTextureCount = 0;
@@ -487,13 +478,20 @@ public:
 	TArray<LightProbe> LightProbes;
 	TArray<FGameTexture*> Lightmaps;
 	TArray<MasterLightmapInfo> MasterLightmaps;
+	TArray<LMSectorInfo> LMSectorInfos;
 	TArray<LightGroupData> LightGroups;
+	TArray<LightGroupMesh> LightGroupMeshes;
+	TArray<LightgroupLightmapInfo> LightGroupLightmapInfos;
 	int LPMinX = 0;
 	int LPMinY = 0;
 	int LPWidth = 0;
 	int LPHeight = 0;
 	int LPCellSize = 32;
 	TArray<LightProbeCell> LPCells;
+
+	// Iterators for dynamic lightmaps
+	LMSectorInfo* LMSectorFirst = nullptr;
+	LMSectorInfo* LMSectorLast = nullptr;
 
 	// Portal information.
 	FDisplacementTable Displacements;
