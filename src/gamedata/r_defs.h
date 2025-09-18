@@ -1829,12 +1829,17 @@ struct LightgroupLightmapInfo
 {
 	int LightmapIndex = -1;
 
-	LightGroupMesh* MeshFirst = nullptr;
-	LightGroupMesh* MeshLast = nullptr;
+	struct PerMasterInfo
+	{
+		LightGroupMesh* MeshFirst = nullptr;
+		LightGroupMesh* MeshLast = nullptr;
 
-	LightgroupLightmapInfo* RenderNext = nullptr;
+		LightgroupLightmapInfo* RenderNext = nullptr;
 
-	bool AddedToMaster = false;
+		bool AddedToMaster = false;
+	};
+
+	TArray<PerMasterInfo> MasterInfo;
 };
 
 struct MasterLightmapInfo

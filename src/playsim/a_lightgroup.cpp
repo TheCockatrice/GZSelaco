@@ -35,6 +35,11 @@ CCMD(lm_info)
 	Printf("Light Probe Cell Size: %d\n", level.LPCellSize);
 }
 
+CCMD(lm_rebuild)
+{
+	level.LMNeedsRebuild = true;
+}
+
 FVector3 LightProbe::CalculateColor(FLevelLocals* level) const
 {
 	FVector3 result = FVector3(Red, Green, Blue);
@@ -198,7 +203,7 @@ DEFINE_ACTION_FUNCTION_NATIVE(ALightGroup, DeactivateLightGroup, DeactivateLight
 }
 
 
-void RenderMasterLightmapV2(FLevelLocals* level, int index)
+void RebuildMasterLightmap(FLevelLocals* level, int index)
 {
 	if (lm_maxlightgroups == 0)
 	{
@@ -273,7 +278,7 @@ void RenderMasterLightmapV2(FLevelLocals* level, int index)
 	}
 }
 
-void RenderMasterLightmapV3(FLevelLocals* level, int index)
+void RenderMasterLightmapPartial(FLevelLocals* level, int index)
 {
 	if (lm_maxlightgroups == 0)
 	{
@@ -328,9 +333,12 @@ void RenderMasterLightmapV3(FLevelLocals* level, int index)
 		state->SetMaterial(lightmap, UF_Texture, 0, CLAMP_NONE, 0, SHADER_LightmapComposite);
 		state->SetRenderStyle(STYLE_Add);
 
-		LightGroupMesh* meshit = lightmapit->MeshFirst;
+		LightGroupMesh* meshit = lightmapit->MasterInfo[index].MeshFirst;
 		while (meshit != nullptr)
 		{
+			assert(meshit->targetLightmapIndex == index);
+			assert(meshit->sourceLightmapIndex == lightmapit->LightmapIndex + level->LMTextureCount);
+
 			state->SetVertexBuffer(&meshit->buffers);
 			state->SetObjectColor(level->LightGroups[meshit->LightGroupIndex].RenderColor);
 
@@ -345,11 +353,10 @@ void RenderMasterLightmapV3(FLevelLocals* level, int index)
 			meshit = meshit->RenderNext;
 		}
 
-		lightmapit->MeshFirst = nullptr;
-		lightmapit->MeshLast = nullptr;
-		lightmapit->AddedToMaster = false;
-
-		lightmapit = lightmapit->RenderNext;
+		lightmapit->MasterInfo[index].MeshFirst = nullptr;
+		lightmapit->MasterInfo[index].MeshLast = nullptr;
+		lightmapit->MasterInfo[index].AddedToMaster = false;
+		lightmapit = lightmapit->MasterInfo[index].RenderNext;
 	}
 
 	master.LightGroupLightmapFirst = nullptr;
@@ -419,11 +426,12 @@ void P_RenderLightGroups(FLevelLocals* level)
 						LightgroupLightmapInfo* lightmap = &level->LightGroupLightmapInfos[lightgroupSector.LightmapIndex - level->LMTextureCount];
 						LightGroupMesh* mesh = &level->LightGroupMeshes[lightgroupSector.MeshIndex];
 
+						LightgroupLightmapInfo::PerMasterInfo& lightmapMasterInfo = lightmap->MasterInfo[mesh->targetLightmapIndex];
 						assert(mesh->LightGroupIndex == lightgroupSector.LightGroupIndex);
 
 						if (mesh->SectorFirst == nullptr)
 						{
-							if (!lightmap->AddedToMaster)
+							if (!lightmapMasterInfo.AddedToMaster)
 							{
 								MasterLightmapInfo& master = level->MasterLightmaps[mesh->targetLightmapIndex];
 								if (master.LightGroupLightmapFirst == nullptr)
@@ -433,28 +441,28 @@ void P_RenderLightGroups(FLevelLocals* level)
 
 								if (master.LightGroupLightmapLast != nullptr)
 								{
-									master.LightGroupLightmapLast = lightmap;
+									master.LightGroupLightmapLast->MasterInfo[mesh->targetLightmapIndex].RenderNext = lightmap;
 								}
 
 								master.LightGroupLightmapLast = lightmap;
-								master.LightGroupLightmapLast->RenderNext = nullptr;
+								master.LightGroupLightmapLast->MasterInfo[mesh->targetLightmapIndex].RenderNext = nullptr;
 
-								lightmap->AddedToMaster = true;
+								lightmapMasterInfo.AddedToMaster = true;
 							}
 
 							// Hasn't been added to the mesh list yet, so add it
-							if (lightmap->MeshFirst == nullptr)
+							if (lightmapMasterInfo.MeshFirst == nullptr)
 							{
-								lightmap->MeshFirst = mesh;
+								lightmapMasterInfo.MeshFirst = mesh;
 							}
 
-							if (lightmap->MeshLast != nullptr)
+							if (lightmapMasterInfo.MeshLast != nullptr)
 							{
-								lightmap->MeshLast->RenderNext = mesh;
+								lightmapMasterInfo.MeshLast->RenderNext = mesh;
 							}
 
-							lightmap->MeshLast = mesh;
-							lightmap->MeshLast->RenderNext = nullptr;
+							lightmapMasterInfo.MeshLast = mesh;
+							lightmapMasterInfo.MeshLast->RenderNext = nullptr;
 
 							mesh->SectorFirst = &lightgroupSector;
 						}
@@ -503,11 +511,11 @@ void P_RenderLightGroups(FLevelLocals* level)
 					{
 						if (level->LMNeedsRebuild)
 						{
-							RenderMasterLightmapV2(level, i);
+							RebuildMasterLightmap(level, i);
 						}
 						else
 						{
-							RenderMasterLightmapV3(level, i);
+							RenderMasterLightmapPartial(level, i);
 						}
 					});
 			}
@@ -574,7 +582,7 @@ void P_RenderLightGroups(FLevelLocals* level)
 			screen->RenderLightmapSlice(i,
 				[level, i](IntRect& bounds)
 				{
-					RenderMasterLightmapV2(level, i);
+					RebuildMasterLightmap(level, i);
 				});
 		}
 

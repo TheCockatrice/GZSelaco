@@ -3641,6 +3641,7 @@ void MapLoader::LoadLightmap(MapData *map)
 	Level->LMMasterTextureData.Resize((numMasterTexBytes + 1));
 	uint8_t* data = (uint8_t*)&Level->LMMasterTextureData[0];
 	fr.Read(data, numMasterTexBytes);
+
 #if 0
 	// Apply compression predictor
 	for (uint32_t i = 1; i < numTexBytes; i++)
@@ -3687,6 +3688,12 @@ void MapLoader::LoadLightmap(MapData *map)
 	{
 		Level->LightGroupLightmapInfos[i] = LightgroupLightmapInfo();
 		Level->LightGroupLightmapInfos[i].LightmapIndex = i;
+		Level->LightGroupLightmapInfos[i].MasterInfo.Reserve(numMasterTextures);
+
+		for (int j = 0; j < numMasterTextures; j++)
+		{
+			Level->LightGroupLightmapInfos[i].MasterInfo[j] = LightgroupLightmapInfo::PerMasterInfo();
+		}
 
 		int width = fr.ReadUInt16();
 		int height = fr.ReadUInt16();
@@ -3698,7 +3705,7 @@ void MapLoader::LoadLightmap(MapData *map)
 		TArray<uint8_t> groupData(dataSize, true);
 		uint8_t* data = (uint8_t*)&groupData[0];
 		fr.Read(data, dataSize);
-
+		
 		// Create the lightmap texture
 		FWrapperTexture* wrapper = new FWrapperTexture(width, height);
 		IHardwareTexture* texture = wrapper->GetHardwareTexture(0, 0);
