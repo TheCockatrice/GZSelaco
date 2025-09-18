@@ -44,25 +44,13 @@ FVector3 LightProbe::CalculateColor(FLevelLocals* level) const
 		const SubProbe& subProbe = subProbes[i];
 		const LightGroupData& lightGroup = level->LightGroups[subProbe.groupID];
 
-		if (lightGroup.TickedThisFrame)
+		if (lightGroup.Enabled)
 		{
 			result += FVector3(subProbe.Red, subProbe.Green, subProbe.Blue) * lightGroup.Intensity;
 		}
 	}
 
 	return result;
-}
-
-void MarkForRender(AActor* self)
-{
-	self->Level->LightGroups[self->Score].TickedThisFrame = true;
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(ALightGroup, MarkForRender, MarkForRender)
-{
-	PARAM_SELF_PROLOGUE(AActor);
-	MarkForRender(self);
-	return 0;
 }
 
 //==========================================================================
@@ -154,12 +142,19 @@ DEFINE_ACTION_FUNCTION_NATIVE(ALightGroup, GetIntensity, GetIntensity)
 
 void ActivateLightGroup(AActor* self)
 {
-	bool wasDormant = self->flags2 & MF2_DORMANT;
 	self->flags2 &= ~MF2_DORMANT;
 
-	if (wasDormant && self->Level->LightGroups.size() > 0)
+	if (self->Level->LightGroups.size() > 0)
 	{
-		self->Level->LightGroups[self->Score].LastUpdateFrame = self->Level->LMRenderFrame;
+		LightGroupData& lightGroup = self->Level->LightGroups[self->Score];
+		
+		bool wasEnabled = lightGroup.Enabled;
+		lightGroup.Enabled = true;
+
+		if (!wasEnabled)
+		{
+			lightGroup.LastUpdateFrame = self->Level->LMRenderFrame;
+		}
 	}
 }
 
@@ -179,12 +174,19 @@ DEFINE_ACTION_FUNCTION_NATIVE(ALightGroup, ActivateLightGroup, ActivateLightGrou
 
 void DeactivateLightGroup(AActor* self)
 {
-	bool wasDormant = self->flags2 & MF2_DORMANT;
 	self->flags2 |= MF2_DORMANT;
 
-	if (!wasDormant && self->Level->LightGroups.size() > 0)
+	if (self->Level->LightGroups.size() > 0)
 	{
-		self->Level->LightGroups[self->Score].LastUpdateFrame = self->Level->LMRenderFrame;
+		LightGroupData& lightGroup = self->Level->LightGroups[self->Score];
+		
+		bool wasEnabled = lightGroup.Enabled;
+		lightGroup.Enabled = false;
+
+		if (wasEnabled)
+		{
+			lightGroup.LastUpdateFrame = self->Level->LMRenderFrame;
+		}
 	}
 }
 
@@ -195,14 +197,6 @@ DEFINE_ACTION_FUNCTION_NATIVE(ALightGroup, DeactivateLightGroup, DeactivateLight
 	return 0;
 }
 
-
-void P_ClearLightgroupTicks(FLevelLocals* level)
-{
-	for (LightGroupData& lightGroupData : level->LightGroups)
-	{
-		lightGroupData.TickedThisFrame = false;
-	}
-}
 
 void RenderMasterLightmapV2(FLevelLocals* level, int index)
 {
@@ -249,7 +243,7 @@ void RenderMasterLightmapV2(FLevelLocals* level, int index)
 
 	for (LightGroupData& lightGroupData : level->LightGroups)
 	{
-		if (lightGroupData.TickedThisFrame)
+		if (lightGroupData.Enabled)
 		{
 			if (lm_maxlightgroups >= 0 && numRendered >= lm_maxlightgroups)
 			{
@@ -375,18 +369,18 @@ void P_RenderLightGroups(FLevelLocals* level)
 
 	if (level->LMVersion >= 3)
 	{
-		if (level->LMSectorFirst)
+		if (level->LMSectorFirst && !level->LMNeedsRebuild)
 		{
 			LMSectorInfo* sectorit = level->LMSectorFirst;
 			while (sectorit != nullptr)
 			{
-				bool shouldAdd = true;
+				bool shouldAdd = false;
 
 				for (LMSectorLightGroupInfo& lgInfo : sectorit->LightGroupInfos)
 				{
 					LightGroupData& lightGroup = level->LightGroups[lgInfo.LightGroupIndex];
 
-					if (lightGroup.GroupID != 0 && (lightGroup.LastUpdateFrame > sectorit->LastRenderFrame || level->LMNeedsRebuild))
+					if (lightGroup.GroupID != 0 && lightGroup.LastUpdateFrame > sectorit->LastRenderFrame)
 					{
 						shouldAdd = true;
 						NumLMSectorsRendered++;
@@ -417,7 +411,7 @@ void P_RenderLightGroups(FLevelLocals* level)
 					for (LMSectorLightGroupInfo& lightgroupSector : sectorit->LightGroupInfos)
 					{
 						LightGroupData& lightGroup = level->LightGroups[lightgroupSector.LightGroupIndex];
-						if (!lightGroup.TickedThisFrame || lightGroup.Intensity <= 0)
+						if (!lightGroup.Enabled || lightGroup.Intensity <= 0)
 						{
 							continue;
 						}
@@ -479,54 +473,60 @@ void P_RenderLightGroups(FLevelLocals* level)
 				sectorit->QueuedForRender = false;
 				sectorit = sectorit->Next;
 			}
-
-			if (NumLMSectorsRendered > 0)
-			{
-				FRenderState& state = *screen->RenderState();
-				state.EnableStencil(false);
-				state.SetStencil(0, SOP_Keep, SF_AllOn);
-				state.Clear(CT_Stencil);
-				state.EnableDepthTest(false);
-				state.EnableMultisampling(false);
-				state.EnableFog(false);
-				state.EnableTexture(true);
-				state.SetTextureMode(TM_NORMAL);
-				state.EnableBrightmap(false);
-				state.EnableModelMatrix(false);
-				state.EnableTextureMatrix(false);
-				state.SetDynLight(0, 0, 0);
-				state.SetLightProbe(0, 0, 0);
-
-				screen->mLights->Clear();
-				screen->mBones->Clear();
-				screen->mViewpoints->Clear();
-
-				for (int i = 0; i < level->MasterLightmaps.size(); i++)
-				{
-					screen->RenderLightmapSlice(i,
-						[level, i](IntRect& bounds)
-						{
-							RenderMasterLightmapV3(level, i);
-						});
-				}
-
-				screen->SetViewportRects(nullptr);
-
-				state.SetRenderStyle(STYLE_Translucent);
-				state.SetVertexBuffer(screen->mVertexData);
-				state.EnableBrightmap(true);
-				state.SetTextureMode(TM_NORMAL);
-				state.EnableFog(false);
-				state.SetScreenFade(1);
-				state.SetSoftLightLevel(255);
-				state.EnableTextureMatrix(false);
-				state.ResetColor();
-			}
-
-			level->LMSectorFirst = nullptr;
-			level->LMSectorLast = nullptr;
 		}
 
+		if (NumLMSectorsRendered > 0 || level->LMNeedsRebuild)
+		{
+			FRenderState& state = *screen->RenderState();
+			state.EnableStencil(false);
+			state.SetStencil(0, SOP_Keep, SF_AllOn);
+			state.Clear(CT_Stencil);
+			state.EnableDepthTest(false);
+			state.EnableMultisampling(false);
+			state.EnableFog(false);
+			state.EnableTexture(true);
+			state.SetTextureMode(TM_NORMAL);
+			state.EnableBrightmap(false);
+			state.EnableModelMatrix(false);
+			state.EnableTextureMatrix(false);
+			state.SetDynLight(0, 0, 0);
+			state.SetLightProbe(0, 0, 0);
+
+			screen->mLights->Clear();
+			screen->mBones->Clear();
+			screen->mViewpoints->Clear();
+
+			for (int i = 0; i < level->MasterLightmaps.size(); i++)
+			{
+				screen->RenderLightmapSlice(i,
+					[level, i](IntRect& bounds)
+					{
+						if (level->LMNeedsRebuild)
+						{
+							RenderMasterLightmapV2(level, i);
+						}
+						else
+						{
+							RenderMasterLightmapV3(level, i);
+						}
+					});
+			}
+
+			screen->SetViewportRects(nullptr);
+
+			state.SetRenderStyle(STYLE_Translucent);
+			state.SetVertexBuffer(screen->mVertexData);
+			state.EnableBrightmap(true);
+			state.SetTextureMode(TM_NORMAL);
+			state.EnableFog(false);
+			state.SetScreenFade(1);
+			state.SetSoftLightLevel(255);
+			state.EnableTextureMatrix(false);
+			state.ResetColor();
+		}
+
+		level->LMSectorFirst = nullptr;
+		level->LMSectorLast = nullptr;
 		level->LMNeedsRebuild = false;
 
 		// Prevent wrapping issues if the game has been sitting forever by just marking everything as needing a rerender

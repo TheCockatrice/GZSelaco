@@ -1807,8 +1807,8 @@ struct LightGroupData
 
 	TArray<int> MeshIDs;
 
+	bool Enabled;
 	float Intensity;
-	bool TickedThisFrame;
 	uint32_t LastUpdateFrame = 0;
 };
 
@@ -1816,7 +1816,7 @@ struct LMSectorInfo
 {
 	int SectorIndex = -1;
 	bool QueuedForRender = false;
-	uint32_t LastRenderFrame = -1;
+	uint32_t LastRenderFrame = 0;
 
 	LMSectorInfo* Next = nullptr;
 	LMSectorInfo* RenderNext = nullptr;

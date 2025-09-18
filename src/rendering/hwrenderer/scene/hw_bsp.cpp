@@ -445,8 +445,47 @@ void HWDrawInfo::PolySubsector(subsector_t * sub)
 		if (line->linedef)
 		{
 			AddLine (line, mClipPortal != nullptr);
+
+			if (Level->LMVersion >= 3)
+			{
+				AddLightmapSector(line->frontsector);
+			}
 		}
 		line++;
+	}
+}
+
+//==========================================================================
+//
+// AddLightmapSector
+// Mark this sector as visible this frame, and needs to be checked for
+// a lightmap update
+//
+//==========================================================================
+
+void HWDrawInfo::AddLightmapSector(sector_t* sector)
+{
+	if (sector)
+	{
+		LMSectorInfo* sectorInfo = &Level->LMSectorInfos[sector->sectornum];
+
+		if (sectorInfo->SectorIndex >= 0 && !sectorInfo->QueuedForRender)
+		{
+			if (Level->LMSectorFirst == nullptr)
+			{
+				Level->LMSectorFirst = sectorInfo;
+			}
+
+			if (Level->LMSectorLast != nullptr)
+			{
+				Level->LMSectorLast->Next = sectorInfo;
+			}
+
+			Level->LMSectorLast = sectorInfo;
+			Level->LMSectorLast->Next = nullptr;
+
+			sectorInfo->QueuedForRender = true;
+		}
 	}
 }
 
@@ -966,25 +1005,7 @@ void HWDrawInfo::DoSubsector(subsector_t * sub)
 
 	if (Level->LMVersion >= 3)
 	{
-		LMSectorInfo* sectorInfo = &Level->LMSectorInfos[sector->sectornum];
-		
-		if (sectorInfo->SectorIndex >= 0 && !sectorInfo->QueuedForRender)
-		{
-			if (Level->LMSectorFirst == nullptr)
-			{
-				Level->LMSectorFirst = sectorInfo;
-			}
-
-			if (Level->LMSectorLast != nullptr)
-			{
-				Level->LMSectorLast->Next = sectorInfo;
-			}
-
-			Level->LMSectorLast = sectorInfo;
-			Level->LMSectorLast->Next = nullptr;
-
-			sectorInfo->QueuedForRender = true;
-		}
+		AddLightmapSector(sector);
 	}
 }
 

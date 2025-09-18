@@ -156,8 +156,6 @@ void P_Ticker (void)
 		auto it = Level->GetThinkerIterator<AActor>();
 		AActor *ac;
 
-		P_ClearLightgroupTicks(Level);
-
 		while ((ac = it.Next()))
 		{
 			ac->ClearInterpolation();

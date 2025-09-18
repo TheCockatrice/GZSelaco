@@ -323,6 +323,15 @@ class LightGroup : Actor
 	{
 		cvarReduceFlicker = CVar.FindCVar("g_photosensitivitymode2");
 
+		if (!bDormant)
+		{
+			ActivateLightGroup();
+		}
+		else
+		{
+			DeactivateLightGroup();
+		}
+
 		if (user_animationInterval <= 0)
 		{
 			user_animationInterval = NormalizeAngle(spawnAngle);
@@ -408,8 +417,6 @@ class LightGroup : Actor
 				{
 					UpdateTintColor();
 				}
-
-				MarkForRender();
 			}
 		}
 	}
@@ -422,7 +429,6 @@ class LightGroup : Actor
         return (offsetValue - (floor(offsetValue / width) * width)) + start;
     }
 
-	private native void MarkForRender();
 	private native void UpdateTintColor();
 	private native void SetIntensity(float intensity);
 	private native float GetIntensity();

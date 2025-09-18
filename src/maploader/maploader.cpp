@@ -3802,6 +3802,11 @@ void MapLoader::LoadLightGroups(MapData* map)
 		uint32_t numMeshes = fr.ReadUInt32();
 		lightGroup->MeshIDs.Resize(numMeshes);
 
+		if (version < 2)
+		{
+			Level->LightGroupMeshes.Grow(numMeshes);
+		}
+
 		for (uint32_t i = 0; i < numMeshes; i++)
 		{
 			if (version >= 2)
