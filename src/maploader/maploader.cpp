@@ -3203,14 +3203,14 @@ void MapLoader::LoadLevel(MapData *map, const char *lumpname, int position)
 	// Spawn 3d floors - must be done before spawning things so it can't be done in P_SpawnSpecials
 	Spawn3DFloors();
 
-	SpawnThings(position);
-
-	// Load and link lightmaps - must be done after P_Spawn3DFloors (and SpawnThings? Potentially for baking static model actors?)
+	// Load and link lightmaps - must be done after P_Spawn3DFloors
 	if (!ForceNodeBuild)
 	{
 		LoadLightmap(map);
 		LoadLightGroups(map);
 	}
+
+	SpawnThings(position);
 
 	for (int i = 0; i < MAXPLAYERS; ++i)
 	{
