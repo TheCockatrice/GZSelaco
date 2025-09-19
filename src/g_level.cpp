@@ -2526,6 +2526,18 @@ void FLevelLocals::SetMusic()
 }
 
 
+void FLevelLocals::ResetLightmapRenderInfo()
+{
+	for (auto& it : LMSectorInfos)
+	{
+		it.QueuedForRender = false;
+		it.LastRenderFrame = 0;
+	}
+
+	LMNeedsRebuild = true;
+}
+
+
 DEFINE_ACTION_FUNCTION(FLevelLocals, GetClusterName)
 {
 	PARAM_SELF_STRUCT_PROLOGUE(FLevelLocals)

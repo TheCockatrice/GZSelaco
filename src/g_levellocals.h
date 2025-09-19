@@ -493,6 +493,9 @@ public:
 	LMSectorInfo* LMSectorFirst = nullptr;
 	LMSectorInfo* LMSectorLast = nullptr;
 
+	// Reset all information about rendering lightmaps so that they're built fresh
+	void ResetLightmapRenderInfo();
+
 	// Portal information.
 	FDisplacementTable Displacements;
 	FPortalBlockmap PortalBlockmap;

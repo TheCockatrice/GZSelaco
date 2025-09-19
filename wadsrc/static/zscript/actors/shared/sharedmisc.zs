@@ -323,14 +323,7 @@ class LightGroup : Actor
 	{
 		cvarReduceFlicker = CVar.FindCVar("g_photosensitivitymode2");
 
-		if (!bDormant)
-		{
-			ActivateLightGroup();
-		}
-		else
-		{
-			DeactivateLightGroup();
-		}
+		enabled = !bDormant;
 
 		if (user_animationInterval <= 0)
 		{
@@ -349,11 +342,13 @@ class LightGroup : Actor
 	override void Activate(Actor activator)
 	{
 		activeTics = 0;
+		enabled = true;
 		ActivateLightGroup();
 	}
 
 	override void Deactivate(Actor activator)
 	{
+		enabled = false;
 		DeactivateLightGroup();
 	}
 
@@ -365,6 +360,16 @@ class LightGroup : Actor
 		{
 			initialized = true;
 			Init();
+		}
+
+		// Need to update the enabled flag every tic.
+		if (enabled)
+		{
+			ActivateLightGroup();
+		}
+		else
+		{
+			DeactivateLightGroup();
 		}
 
 		// Mark this LightGroup to render this frame
@@ -437,6 +442,8 @@ class LightGroup : Actor
 
 	bool initialized;
 	int activeTics;
+
+	bool enabled;
 
 	private CVar cvarReduceFlicker;
 

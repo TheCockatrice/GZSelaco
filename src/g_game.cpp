@@ -2206,6 +2206,9 @@ void G_DoLoadGame ()
 	if (level.info != nullptr)
 		level.info->Snapshot.Clean();
 
+	// [NL] Need to rebuild lightmaps after a load, otherwise dynamic lightmaps will still be marked as 'rendered'
+	level.ResetLightmapRenderInfo();
+
 	BackupSaveName = savename;
 
 	// At this point, the GC threshold is likely a lot higher than the
