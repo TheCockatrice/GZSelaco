@@ -202,7 +202,7 @@ DEFINE_ACTION_FUNCTION_NATIVE(ALightGroup, DeactivateLightGroup, DeactivateLight
 	return 0;
 }
 
-
+// Completely rerender *all* of the master lightmaps. Can have a high pixel cost for maps with a lot of large, overlapping lightgroups.
 void RebuildMasterLightmap(FLevelLocals* level, int index)
 {
 	if (lm_maxlightgroups == 0)
@@ -278,6 +278,8 @@ void RebuildMasterLightmap(FLevelLocals* level, int index)
 	}
 }
 
+// Only render the sectors/lightgroups that have changed since we last rendered. 
+// Significantly decreases pixel cost by not having to rerender the entire lightmap.
 void RenderMasterLightmapPartial(FLevelLocals* level, int index)
 {
 	if (lm_maxlightgroups == 0)
@@ -312,28 +314,28 @@ void RenderMasterLightmapPartial(FLevelLocals* level, int index)
 		{
 			state->SetVertexBuffer(&master.meshBuffers);
 
-			LMSectorLightGroupInfo* sectorit = master.MasterRenderSectorFirst;
+			LMSectorLightGroupInfo* sectorit = master.MasterRenderSectorItFirst;
 			while (sectorit != nullptr)
 			{
 				state->DrawIndexed(DT_Triangles, sectorit->MeshIndexStart, sectorit->MeshIndexCount);
-				sectorit = sectorit->RenderNext;
+				sectorit = sectorit->RenderItNext;
 			}
 		}
 
-		master.MasterRenderSectorFirst = nullptr;
-		master.MasterRenderSectorLast = nullptr;
+		// We're done with rendering the master lightmap meshes, so clear the iterators ready for the next frame
+		master.MasterRenderSectorItFirst = nullptr;
+		master.MasterRenderSectorItLast = nullptr;
 	}
 
 	// Render the additive lightgroups
-
-	LightgroupLightmapInfo* lightmapit = master.LightGroupLightmapFirst;
+	LightgroupLightmapInfo* lightmapit = master.LightGroupLightmapItFirst;
 	while (lightmapit != nullptr)
 	{
 		FGameTexture* lightmap = level->Lightmaps[lightmapit->LightmapIndex + level->LMTextureCount];
 		state->SetMaterial(lightmap, UF_Texture, 0, CLAMP_NONE, 0, SHADER_LightmapComposite);
 		state->SetRenderStyle(STYLE_Add);
 
-		LightGroupMesh* meshit = lightmapit->MasterInfo[index].MeshFirst;
+		LightGroupMesh* meshit = lightmapit->MasterInfos[index].MeshItFirst;
 		while (meshit != nullptr)
 		{
 			assert(meshit->targetLightmapIndex == index);
@@ -342,25 +344,27 @@ void RenderMasterLightmapPartial(FLevelLocals* level, int index)
 			state->SetVertexBuffer(&meshit->buffers);
 			state->SetObjectColor(level->LightGroups[meshit->LightGroupIndex].RenderColor);
 
-			LMSectorLightGroupInfo* sectorit = meshit->SectorFirst;
+			LMSectorLightGroupInfo* sectorit = meshit->SectorItFirst;
 			while (sectorit != nullptr)
 			{
 				state->DrawIndexed(DT_Triangles, sectorit->MeshIndexStart, sectorit->MeshIndexCount);
-				sectorit = sectorit->RenderNext;
+				sectorit = sectorit->RenderItNext;
 			}
 
-			meshit->SectorFirst = nullptr;
-			meshit = meshit->RenderNext;
+			meshit->SectorItFirst = nullptr;
+			meshit = meshit->RenderItNext;
 		}
 
-		lightmapit->MasterInfo[index].MeshFirst = nullptr;
-		lightmapit->MasterInfo[index].MeshLast = nullptr;
-		lightmapit->MasterInfo[index].AddedToMaster = false;
-		lightmapit = lightmapit->MasterInfo[index].RenderNext;
+		// We're done with rendering this lightmap, so clear the iterators ready for the next frame
+		lightmapit->MasterInfos[index].MeshItFirst = nullptr;
+		lightmapit->MasterInfos[index].MeshItLast = nullptr;
+		lightmapit->MasterInfos[index].AddedToMaster = false;
+
+		lightmapit = lightmapit->MasterInfos[index].RenderItNext;
 	}
 
-	master.LightGroupLightmapFirst = nullptr;
-	master.LightGroupLightmapLast = nullptr;
+	master.LightGroupLightmapItFirst = nullptr;
+	master.LightGroupLightmapItLast = nullptr;
 }
 
 int NumLMSectorsRendered = 0;
@@ -376,19 +380,22 @@ void P_RenderLightGroups(FLevelLocals* level)
 
 	if (level->LMVersion >= 3)
 	{
-		if (level->LMSectorFirst && !level->LMNeedsRebuild)
+		if (level->LMSectorItFirst && !level->LMNeedsRebuild)
 		{
-			LMSectorInfo* sectorit = level->LMSectorFirst;
+			// Go through all of the sectors that rendered last frame
+			LMSectorInfo* sectorit = level->LMSectorItFirst;
 			while (sectorit != nullptr)
 			{
 				bool shouldAdd = false;
 
+				// Check if this sector has any lightgroups that have updated since our last render
 				for (LMSectorLightGroupInfo& lgInfo : sectorit->LightGroupInfos)
 				{
 					LightGroupData& lightGroup = level->LightGroups[lgInfo.LightGroupIndex];
 
 					if (lightGroup.GroupID != 0 && lightGroup.LastUpdateFrame > sectorit->LastRenderFrame)
 					{
+						// Found a lightgroup that changed for this sector, so we want to continue
 						shouldAdd = true;
 						NumLMSectorsRendered++;
 						break;
@@ -397,89 +404,95 @@ void P_RenderLightGroups(FLevelLocals* level)
 
 				if (shouldAdd)
 				{
+					// Queue up the sector to render to the master lightmap
+					// This basically just resets this sector back to the base version so we can render lightgroups on top of it
 					for (LMSectorLightGroupInfo& masterSector : sectorit->MasterInfos)
 					{
 						MasterLightmapInfo& masterLightmap = level->MasterLightmaps[masterSector.LightmapIndex];
 
-						if (masterLightmap.MasterRenderSectorFirst == nullptr)
+						if (masterLightmap.MasterRenderSectorItFirst == nullptr)
 						{
-							masterLightmap.MasterRenderSectorFirst = &masterSector;
+							masterLightmap.MasterRenderSectorItFirst = &masterSector;
 						}
 
-						if (masterLightmap.MasterRenderSectorLast != nullptr)
+						if (masterLightmap.MasterRenderSectorItLast != nullptr)
 						{
-							masterLightmap.MasterRenderSectorLast->RenderNext = &masterSector;
+							masterLightmap.MasterRenderSectorItLast->RenderItNext = &masterSector;
 						}
 
-						masterLightmap.MasterRenderSectorLast = &masterSector;
-						masterLightmap.MasterRenderSectorLast->RenderNext = nullptr;
+						masterLightmap.MasterRenderSectorItLast = &masterSector;
+						masterLightmap.MasterRenderSectorItLast->RenderItNext = nullptr;
 					}
 
+					// Go through all of the lightgroups for this sector
 					for (LMSectorLightGroupInfo& lightgroupSector : sectorit->LightGroupInfos)
 					{
 						LightGroupData& lightGroup = level->LightGroups[lightgroupSector.LightGroupIndex];
 						if (!lightGroup.Enabled || lightGroup.Intensity <= 0)
 						{
+							// If the lightgroup won't contribute, don't add it
 							continue;
 						}
 
 						LightgroupLightmapInfo* lightmap = &level->LightGroupLightmapInfos[lightgroupSector.LightmapIndex - level->LMTextureCount];
 						LightGroupMesh* mesh = &level->LightGroupMeshes[lightgroupSector.MeshIndex];
 
-						LightgroupLightmapInfo::PerMasterInfo& lightmapMasterInfo = lightmap->MasterInfo[mesh->targetLightmapIndex];
+						LightgroupLightmapInfo::PerMasterInfo& lightmapPerMasterInfo = lightmap->MasterInfos[mesh->targetLightmapIndex];
 						assert(mesh->LightGroupIndex == lightgroupSector.LightGroupIndex);
 
-						if (mesh->SectorFirst == nullptr)
+						if (mesh->SectorItFirst == nullptr)
 						{
-							if (!lightmapMasterInfo.AddedToMaster)
+							// Tell the master lightmap that we want to render this lightmap if it hasn't been added already
+							if (!lightmapPerMasterInfo.AddedToMaster)
 							{
 								MasterLightmapInfo& master = level->MasterLightmaps[mesh->targetLightmapIndex];
-								if (master.LightGroupLightmapFirst == nullptr)
+								if (master.LightGroupLightmapItFirst == nullptr)
 								{
-									master.LightGroupLightmapFirst = lightmap;
+									master.LightGroupLightmapItFirst = lightmap;
 								}
 
-								if (master.LightGroupLightmapLast != nullptr)
+								if (master.LightGroupLightmapItLast != nullptr)
 								{
-									master.LightGroupLightmapLast->MasterInfo[mesh->targetLightmapIndex].RenderNext = lightmap;
+									master.LightGroupLightmapItLast->MasterInfos[mesh->targetLightmapIndex].RenderItNext = lightmap;
 								}
 
-								master.LightGroupLightmapLast = lightmap;
-								master.LightGroupLightmapLast->MasterInfo[mesh->targetLightmapIndex].RenderNext = nullptr;
+								master.LightGroupLightmapItLast = lightmap;
+								master.LightGroupLightmapItLast->MasterInfos[mesh->targetLightmapIndex].RenderItNext = nullptr;
 
-								lightmapMasterInfo.AddedToMaster = true;
+								lightmapPerMasterInfo.AddedToMaster = true;
 							}
 
-							// Hasn't been added to the mesh list yet, so add it
-							if (lightmapMasterInfo.MeshFirst == nullptr)
+							// Add this mesh to the list of meshes to render for this particular master lightmap/lightgroup pair
+							if (lightmapPerMasterInfo.MeshItFirst == nullptr)
 							{
-								lightmapMasterInfo.MeshFirst = mesh;
+								lightmapPerMasterInfo.MeshItFirst = mesh;
 							}
 
-							if (lightmapMasterInfo.MeshLast != nullptr)
+							if (lightmapPerMasterInfo.MeshItLast != nullptr)
 							{
-								lightmapMasterInfo.MeshLast->RenderNext = mesh;
+								lightmapPerMasterInfo.MeshItLast->RenderItNext = mesh;
 							}
 
-							lightmapMasterInfo.MeshLast = mesh;
-							lightmapMasterInfo.MeshLast->RenderNext = nullptr;
+							lightmapPerMasterInfo.MeshItLast = mesh;
+							lightmapPerMasterInfo.MeshItLast->RenderItNext = nullptr;
 
-							mesh->SectorFirst = &lightgroupSector;
+							mesh->SectorItFirst = &lightgroupSector;
 						}
 
-						if (mesh->SectorLast != nullptr)
+						// Add this sector to the list of sectors to render for this mesh
+						if (mesh->SectorItLast != nullptr)
 						{
-							mesh->SectorLast->RenderNext = &lightgroupSector;
+							mesh->SectorItLast->RenderItNext = &lightgroupSector;
 						}
 
-						mesh->SectorLast = &lightgroupSector;
-						mesh->SectorLast->RenderNext = nullptr;
+						mesh->SectorItLast = &lightgroupSector;
+						mesh->SectorItLast->RenderItNext = nullptr;
 					}
 				}
 
 				sectorit->LastRenderFrame = level->LMRenderFrame;
 				sectorit->QueuedForRender = false;
-				sectorit = sectorit->Next;
+				sectorit = sectorit->NextIt;
 			}
 		}
 
@@ -533,8 +546,8 @@ void P_RenderLightGroups(FLevelLocals* level)
 			state.ResetColor();
 		}
 
-		level->LMSectorFirst = nullptr;
-		level->LMSectorLast = nullptr;
+		level->LMSectorItFirst = nullptr;
+		level->LMSectorItLast = nullptr;
 		level->LMNeedsRebuild = false;
 
 		// Prevent wrapping issues if the game has been sitting forever by just marking everything as needing a rerender
@@ -542,7 +555,7 @@ void P_RenderLightGroups(FLevelLocals* level)
 		{
 			for (LightGroupData& lightgroup : level->LightGroups)
 			{
-				lightgroup.LastUpdateFrame = 1;
+				lightgroup.LastUpdateFrame = 0;
 			}
 
 			for (LMSectorInfo& sectorInfo : level->LMSectorInfos)

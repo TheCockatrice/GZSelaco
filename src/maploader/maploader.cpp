@@ -3688,11 +3688,11 @@ void MapLoader::LoadLightmap(MapData *map)
 	{
 		Level->LightGroupLightmapInfos[i] = LightgroupLightmapInfo();
 		Level->LightGroupLightmapInfos[i].LightmapIndex = i;
-		Level->LightGroupLightmapInfos[i].MasterInfo.Reserve(numMasterTextures);
+		Level->LightGroupLightmapInfos[i].MasterInfos.Reserve(numMasterTextures);
 
 		for (int j = 0; j < numMasterTextures; j++)
 		{
-			Level->LightGroupLightmapInfos[i].MasterInfo[j] = LightgroupLightmapInfo::PerMasterInfo();
+			Level->LightGroupLightmapInfos[i].MasterInfos[j] = LightgroupLightmapInfo::PerMasterInfo();
 		}
 
 		int width = fr.ReadUInt16();

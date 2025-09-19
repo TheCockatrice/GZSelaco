@@ -1761,18 +1761,22 @@ struct LightProbeCell
 	int NumProbes = 0;
 };
 
+// Info for each lightgroup in a sector
 struct LMSectorLightGroupInfo
 {
 	int LightGroupIndex;
 	int LightmapIndex;
 	
+	// Which LightGroupMesh we want to render, as well as the start and end indices
 	int MeshIndex;
 	int MeshIndexStart;
 	int MeshIndexCount;
 
-	LMSectorLightGroupInfo* RenderNext = nullptr;
+	// Next lightgroup we want to render
+	LMSectorLightGroupInfo* RenderItNext = nullptr;
 };
 
+// A 2D mesh used to copy a dynamic lightgroup from the static lightmap textures into the dynamic (Master) lightmaps
 struct LightGroupMesh
 {
 	int LightGroupIndex;
@@ -1782,12 +1786,15 @@ struct LightGroupMesh
 	int indexCount;
 	F2DVertexBuffer buffers;
 
-	LMSectorLightGroupInfo* SectorFirst = nullptr;
-	LMSectorLightGroupInfo* SectorLast = nullptr;
+	// Iterators for the sectors we want to render for this lightgroup
+	LMSectorLightGroupInfo* SectorItFirst = nullptr;
+	LMSectorLightGroupInfo* SectorItLast = nullptr;
 
-	LightGroupMesh* RenderNext = nullptr;
+	// Next mesh we want to render
+	LightGroupMesh* RenderItNext = nullptr;
 };
 
+// Additional data for LightGroups, updated from the in-level LightGroup Things
 struct LightGroupData
 {
 	uint32_t GroupID;
@@ -1812,49 +1819,67 @@ struct LightGroupData
 	uint32_t LastUpdateFrame = 0;
 };
 
+// Dynamic lightmap information for a sector
 struct LMSectorInfo
 {
 	int SectorIndex = -1;
 	bool QueuedForRender = false;
 	uint32_t LastRenderFrame = 0;
 
-	LMSectorInfo* Next = nullptr;
-	LMSectorInfo* RenderNext = nullptr;
+	// Iterator for the next LMSectorInfo we need to check
+	LMSectorInfo* NextIt = nullptr;
 
+	// Iterator for the next sector we want to render
+	LMSectorInfo* RenderItNext = nullptr;
+
+	// Infos for 
 	TArray<LMSectorLightGroupInfo> MasterInfos;
 	TArray<LMSectorLightGroupInfo> LightGroupInfos;
 };
 
+// Rendering info for a lightgroup per lightmap
 struct LightgroupLightmapInfo
 {
 	int LightmapIndex = -1;
 
+	// Info for this lightgroup per Master Lightmap
+	// We keep it this way to speed up rendering, so we don't have to
+	// look through each master lightmap to find the correct one
 	struct PerMasterInfo
 	{
-		LightGroupMesh* MeshFirst = nullptr;
-		LightGroupMesh* MeshLast = nullptr;
+		// Iterators for the meshes we need to render to the master lightmap
+		LightGroupMesh* MeshItFirst = nullptr;
+		LightGroupMesh* MeshItLast = nullptr;
 
-		LightgroupLightmapInfo* RenderNext = nullptr;
+		// Iterator for the next LightgroupLightmapInfo that we want to render
+		LightgroupLightmapInfo* RenderItNext = nullptr;
 
+		// Has this already been added to the master lightmap for this render?
 		bool AddedToMaster = false;
 	};
 
-	TArray<PerMasterInfo> MasterInfo;
+	TArray<PerMasterInfo> MasterInfos;
 };
 
+// A 2D mesh for the master lightmap, mostly used to reset the dynamic lightmaps to the baseline so
+// we can render any active lightgroups over the top of them
 struct MasterLightmapInfo
 {
 	FGameTexture* base;
+
+	// The QuadBuffer is used if we just want to copy the entire lightmap over rather than just segments
 	F2DVertexBuffer quadBuffer;
 
 	int indexCount;
 	F2DVertexBuffer meshBuffers;
 
-	LMSectorLightGroupInfo* MasterRenderSectorFirst = nullptr;
-	LMSectorLightGroupInfo* MasterRenderSectorLast = nullptr;
+	// Iterators for sectors that we want to render for this master lightmap
+	LMSectorLightGroupInfo* MasterRenderSectorItFirst = nullptr;
+	LMSectorLightGroupInfo* MasterRenderSectorItLast = nullptr;
 
-	LightgroupLightmapInfo* LightGroupLightmapFirst = nullptr;
-	LightgroupLightmapInfo* LightGroupLightmapLast = nullptr;
+	// Iterators for lightgroups that we want to render to this master lightmap
+	LightgroupLightmapInfo* LightGroupLightmapItFirst = nullptr;
+	LightgroupLightmapInfo* LightGroupLightmapItLast = nullptr;
 };
 
 //

@@ -490,8 +490,8 @@ public:
 	TArray<LightProbeCell> LPCells;
 
 	// Iterators for dynamic lightmaps
-	LMSectorInfo* LMSectorFirst = nullptr;
-	LMSectorInfo* LMSectorLast = nullptr;
+	LMSectorInfo* LMSectorItFirst = nullptr;
+	LMSectorInfo* LMSectorItLast = nullptr;
 
 	// Reset all information about rendering lightmaps so that they're built fresh
 	void ResetLightmapRenderInfo();

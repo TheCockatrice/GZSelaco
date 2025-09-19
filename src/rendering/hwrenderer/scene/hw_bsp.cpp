@@ -471,18 +471,18 @@ void HWDrawInfo::AddLightmapSector(sector_t* sector)
 
 		if (sectorInfo->SectorIndex >= 0 && !sectorInfo->QueuedForRender)
 		{
-			if (Level->LMSectorFirst == nullptr)
+			if (Level->LMSectorItFirst == nullptr)
 			{
-				Level->LMSectorFirst = sectorInfo;
+				Level->LMSectorItFirst = sectorInfo;
 			}
 
-			if (Level->LMSectorLast != nullptr)
+			if (Level->LMSectorItLast != nullptr)
 			{
-				Level->LMSectorLast->Next = sectorInfo;
+				Level->LMSectorItLast->NextIt = sectorInfo;
 			}
 
-			Level->LMSectorLast = sectorInfo;
-			Level->LMSectorLast->Next = nullptr;
+			Level->LMSectorItLast = sectorInfo;
+			Level->LMSectorItLast->NextIt = nullptr;
 
 			sectorInfo->QueuedForRender = true;
 		}
