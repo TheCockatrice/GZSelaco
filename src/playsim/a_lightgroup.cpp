@@ -51,7 +51,11 @@ FVector3 LightProbe::CalculateColor(FLevelLocals* level) const
 
 		if (lightGroup.Enabled)
 		{
-			result += FVector3(subProbe.Red, subProbe.Green, subProbe.Blue) * lightGroup.Intensity;
+			float r = subProbe.Red * lightGroup.TintColor.r;
+			float g = subProbe.Green * lightGroup.TintColor.g;
+			float b = subProbe.Blue * lightGroup.TintColor.b;
+
+			result += FVector3(r, g, b) * lightGroup.Intensity;
 		}
 	}
 
