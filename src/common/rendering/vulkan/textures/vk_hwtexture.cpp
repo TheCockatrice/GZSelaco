@@ -490,7 +490,7 @@ uint8_t *VkHardwareTexture::MapBuffer()
 	return mappedSWFB;
 }
 
-unsigned int VkHardwareTexture::CreateTexture(unsigned char * buffer, int w, int h, int texunit, bool mipmap, const char *name)
+unsigned int VkHardwareTexture::CreateTexture(unsigned char * buffer, int w, int h, int texunit, bool mipmap, const char *name, bool noGLSwizzle /*= false*/)
 {
 	// CreateTexture is used by the software renderer to create a screen output but without any screen data.
 	if (buffer)

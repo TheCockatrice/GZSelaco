@@ -3656,7 +3656,7 @@ void MapLoader::LoadLightmap(MapData *map)
 		// Create the lightmap texture
 		FWrapperTexture* wrapper = new FWrapperTexture(textureSize.X, textureSize.Y);
 		IHardwareTexture* texture = wrapper->GetHardwareTexture(0, 0);
-		texture->CreateTexture(data + i * (textureSize.X * textureSize.Y) * sizeof(int32_t), textureSize.X, textureSize.Y, -1, false, "MasterLightmap");
+		texture->CreateTexture(data + i * (textureSize.X * textureSize.Y) * sizeof(int32_t), textureSize.X, textureSize.Y, -1, false, "MasterLightmap", true);
 		texture->Finalize();
 		FGameTexture* lightmap = Level->Lightmaps[i] = new FGameTexture(wrapper, "MasterLightmap");
 
@@ -3709,7 +3709,7 @@ void MapLoader::LoadLightmap(MapData *map)
 		// Create the lightmap texture
 		FWrapperTexture* wrapper = new FWrapperTexture(width, height);
 		IHardwareTexture* texture = wrapper->GetHardwareTexture(0, 0);
-		texture->CreateTexture(data, width, height, -1, false, "GroupLightmap");
+		texture->CreateTexture(data, width, height, -1, false, "GroupLightmap", true);
 		texture->Finalize();
 		FGameTexture* lightmap = Level->Lightmaps[i + numMasterTextures] = new FGameTexture(wrapper, "GroupLightmap");
 	}

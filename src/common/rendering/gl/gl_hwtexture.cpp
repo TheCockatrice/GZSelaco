@@ -80,7 +80,7 @@ unsigned int FHardwareTexture::lastbound[FHardwareTexture::MAX_TEXTURES];
 //
 //===========================================================================
 
-unsigned int FHardwareTexture::CreateTexture(unsigned char * buffer, int w, int h, int texunit, bool mipmap, const char *name)
+unsigned int FHardwareTexture::CreateTexture(unsigned char * buffer, int w, int h, int texunit, bool mipmap, const char *name, bool noGLSwizzle /*= false*/)
 {
 	int rh,rw;
 	int texformat = GL_RGBA8;// TexFormat[gl_texture_format];
@@ -143,9 +143,10 @@ unsigned int FHardwareTexture::CreateTexture(unsigned char * buffer, int w, int 
 		if (glTextureBytes < 4) glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 		static const int ITypes[] = { GL_R8, GL_RG8, GL_RGB8, GL_RGBA8 };
 		static const int STypes[] = { GL_RED, GL_RG, GL_BGR, GL_BGRA };
+		static const int NTypes[] = { GL_RED, GL_RG, GL_RGB, GL_RGBA };
 
 		texformat = ITypes[glTextureBytes - 1];
-		sourcetype = STypes[glTextureBytes - 1];
+		sourcetype = noGLSwizzle ? NTypes[glTextureBytes - 1] : STypes[glTextureBytes - 1];
 	}
 	else
 	{
@@ -168,6 +169,11 @@ unsigned int FHardwareTexture::CreateTexture(unsigned char * buffer, int w, int 
 	{
 		glGenerateMipmap(GL_TEXTURE_2D);
 		mipmapped = true;
+	}
+	else if (!mipmap)
+	{
+		// We don't want mipmaps, so disable mipmaps
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
 	}
 
 	if (texunit > 0) glActiveTexture(GL_TEXTURE0);

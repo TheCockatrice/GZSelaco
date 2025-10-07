@@ -75,7 +75,7 @@ unsigned int FHardwareTexture::lastbound[FHardwareTexture::MAX_TEXTURES];
 //
 //===========================================================================
 
-unsigned int FHardwareTexture::CreateTexture(unsigned char * buffer, int w, int h, int texunit, bool mipmap, const char *name)
+unsigned int FHardwareTexture::CreateTexture(unsigned char * buffer, int w, int h, int texunit, bool mipmap, const char *name, bool noGLSwizzle /*= false*/)
 {
 	int rh,rw;
 	int texformat = GL_RGBA;// TexFormat[gl_texture_format];

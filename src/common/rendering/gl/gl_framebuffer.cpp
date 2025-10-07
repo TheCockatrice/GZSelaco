@@ -934,6 +934,31 @@ void OpenGLFrameBuffer::RenderTextureView(FCanvasTexture* tex, std::function<voi
 
 //===========================================================================
 //
+// Lightmap slice rendering
+//
+//===========================================================================
+
+void OpenGLFrameBuffer::RenderLightmapSlice(int slice, std::function<void(IntRect&)> renderFunc)
+{
+	GLRenderer->StartOffscreen();
+
+	gl_RenderState.ClearLastMaterial();
+	glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GLRenderer->mLightMapID, 0, slice);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, 0);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, 0);
+
+	IntRect bounds;
+	bounds.left = bounds.top = 0;
+	bounds.width = GLRenderer->mLightMapWidth;
+	bounds.height = GLRenderer->mLightMapHeight;
+
+	renderFunc(bounds);
+
+	GLRenderer->EndOffscreen();
+}
+
+//===========================================================================
+//
 // 
 //
 //===========================================================================
@@ -1071,12 +1096,14 @@ void OpenGLFrameBuffer::InitLightmap(IVector2 LMTextureSize, int LMTextureCount,
 			glGenTextures(1, (GLuint*)&GLRenderer->mLightMapID);
 
 		glBindTexture(GL_TEXTURE_2D_ARRAY, GLRenderer->mLightMapID);
-		glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGB8UI, LMTextureSize.X, LMTextureSize.Y, LMTextureCount, 0, GL_RGB, GL_UNSIGNED_BYTE, &LMTextureData[0]);
+		glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA, LMTextureSize.X, LMTextureSize.Y, LMTextureCount, 0, GL_RGBA, GL_UNSIGNED_BYTE, &LMTextureData[0]);
 		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
 
 		glActiveTexture(activeTex);
+
+		GLRenderer->mLightMapWidth = LMTextureSize.X;
+		GLRenderer->mLightMapHeight = LMTextureSize.Y;
 
 		LMTextureData.Reset(); // We no longer need this, release the memory
 	}

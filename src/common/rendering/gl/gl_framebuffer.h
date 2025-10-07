@@ -149,6 +149,7 @@ class OpenGLFrameBuffer : public SystemGLFrameBuffer
 	typedef SystemGLFrameBuffer Super;
 
 	void RenderTextureView(FCanvasTexture* tex, std::function<void(IntRect &)> renderFunc) override;
+	void RenderLightmapSlice(int slice, std::function<void(IntRect&)> renderFunc) override;
 
 public:
 
