@@ -3373,6 +3373,7 @@ void MapLoader::LoadLightmap(MapData *map)
 
 	for (size_t i = 0; i < Level->Lightmaps.size(); i++)
 	{
+		Level->Lightmaps[i]->CleanHardwareData(true);
 		delete Level->Lightmaps[i];
 	}
 	Level->Lightmaps.Reset();
@@ -3641,6 +3642,7 @@ void MapLoader::LoadLightmap(MapData *map)
 	Level->LMMasterTextureData.Resize((numMasterTexBytes + 1));
 	uint8_t* data = (uint8_t*)&Level->LMMasterTextureData[0];
 	fr.Read(data, numMasterTexBytes);
+	data[numMasterTexBytes] = 0;
 
 #if 0
 	// Apply compression predictor

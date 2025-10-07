@@ -231,7 +231,7 @@ static const char *shaderBindings = R"(
 	};
 
 	// bone matrix buffers
-	layout(set = 1, binding = 4, std430) buffer BoneBufferSSO
+	layout(set = 1, binding = 4, std430) readonly buffer BoneBufferSSO
 	{
 	    mat4 bones[];
 	};
