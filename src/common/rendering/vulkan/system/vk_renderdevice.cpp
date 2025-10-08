@@ -1134,7 +1134,7 @@ void VulkanRenderDevice::RenderLightmapSlice(int slice, std::function<void(IntRe
 		.AddImage(lightmap, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, false)
 		.Execute(mCommands->GetDrawCommands());
 
-	mRenderState->SetRenderTarget(&texman->LightmapSlices[slice], nullptr, lightmap->Image->width, lightmap->Image->height, VK_FORMAT_R8G8B8A8_UNORM, VK_SAMPLE_COUNT_1_BIT);
+	mRenderState->SetRenderTarget(&texman->LightmapSlices[slice], nullptr, lightmap->Image->width, lightmap->Image->height, VK_FORMAT_B8G8R8A8_UNORM, VK_SAMPLE_COUNT_1_BIT);
 
 	IntRect bounds;
 	bounds.left = bounds.top = 0;

@@ -406,6 +406,12 @@ ImageBuilder& ImageBuilder::Format(VkFormat format)
 	return *this;
 }
 
+ImageBuilder& ImageBuilder::Flags(VkImageCreateFlagBits flags)
+{
+	imageInfo.flags = flags;
+	return *this;
+}
+
 ImageBuilder& ImageBuilder::LinearTiling()
 {
 	imageInfo.tiling = VK_IMAGE_TILING_LINEAR;

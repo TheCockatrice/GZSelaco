@@ -203,6 +203,7 @@ void VkTextureManager::SetLightmap(IVector2 LMTextureSize, int LMTextureCount, c
 		.Size(w, h, 1, count)
 		.Format(VK_FORMAT_R8G8B8A8_UNORM)
 		.Usage(VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+		.Flags(VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT)
 		.DebugName("VkRenderBuffers.Lightmap")
 		.Create(fb->device.get());
 
@@ -247,7 +248,7 @@ void VkTextureManager::SetLightmap(IVector2 LMTextureSize, int LMTextureCount, c
 	stagingBuffer->Unmap();
 
 	VkImageTransition()
-		.AddImage(&Lightmap, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, true, 0, count)
+		.AddImage(&Lightmap, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, true, 0, 1, 0, count)
 		.Execute(cmdbuffer);
 
 	VkBufferImageCopy region = {};
@@ -259,7 +260,7 @@ void VkTextureManager::SetLightmap(IVector2 LMTextureSize, int LMTextureCount, c
 	cmdbuffer->copyBufferToImage(stagingBuffer->buffer, Lightmap.Image->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
 	VkImageTransition()
-		.AddImage(&Lightmap, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, false, 0, count)
+		.AddImage(&Lightmap, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, false, 0, 1, 0, count)
 		.Execute(cmdbuffer);
 
 	fb->GetCommands()->TransferDeleteList->Add(std::move(stagingBuffer));
