@@ -1122,7 +1122,7 @@ void DParticleDefinition::Emit(AActor* master, double chance, int numTries, doub
 						p->life = (int16_t)roundf(p->life * LifeMultHigh);
 						break;
 					case 4:
-						p->life = (int16_t)roundf(p->life * LifeMultUlt) * 2;
+						p->life = (int16_t)roundf(p->life * LifeMultUlt);
 						break;
 					case 5:
 						p->life = (int16_t)roundf(p->life * LifeMultInsane);
