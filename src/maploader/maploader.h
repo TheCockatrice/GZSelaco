@@ -235,6 +235,8 @@ private:
 	void CreateBlockMap();
 	void PO_Init(void);
 
+	void ProcessZDRayInfo(int index, FMapThing* mthing);
+
 	// During map init the items' own Index functions should not be used.
 	inline int Index(vertex_t *v) const
 	{

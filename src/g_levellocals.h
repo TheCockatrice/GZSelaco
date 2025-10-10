@@ -488,6 +488,7 @@ public:
 	int LPHeight = 0;
 	int LPCellSize = 32;
 	TArray<LightProbeCell> LPCells;
+	FVector3 SunDirection = { 0.5f, 0.5f, -0.7071f };
 
 	// Iterators for dynamic lightmaps
 	LMSectorInfo* LMSectorItFirst = nullptr;

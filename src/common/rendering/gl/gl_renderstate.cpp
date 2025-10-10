@@ -128,6 +128,7 @@ bool FGLRenderState::ApplyShader()
 	activeShader->muTextureMode.Set(GetTextureModeAndFlags(mTempTM));
 	activeShader->muLightParms.Set(mLightParms);
 	activeShader->muFogColor.Set(mStreamData.uFogColor);
+	activeShader->muSunDirection.Set(&mStreamData.uSunDirection.X);
 	activeShader->muObjectColor.Set(mStreamData.uObjectColor);
 	activeShader->muDynLightColor.Set(&mStreamData.uDynLightColor.X);
 	activeShader->muLightProbeColor.Set(&mStreamData.uLightProbeColor.X);

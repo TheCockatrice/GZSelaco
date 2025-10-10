@@ -1437,8 +1437,15 @@ void MapLoader::SpawnThings (int position)
 
 	for (int i=0; i < numthings; i++)
 	{
-		AActor *actor = Level->SpawnMapThing (i, &MapThingsConverted[i], position);
-		unsigned *udi = MapThingsUserDataIndex.CheckKey((unsigned)i);
+		FMapThing* mthing = &MapThingsConverted[i];
+
+		if (mthing->EdNum == 9890) // ZDRayInfo
+		{
+			ProcessZDRayInfo(i, mthing);
+		}
+
+		AActor *actor = Level->SpawnMapThing (i, mthing, position);
+		unsigned* udi = MapThingsUserDataIndex.CheckKey((unsigned)i);
 		if (udi != nullptr)
 		{
 			SetMapThingUserData(actor, *udi);
@@ -2491,7 +2498,21 @@ void MapLoader::CreateBlockMap ()
 	}
 }
 
+void MapLoader::ProcessZDRayInfo(int index, FMapThing* mthing)
+{
+	bool sunenabled = mthing->score == 1; // Comes from ParseThing
 
+	if (sunenabled)
+	{
+		// Code reused from ZDRay sun direction
+		float sdx = g_cosdeg(mthing->angle) * g_cosdeg(mthing->pitch);
+		float sdy = g_sindeg(mthing->angle) * g_cosdeg(mthing->pitch);
+		float sdz = -g_sindeg(mthing->pitch);
+		Level->SunDirection.X = -sdx;
+		Level->SunDirection.Y = -sdy;
+		Level->SunDirection.Z = -sdz;
+	}
+}
 
 //===========================================================================
 //

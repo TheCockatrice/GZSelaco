@@ -182,6 +182,7 @@ struct StreamData
 	FVector4PalEntry uTextureModulateColor;
 	FVector4PalEntry uTextureBlendColor;
 	FVector4PalEntry uFogColor;
+	FVector4 uSunDirection;
 	float uDesaturationFactor;
 	float uInterpolationFactor;
 	float timer;
@@ -306,6 +307,7 @@ public:
 		mStreamData.uDynLightColor = { 0.0f, 0.0f, 0.0f, 1.0f };
 		mStreamData.uLightProbeColor = { 0.0f, 0.0f, 0.0f, 1.0f };
 		mStreamData.uDetailParms = { 0.0f, 0.0f, 0.0f, 0.0f };
+		mStreamData.uSunDirection = { 0.0f, 0.0f, 0.0f, -1.0f };
 #ifdef NPOT_EMULATION
 		mStreamData.uNpotEmulation = { 0,0,0,0 };
 #endif
@@ -518,6 +520,16 @@ public:
 	void SetAddColor(PalEntry pe)
 	{
 		mStreamData.uAddColor = pe;
+	}
+
+	void EnableSunShading(FVector3 sunDirection)
+	{
+		mStreamData.uSunDirection = { sunDirection.X, sunDirection.Y, sunDirection.Z, 1.0f };
+	}
+
+	void DisableSunShading()
+	{
+		mStreamData.uSunDirection = { 0.0f, 0.0f, 0.0f, -1.0f };
 	}
 
 	void SetNpotEmulation(float factor, float offset)

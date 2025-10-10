@@ -1105,6 +1105,7 @@ void ParseModelDefLump(int Lump)
 						}
 						if (map[c]) continue;
 						smf.frame=c;
+
 						SpriteModelFrames.Push(smf);
 						GetDefaultByType(type)->hasmodel = true;
 						map[c]=1;
@@ -1135,6 +1136,9 @@ void ParseModelDefLump(int Lump)
 				}
 				else if (sc.Compare("nopixelstretch")) {
 					smf.flags |= MDL_NOPIXELSTRETCH;
+				}
+				else if (sc.Compare("sunshading")) {
+					smf.flags |= MDL_SUNSHADING;
 				}
 				else
 				{

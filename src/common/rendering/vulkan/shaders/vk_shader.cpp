@@ -197,6 +197,7 @@ static const char *shaderBindings = R"(
 		vec4 uTextureModulateColor;
 		vec4 uTextureBlendColor;
 		vec4 uFogColor;
+		vec4 uSunDirection;
 		float uDesaturationFactor;
 		float uInterpolationFactor;
 		float timer; // timer data for material shaders
@@ -307,6 +308,7 @@ static const char *shaderBindings = R"(
 	#define uTextureModulateColor data[uDataIndex].uTextureModulateColor
 	#define uTextureAddColor data[uDataIndex].uTextureAddColor
 	#define uFogColor data[uDataIndex].uFogColor
+	#define uSunDirection data[uDataIndex].uSunDirection
 	#define uDesaturationFactor data[uDataIndex].uDesaturationFactor
 	#define uInterpolationFactor data[uDataIndex].uInterpolationFactor
 	#define timer data[uDataIndex].timer

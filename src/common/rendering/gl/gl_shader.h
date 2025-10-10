@@ -243,6 +243,7 @@ class FShader
 	FBufferedUniform1i muLightIndex;
 	FBufferedUniform1i muBoneIndexBase;
 	FBufferedUniformPE muFogColor;
+	FBufferedUniform4f muSunDirection;
 	FBufferedUniform4f muDynLightColor;
 	FBufferedUniform4f muLightProbeColor;
 	FBufferedUniformPE muObjectColor;

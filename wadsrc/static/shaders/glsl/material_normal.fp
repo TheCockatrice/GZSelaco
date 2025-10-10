@@ -37,7 +37,22 @@ vec3 lightContribution(int i, vec3 normal)
 
 vec3 ProcessMaterialLight(Material material, vec3 color)
 {
-	vec4 dynlight = uDynLightColor + uLightProbeColor;
+	vec4 lightProbeColor = uLightProbeColor;
+
+	//
+	// apply sunlight shading
+	//
+	if (uSunDirection.w > 0.0)
+	{
+		float dotProd = dot(material.Normal, uSunDirection.xyz);
+
+		// Just add a smidge of directional lighting to lightprobes to give objects depth, don't let them go to full black
+		float sunlight = max(dotProd, 0.0) * 0.5 + 0.5;
+
+		lightProbeColor.rgb *= sunlight;
+	}
+
+	vec4 dynlight = uDynLightColor + lightProbeColor;
 	vec3 normal = material.Normal;
 
 	if (uLightIndex >= 0)

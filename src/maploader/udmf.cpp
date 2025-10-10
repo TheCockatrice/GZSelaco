@@ -796,6 +796,11 @@ public:
 				CHECK_N(Zd | Zdt)
 					break;
 
+			case NAME_lm_sunenabled:
+				CHECK_N(Zd | Zdt)
+				th->score = 1; // Processed later in MapLoader::ProcessZDRayInfo
+					break;
+
 			default:
 				CHECK_N(Zd | Zdt)
 				if (0 == strnicmp("user_", key.GetChars(), 5))

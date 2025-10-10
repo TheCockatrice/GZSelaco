@@ -69,6 +69,11 @@ void FHWModelRenderer::BeginDrawModel(FRenderStyle style, int smf_flags, const V
 		state.SetCulling((mirrored ^ portalState.isMirrored()) ? Cull_CCW : Cull_CW);
 	}
 
+	if (smf_flags & MDL_SUNSHADING)
+	{
+		state.EnableSunShading(level.SunDirection);
+	}
+
 	state.mModelMatrix = objectToWorldMatrix;
 	state.EnableModelMatrix(true);
 }
@@ -78,6 +83,7 @@ void FHWModelRenderer::EndDrawModel(FRenderStyle style, int smf_flags)
 	state.SetBoneIndexBase(-1);
 	state.EnableModelMatrix(false);
 	state.SetDepthFunc(DF_Less);
+	state.DisableSunShading();
 	if (gl_cull_backfaces || (smf_flags & MDL_ALWAYSCULLBACKFACES) || (smf_flags & MDL_FORCECULLBACKFACES) || ( !(style == DefaultRenderStyle()) && !(smf_flags & MDL_DONTCULLBACKFACES) ))
 		state.SetCulling(Cull_None);
 }
