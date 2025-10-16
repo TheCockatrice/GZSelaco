@@ -445,10 +445,13 @@ bool Win32GLVideo::InitHardware(HWND Window, int multisample)
 				}
 			}
 		}
+		
 
 		// Identify calculated version
 		if (version > 0) Printf("R_OPENGL: Version - %d.%d\n", version / 10, version % 10);
 		else Printf("R_OPENGL: Fallback Version - %d\n", version);
+		glVersion = version;
+		glProfile = prof;
 
 		if (m_hRC == NULL && prof == WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB)
 		{
@@ -465,7 +468,7 @@ bool Win32GLVideo::InitHardware(HWND Window, int multisample)
 		}
 
 		
-		Printf("R_OPENGL: Creating additional contexts...\n");
+		/*Printf("R_OPENGL: Creating additional contexts...\n");
 
 		char err[256] = { '\0' };
 		const int numAux = min((int)gl_max_transfer_threads, 10);
@@ -529,7 +532,7 @@ bool Win32GLVideo::InitHardware(HWND Window, int multisample)
 			else {
 				Printf("R_OPENGL: Created %d additional contexts\n", numCreated);
 			}
-		}
+		}*/
 
 
 		return true;
@@ -550,7 +553,7 @@ void Win32GLVideo::Shutdown()
 	if (m_hRC)
 	{
 		zd_wglMakeCurrent(0, 0);
-		for(int x = 0; x < 4; x++) zd_wglDeleteContext(gl_auxContexts[x]);
+		for(int x = 0; x < 10; x++) zd_wglDeleteContext(gl_auxContexts[x]);
 		zd_wglDeleteContext(m_hRC);
 	}
 	if (m_hDC) ReleaseDC(m_Window, m_hDC);
@@ -564,12 +567,63 @@ void Win32GLVideo::setNULLContext() {
 	zd_wglMakeCurrent(0, 0);
 }
 
-void Win32GLVideo::setMainContext() {
-	zd_wglMakeCurrent(m_hDC, m_hRC);
+bool Win32GLVideo::setMainContext() {
+	return zd_wglMakeCurrent(m_hDC, m_hRC);
 }
 
-void Win32GLVideo::setAuxContext(int index) {
-	zd_wglMakeCurrent(m_hDC, gl_auxContexts[index]);
+bool Win32GLVideo::setAuxContext(int index) {
+	return zd_wglMakeCurrent(m_hDC, gl_auxContexts[index]);
+}
+
+int Win32GLVideo::createAuxContext() {
+	// Find a free context
+	int index = -1;
+	char err[256] = { '\0' };
+
+	for (; index < 10; index++) {
+		if (gl_auxContexts[index] == NULL)
+			break;
+	}
+
+	if (gl_auxContexts[index] != NULL)
+		return -1;
+
+	if (myWglCreateContextAttribsARB != NULL && glVersion > 0) {
+		int ctxAttribs[] = {
+			WGL_CONTEXT_MAJOR_VERSION_ARB, glVersion / 10,
+			WGL_CONTEXT_MINOR_VERSION_ARB, glVersion % 10,
+			WGL_CONTEXT_FLAGS_ARB, gl_debug ? WGL_CONTEXT_DEBUG_BIT_ARB : 0,
+			WGL_CONTEXT_PROFILE_MASK_ARB, glProfile,
+			0
+		};
+
+		gl_auxContexts[index] = myWglCreateContextAttribsARB(m_hDC, m_hRC, ctxAttribs);
+
+		if (gl_auxContexts[index] == NULL) {
+			FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, GetLastError(), 0, err, 255, NULL);
+			Printf(TEXTCOLOR_ORANGE"R_OPENGL: Warning - Unable to create additional context [%d] (%d : %s)\n", index, GetLastError(), err);
+			return -1;
+		}
+	}
+	else {
+		gl_auxContexts[index] = zd_wglCreateContext(m_hDC);
+
+		if (gl_auxContexts[index] == NULL) {
+			FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, GetLastError(), 0, err, 255, NULL);
+			Printf(TEXTCOLOR_ORANGE"R_OPENGL: Warning - Unable to create additional context [%d] (%d : %s)\n", index, GetLastError(), err);
+			return false;
+		}
+
+		if (!zd_wglShareContext(m_hRC, gl_auxContexts[index])) {
+			FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, GetLastError(), 0, err, 255, NULL);
+			Printf(TEXTCOLOR_ORANGE"R_OPENGL: Warning - Unable to share additional context [%d] (%d : %s)\n", index, GetLastError(), err);
+			zd_wglDeleteContext(gl_auxContexts[index]);
+			gl_auxContexts[index] = NULL;
+			return false;
+		}
+	}
+
+	return index;
 }
 
 int Win32GLVideo::numAuxContexts() {

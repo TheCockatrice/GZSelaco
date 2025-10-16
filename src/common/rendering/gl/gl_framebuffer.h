@@ -113,13 +113,15 @@ public:
 	~GlTexLoadThread() override {};
 
 	bool uploadPossible() const { return auxContext >= 0; }
+	int startupStatus() const { return startup.load(); }
 
 protected:
 	OpenGLFrameBuffer* cmd;
 
 	int submits, auxContext;
 
-	std::atomic<int> maxQueue;
+	std::atomic<int> maxQueue = 0;
+	std::atomic<int> startup = 0;
 
 	bool loadResource(GlTexLoadIn& input, GlTexLoadOut& output) override;
 	void cancelLoad() override {  }		// TODO: Actually finish this

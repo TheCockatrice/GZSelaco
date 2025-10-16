@@ -18,12 +18,16 @@ public:
 	void Shutdown();
 
 	void setNULLContext();
-	void setMainContext();
-	void setAuxContext(int index);
+	bool setMainContext();
+	bool setAuxContext(int index);
+	int createAuxContext();
 	int numAuxContexts();
 
 protected:
 	HGLRC m_hRC;
+	int glVersion = 0;
+	int glProfile = 0;
+	
 
 	HWND InitDummy();
 	void ShutdownDummy(HWND dummy);
