@@ -96,7 +96,7 @@ extern bool vid_hdr_active;
 
 #ifdef __POSIX_SDL_GL_SYSFB_H__
 #include "hardware.h"
-#define gl_createAUXContext(a) static_cast<OpenGLFrameBuffer*>(screen)->createAuxContext(a)
+#define gl_createAUXContext() static_cast<OpenGLFrameBuffer*>(screen)->createAuxContext()
 #define gl_setAUXContext(a) static_cast<OpenGLFrameBuffer*>(screen)->setAuxContext(a)
 #define gl_setMainContext() static_cast<OpenGLFrameBuffer*>(screen)->setMainContext()
 #define gl_numAUXContexts() static_cast<OpenGLFrameBuffer*>(screen)->numAuxContexts()
@@ -184,6 +184,7 @@ bool GlTexLoadThread::loadResource(GlTexLoadIn & input, GlTexLoadOut & output) {
 	output.flags = input.flags;
 	output.error = GL_TEXLOAD_ERR_NONE;
 	output.lump = params->lump;
+	output.uploadFence = NULL;
 
 	auto* src = input.imgSource;
 	FBitmap pixels;
@@ -689,7 +690,11 @@ void OpenGLFrameBuffer::UpdateBackgroundCache(bool flush) {
 
 				// If the texture isn't available yet, we need to recycle this object into the queue and check again next frame
 				if (loaded.uploadFence != GL_NONE) {
-					GLenum res = flush ? glClientWaitSync(loaded.uploadFence, GL_SYNC_FLUSH_COMMANDS_BIT, UINT64_MAX) : glClientWaitSync(loaded.uploadFence, 0, 0);
+					if(!glIsSync(loaded.uploadFence)) {
+						Printf(TEXTCOLOR_YELLOW"glFrameBuffer: A sync object has degraded.\n");
+					}
+					
+					GLenum res = flush ? glClientWaitSync(loaded.uploadFence, GL_SYNC_FLUSH_COMMANDS_BIT, GL_TIMEOUT_IGNORED) : glClientWaitSync(loaded.uploadFence, 0, 0);
 					if (res == GL_ALREADY_SIGNALED || res == GL_CONDITION_SATISFIED) {
 						glDeleteSync(loaded.uploadFence);
 
@@ -705,14 +710,18 @@ void OpenGLFrameBuffer::UpdateBackgroundCache(bool flush) {
 						assert(!flush);
 						loaded.spi.generateSpi = false;		// We don't need to create SPI again
 						recycle.push_back(loaded);
-					}
-					else {
+					} else {
 						// Something went wrong, mark the texture as failed
 						loaded.tex->CreateInvalid(loaded.texUnit);
 
 						// TODO: Set error state once that is handled correctly
 						loaded.tex->SetHardwareState(IHardwareTexture::HardwareState::READY, loaded.texUnit);
-						Printf(TEXTCOLOR_YELLOW"glFrameBuffer: A texture failed to synchronize. (%s)\n", fileSystem.GetFileFullPath(loaded.lump).c_str() );
+						if(res == GL_WAIT_FAILED) {
+							GLenum err = glGetError();
+							Printf(TEXTCOLOR_YELLOW"glFrameBuffer: A texture fence failed to wait [glerr:%d]. (%s)\n", err, fileSystem.GetFileFullPath(loaded.lump).c_str() );
+						} else {
+							Printf(TEXTCOLOR_YELLOW"glFrameBuffer: A texture failed to synchronize. (%s)\n", fileSystem.GetFileFullPath(loaded.lump).c_str() );
+						}
 					}
 				}
 				else {
@@ -914,7 +923,9 @@ void OpenGLFrameBuffer::InitializeState()
 	}
 
 	// Assign context again to do work on the main thread
-	gl_setMainContext();
+	if(!gl_setMainContext()) {
+		I_FatalError("OpenGLFrameBuffer::Couldn't configure main context!");
+	}
 
 	modelThread.reset(new GLModelLoadThread(&modelInQueue, &modelOutQueue));
 	modelThread->start();
