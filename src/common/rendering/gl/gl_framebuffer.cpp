@@ -87,14 +87,18 @@ extern bool vid_hdr_active;
 #ifdef WIN32
 #include "hardware.h"
 #include "win32glvideo.h"
+#define gl_createAUXContext() static_cast<Win32GLVideo*>(Video)->createAuxContext()
 #define gl_setAUXContext(a) static_cast<Win32GLVideo*>(Video)->setAuxContext(a)
+#define gl_setMainContext() static_cast<Win32GLVideo*>(Video)->setMainContext()
 #define gl_numAUXContexts() static_cast<Win32GLVideo*>(Video)->numAuxContexts()
 #define gl_setNULLContext() static_cast<Win32GLVideo*>(Video)->setNULLContext()
 #endif
 
 #ifdef __POSIX_SDL_GL_SYSFB_H__
 #include "hardware.h"
+#define gl_createAUXContext() static_cast<OpenGLFrameBuffer*>(screen)->createAuxContext()
 #define gl_setAUXContext(a) static_cast<OpenGLFrameBuffer*>(screen)->setAuxContext(a)
+#define gl_setMainContext() static_cast<OpenGLFrameBuffer*>(screen)->setMainContext()
 #define gl_numAUXContexts() static_cast<OpenGLFrameBuffer*>(screen)->numAuxContexts()
 #define gl_setNULLContext() static_cast<OpenGLFrameBuffer*>(screen)->setNULLContext()
 #endif
@@ -144,7 +148,18 @@ namespace OpenGLRenderer
 // @Cockatrice - Background Loader Stuff ===========================================
 // =================================================================================
 void GlTexLoadThread::bgproc() {
-	if(auxContext >= 0) gl_setAUXContext(auxContext);
+	if (auxContext >= 0) {
+		auxContext = gl_createAUXContext();
+		if (auxContext == -1 || !gl_setAUXContext(auxContext)) {
+			startup.store(-1);
+		}
+		else {
+			startup.store(1);
+		}
+	}
+	else {
+		startup.store(1);
+	}
 	ResourceLoader2::bgproc();
 	if (auxContext >= 0) gl_setNULLContext();
 }
@@ -169,6 +184,7 @@ bool GlTexLoadThread::loadResource(GlTexLoadIn & input, GlTexLoadOut & output) {
 	output.flags = input.flags;
 	output.error = GL_TEXLOAD_ERR_NONE;
 	output.lump = params->lump;
+	output.uploadFence = NULL;
 
 	auto* src = input.imgSource;
 	FBitmap pixels;
@@ -593,6 +609,7 @@ void OpenGLFrameBuffer::UpdateBackgroundCache(bool flush) {
 	cycle_t timer = cycle_t();
 	timer.Clock();
 
+
 	while (outputTexQueue.size() > 0 && (flush || (dequeueCount < gl_background_flush_count && dataLoaded < 20971520))) {
 		if (!outputTexQueue.dequeue(loaded)) break;
 
@@ -673,7 +690,11 @@ void OpenGLFrameBuffer::UpdateBackgroundCache(bool flush) {
 
 				// If the texture isn't available yet, we need to recycle this object into the queue and check again next frame
 				if (loaded.uploadFence != GL_NONE) {
-					GLenum res = flush ? glClientWaitSync(loaded.uploadFence, GL_SYNC_FLUSH_COMMANDS_BIT, UINT64_MAX) : glClientWaitSync(loaded.uploadFence, 0, 0);
+					if(!glIsSync(loaded.uploadFence)) {
+						Printf(TEXTCOLOR_YELLOW"glFrameBuffer: A sync object has degraded.\n");
+					}
+					
+					GLenum res = flush ? glClientWaitSync(loaded.uploadFence, GL_SYNC_FLUSH_COMMANDS_BIT, GL_TIMEOUT_IGNORED) : glClientWaitSync(loaded.uploadFence, 0, 0);
 					if (res == GL_ALREADY_SIGNALED || res == GL_CONDITION_SATISFIED) {
 						glDeleteSync(loaded.uploadFence);
 
@@ -689,14 +710,18 @@ void OpenGLFrameBuffer::UpdateBackgroundCache(bool flush) {
 						assert(!flush);
 						loaded.spi.generateSpi = false;		// We don't need to create SPI again
 						recycle.push_back(loaded);
-					}
-					else {
+					} else {
 						// Something went wrong, mark the texture as failed
 						loaded.tex->CreateInvalid(loaded.texUnit);
 
 						// TODO: Set error state once that is handled correctly
 						loaded.tex->SetHardwareState(IHardwareTexture::HardwareState::READY, loaded.texUnit);
-						Printf(TEXTCOLOR_YELLOW"glFrameBuffer: A texture failed to synchronize. (%s)\n", fileSystem.GetFileFullPath(loaded.lump).c_str() );
+						if(res == GL_WAIT_FAILED) {
+							GLenum err = glGetError();
+							Printf(TEXTCOLOR_YELLOW"glFrameBuffer: A texture fence failed to wait [glerr:%d]. (%s)\n", err, fileSystem.GetFileFullPath(loaded.lump).c_str() );
+						} else {
+							Printf(TEXTCOLOR_YELLOW"glFrameBuffer: A texture failed to synchronize. (%s)\n", fileSystem.GetFileFullPath(loaded.lump).c_str() );
+						}
 					}
 				}
 				else {
@@ -858,18 +883,48 @@ void OpenGLFrameBuffer::InitializeState()
 	mDebug->Update();
 
 	bgTransferThreads.clear();
+
+	gl_setNULLContext();	// Clear context before creating additional threads
+
 	if (gl_texture_thread) {
 		int numThreads = 1;
-		bool canUpload = gl_texture_thread_upload && gl_numAUXContexts() > 0;
+		bool canUpload = gl_texture_thread_upload;
 
-		if(canUpload)
-			numThreads = min((int)gl_max_transfer_threads, gl_numAUXContexts());
+		if (canUpload)
+			numThreads = gl_max_transfer_threads;
+
+		Printf(TEXTCOLOR_GREEN "OpenGLFrameBuffer: Creating %d transfer threads...\n", numThreads);
 		
 		for (int x = 0; x < numThreads; x++) {
-			std::unique_ptr<GlTexLoadThread> ptr(new GlTexLoadThread(this, canUpload ? x : -1, &primaryTexQueue, &secondaryTexQueue, &outputTexQueue));
+			std::unique_ptr<GlTexLoadThread> ptr(new GlTexLoadThread(this, canUpload ? 1 : -1, &primaryTexQueue, &secondaryTexQueue, &outputTexQueue));
+			ptr->start();
+			
+			int status = 0;
+			while (status == 0) {
+				status = ptr->startupStatus();
+			}
+
+			if (status < 0 && canUpload) {
+				ptr->stop();
+				Printf(TEXTCOLOR_RED "OpenGL Error:: Failed to create background thread %d!\n", x);
+			}
+			else {
+				bgTransferThreads.push_back(std::move(ptr));
+			}			
+		}
+
+		// If we failed to assign any contexts, make sure there is at least one non-uploading thread created
+		if (numThreads > 0 && bgTransferThreads.size() == 0) {
+			Printf(TEXTCOLOR_YELLOW "OpenGL Warning:: No aux contexts could be assigned. Creating a single background thread with upload disabled.\n");
+			std::unique_ptr<GlTexLoadThread> ptr(new GlTexLoadThread(this, -1, &primaryTexQueue, &secondaryTexQueue, &outputTexQueue));
 			ptr->start();
 			bgTransferThreads.push_back(std::move(ptr));
 		}
+	}
+
+	// Assign context again to do work on the main thread
+	if(!gl_setMainContext()) {
+		I_FatalError("OpenGLFrameBuffer::Couldn't configure main context!");
 	}
 
 	modelThread.reset(new GLModelLoadThread(&modelInQueue, &modelOutQueue));

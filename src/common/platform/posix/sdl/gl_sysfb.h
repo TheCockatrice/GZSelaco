@@ -40,13 +40,14 @@ public:
 	void SwapBuffers();
 
 	void setNULLContext();
-	void setMainContext();
-	void setAuxContext(int index);
+	bool setMainContext();
+	bool setAuxContext(int index);
+	int createAuxContext();
 	int numAuxContexts();
 
 protected:
 	SDL_GLContext GLContext;
-	SDL_GLContext GLAuxContexts[4] = { NULL, NULL, NULL, NULL };
+	SDL_GLContext GLAuxContexts[10] = { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
 
 	SystemGLFrameBuffer() {}
 };
