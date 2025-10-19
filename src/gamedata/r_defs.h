@@ -1761,6 +1761,24 @@ struct LightProbeCell
 	int NumProbes = 0;
 };
 
+struct HeavyProbe
+{
+	int thingID;
+	float X, Y, Z;
+
+	struct Sample
+	{
+		uint32_t groupID;
+		float R, G, B;
+		float dirX, dirY, dirZ;
+	};
+
+	uint8_t numSamples;
+	Sample samples[4];
+
+	void CalculateSampleData(FLevelLocals* level, struct HeavyProbeSampleData* outSamples);
+};
+
 // Info for each lightgroup in a sector
 struct LMSectorLightGroupInfo
 {

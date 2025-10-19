@@ -214,6 +214,7 @@ DEFINE_ACTION_FUNCTION(DLevelPostProcessor, AddThing)
 	newthing.Alpha = -1;
 	newthing.Health = 1;
 	newthing.FloatbobPhase = -1;
+	newthing.HeavyProbeIndex = -1;
 	newthing.pos.X = x;
 	newthing.pos.Y = y;
 	newthing.pos.Z = z;

@@ -4757,6 +4757,7 @@ void ConstructActor(AActor *actor, const DVector3 &pos, bool SpawningMapThing)
 	actor->lastModelFrame = -1;
 	actor->LastPatch.SetInvalid();
 	actor->lastScaleFlags = -1;
+	actor->HeavyProbeIndex = -1;
 
 	// Set default dialogue
 	actor->ConversationRoot = Level->GetConversation(actor->GetClass()->TypeName);
@@ -6129,6 +6130,7 @@ AActor *FLevelLocals::SpawnMapThing (FMapThing *mthing, int position)
 	mobj->SpawnPoint = mthing->pos;
 	mobj->SpawnAngle = mthing->angle;
 	mobj->SpawnFlags = mthing->flags;
+	mobj->HeavyProbeIndex = mthing->HeavyProbeIndex;
 	if (mthing->friendlyseeblocks > 0)
 		mobj->friendlyseeblocks = mthing->friendlyseeblocks;
 	if (mthing->FloatbobPhase >= 0 && mthing->FloatbobPhase < 64) mobj->FloatBobPhase = mthing->FloatbobPhase;

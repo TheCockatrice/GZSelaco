@@ -1137,9 +1137,6 @@ void ParseModelDefLump(int Lump)
 				else if (sc.Compare("nopixelstretch")) {
 					smf.flags |= MDL_NOPIXELSTRETCH;
 				}
-				else if (sc.Compare("sunshading")) {
-					smf.flags |= MDL_SUNSHADING;
-				}
 				else
 				{
 					sc.ScriptMessage("Unrecognized string \"%s\"", sc.String);

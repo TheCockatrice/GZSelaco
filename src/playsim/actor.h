@@ -1403,6 +1403,8 @@ public:
 	// (note: this is put into AActor instead of the PlayerPawn because non-players also use the value)
 	double LandingSpeed;
 
+	int HeavyProbeIndex; // NL: Index of HeavyProbe for static models
+
 
 	// ThingIDs
 	void SetTID (int newTID);

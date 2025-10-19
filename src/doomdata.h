@@ -383,6 +383,7 @@ struct FMapThing
 	int			FloatbobPhase;
 	int			friendlyseeblocks;
 	FName arg0str;
+	int			HeavyProbeIndex;
 };
 
 

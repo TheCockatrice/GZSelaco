@@ -203,6 +203,22 @@ public:
 
 };
 
+class FUniform4x4f
+{
+	int mIndex;
+
+public:
+	void Init(GLuint hShader, const GLchar* name)
+	{
+		mIndex = glGetUniformLocation(hShader, name);
+	}
+
+	void Set(const float* newvalue)
+	{
+		glUniformMatrix4fv(mIndex, 1, 0, newvalue);
+	}
+};
+
 class FBufferedUniformPE
 {
 	FVector4PalEntry mBuffer;
@@ -268,6 +284,10 @@ class FShader
 #ifdef NPOT_EMULATION
 	FBufferedUniform2f muNpotEmulation;
 #endif
+
+	FBufferedUniform1i muHeavyProbeSampleCount;
+	FUniform4x4f muHeavyProbeSampleColors;
+	FUniform4x4f muHeavyProbeSampleDirs;
 
 	int lights_index;
 	int modelmatrix_index;

@@ -518,6 +518,7 @@ public:
 		th->Alpha = -1;
 		th->Health = 1;
 		th->FloatbobPhase = -1;
+		th->HeavyProbeIndex = -1;
 		sc.MustGetToken('{');
 		while (!sc.CheckToken('}'))
 		{
