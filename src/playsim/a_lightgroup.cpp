@@ -79,6 +79,10 @@ void HeavyProbe::CalculateSampleData(FLevelLocals* level, HeavyProbeSampleData *
 
 			outSamples[i].Color = FVector4(r, g, b, 1) * lightGroup.Intensity;
 		}
+		else
+		{
+			outSamples[i].Color = FVector4(0, 0, 0, 1);
+		}
 
 		outSamples[i].Dir = FVector4(sample.dirX, sample.dirY, sample.dirZ, 1);
 	}
