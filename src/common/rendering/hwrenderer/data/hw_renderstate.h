@@ -209,6 +209,9 @@ struct StreamData
 	FVector4 uDetailParms;
 	FVector4 uNpotEmulation;
 
+	// NL: I'm not happy with how much extra data we need to store here for something that's only used occasionally.
+	//     Ideally this should just be an index into another external array for the HeavyProbe data, 
+	//     but I'm running short on time so this'll have to do.
 	int uHeavyProbeSampleCount, pad1, pad2, pad3;
 	FVector4 uHeavyProbeSampleColors[4];
 	FVector4 uHeavyProbeSampleDirs[4];
