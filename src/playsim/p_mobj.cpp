@@ -397,6 +397,7 @@ void AActor::Serialize(FSerializer &arc)
 		A("WorldOffset", WorldOffset)
 		("modelData", modelData)
 		A("LandingSpeed", LandingSpeed)
+		A("HeavyProbeIndex", HeavyProbeIndex)
 
 		("unmorphtime", UnmorphTime)
 		("morphflags", MorphFlags)
