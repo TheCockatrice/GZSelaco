@@ -191,7 +191,7 @@ ADD_STAT(vkloader)
 
 		FString out = "";
 		out.AppendFormat(
-			"VRAM: %dMB / %dMB\n"
+			"VRAM: %ldMB / %ldMB\n"
 			"[%d Threads] Queued: %3.3d - %3.3d Out: %3.3d  Col: %d\nMax: %3.3d Max Sec: %3.3d Tot: %d\n"
 			"Models: %d\n"
 			"Min: %.3fms  FG: %.3fms\n"
@@ -299,7 +299,7 @@ static int TempUploadTexture(VkCommandBufferManager *cmd, VkHardwareTexture *tex
 
 		assert(indexed == false);
 
-		for (uint32_t x = 0; x < numMipLevels && mipCnt < maxMips; x++) {
+		for (int x = 0; x < (int)numMipLevels && mipCnt < maxMips; x++) {
 			if (mipSize == 0 || totalSize - dataPos < mipSize)
 				break;
 
