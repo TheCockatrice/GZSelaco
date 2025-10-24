@@ -1416,7 +1416,8 @@ enum ELevelFlags
 	LEVEL3_LIGHTCREATED			= 0x00080000,	// a light had been created in the last frame
 	LEVEL3_NOFOGOFWAR			= 0x00100000,	// disables effect of r_radarclipper CVAR on this map
 	LEVEL3_RAINYMAP				= 0x00200000,	// @Cockatrice - Indicates map should draw rain effects under F_SKY
-	LEVEL3_SAFEROOM				= 0x00400000	// @Cockatrice - Indicates a saferoom is in this map, available for fast travel
+	LEVEL3_SAFEROOM				= 0x00400000,	// @Cockatrice - Indicates a saferoom is in this map, available for fast travel
+	LEVEL3_WINDYMAP				= 0x00800000	// @Cocaktrice - Wind effects under F_SKY
 };
 
 // [RH] Compatibility flags.
