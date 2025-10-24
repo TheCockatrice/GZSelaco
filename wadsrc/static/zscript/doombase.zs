@@ -482,6 +482,7 @@ struct LevelLocals native
 	native readonly bool nomonsters;
 	native readonly bool allowrespawn;
 	native readonly bool rainymap;
+	native readonly bool windymap;
 	native readonly bool saferoom;
 	deprecated("3.8", "Use Level.isFrozen() instead") native bool frozen;
 	native readonly bool infinite_flight;
