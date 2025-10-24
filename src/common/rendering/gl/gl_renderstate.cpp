@@ -128,7 +128,6 @@ bool FGLRenderState::ApplyShader()
 	activeShader->muTextureMode.Set(GetTextureModeAndFlags(mTempTM));
 	activeShader->muLightParms.Set(mLightParms);
 	activeShader->muFogColor.Set(mStreamData.uFogColor);
-	activeShader->muSunDirection.Set(&mStreamData.uSunDirection.X);
 	activeShader->muObjectColor.Set(mStreamData.uObjectColor);
 	activeShader->muDynLightColor.Set(&mStreamData.uDynLightColor.X);
 	activeShader->muLightProbeColor.Set(&mStreamData.uLightProbeColor.X);
@@ -147,6 +146,13 @@ bool FGLRenderState::ApplyShader()
 #ifdef NPOT_EMULATION
 	activeShader->muNpotEmulation.Set(&mStreamData.uNpotEmulation.X);
 #endif
+
+	activeShader->muHeavyProbeSampleCount.Set(mStreamData.uHeavyProbeSampleCount);
+	if (mStreamData.uHeavyProbeSampleCount > 0)
+	{
+		activeShader->muHeavyProbeSampleColors.Set(&mStreamData.uHeavyProbeSampleColors[0].X);
+		activeShader->muHeavyProbeSampleDirs.Set(&mStreamData.uHeavyProbeSampleDirs[0].X);
+	}
 
 	if (mGlowEnabled || activeShader->currentglowstate)
 	{

@@ -465,6 +465,7 @@ void hw_GetDynModelLight(AActor *self, FDynLightData &modellightdata, double tic
 LightProbe* FindLightProbe(FLevelLocals* level, float x, float y, float z, float floorz = -FLT_MAX);
 bool TryGetLightProbeColor(FLevelLocals* level, AActor* actor, FVector3& out);
 bool TryGetLightProbeColor(FLevelLocals* level, float x, float y, float z, FVector3& out, float floorz = -FLT_MAX);
+void SetHeavyProbe(FRenderState& state, FLevelLocals* level, AActor* actor);
 
 extern const float LARGE_VALUE;
 

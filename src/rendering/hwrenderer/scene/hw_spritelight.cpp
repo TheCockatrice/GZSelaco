@@ -38,8 +38,10 @@
 #include "hwrenderer/scene/hw_drawstructs.h"
 #include "models.h"
 #include <cmath>	// needed for std::floor on mac
+#include "hw_renderstate.h"
 
 EXTERN_CVAR(Bool, lm_lightprobes);
+EXTERN_CVAR(Bool, lm_heavyprobes);
 
 template<class T>
 T smoothstep(const T edge0, const T edge1, const T x)
@@ -104,7 +106,7 @@ LightProbe* FindLightProbe(FLevelLocals* level, float x, float y, float z, float
 
 bool TryGetLightProbeColor(FLevelLocals* level, AActor* actor, FVector3& out)
 {
-	if (!actor)
+	if (!actor || (lm_heavyprobes && actor->HeavyProbeIndex >= 0))
 	{
 		return false;
 	}
@@ -124,6 +126,19 @@ bool TryGetLightProbeColor(FLevelLocals* level, float x, float y, float z, FVect
 	else
 	{
 		return false;
+	}
+}
+
+void SetHeavyProbe(FRenderState& state, FLevelLocals* level, AActor* actor)
+{
+	if (lm_heavyprobes && actor->HeavyProbeIndex >= 0 && actor->HeavyProbeIndex < level->HeavyProbes.size())
+	{
+		HeavyProbe& heavyProbe = level->HeavyProbes[actor->HeavyProbeIndex];
+
+		HeavyProbeSampleData samples[4];
+		heavyProbe.CalculateSampleData(level, samples);
+		
+		state.SetHeavyProbe(heavyProbe.numSamples, samples);
 	}
 }
 

@@ -1329,6 +1329,7 @@ void MapLoader::LoadThings (MapData * map)
 		mti[i].Alpha = -1;
 		mti[i].Health = 1;
 		mti[i].FloatbobPhase = -1;
+		mti[i].HeavyProbeIndex = -1;
 
 		mti[i].pos.X = LittleShort(mt->x);
 		mti[i].pos.Y = LittleShort(mt->y);
@@ -1421,6 +1422,7 @@ void MapLoader::LoadThings2 (MapData * map)
 		mti[i].Alpha = -1;
 		mti[i].Health = 1;
 		mti[i].FloatbobPhase = -1;
+		mti[i].HeavyProbeIndex = -1;
 		mti[i].friendlyseeblocks = -1;
 	}
 }
@@ -3370,6 +3372,7 @@ void MapLoader::LoadLightmap(MapData *map)
 {
 	// We have to reset everything as FLevelLocals is recycled between maps
 	Level->LightProbes.Reset();
+	Level->HeavyProbes.Reset();
 	Level->LPCells.Reset();
 	Level->LMTexCoords.Reset();
 	Level->LMSurfaces.Reset();
@@ -3420,7 +3423,7 @@ void MapLoader::LoadLightmap(MapData *map)
 	// The *actual* version number, minus the 'Selaco' identifier
 	version = version & 0x000000FF;
 
-	if (version > 3)
+	if (version > 4)
 	{
 		Printf(PRINT_HIGH, "LoadLightmap: Unsupported lightmap lump version\n");
 		return;
@@ -3436,6 +3439,7 @@ void MapLoader::LoadLightmap(MapData *map)
 	uint32_t numSurfaces = fr.ReadUInt32();
 	uint32_t numTexCoords = fr.ReadUInt32();
 	int32_t numLightProbes = fr.ReadUInt32();
+	int32_t numHeavyProbes = version >= 4 ? fr.ReadUInt32() : 0;
 	uint32_t numSectorInfos = version >= 3 ? fr.ReadUInt32() : 0;
 	uint32_t numSubsectors = fr.ReadUInt32();
 	Level->LPCellSize = fr.ReadInt32();
@@ -3527,6 +3531,36 @@ void MapLoader::LoadLightmap(MapData *map)
 					cell.FirstProbe = &p;
 				cell.NumProbes++;
 			}
+		}
+	}
+
+	if (numHeavyProbes > 0)
+	{
+		Level->HeavyProbes.Resize(numHeavyProbes);
+
+		for (int i = 0; i < numHeavyProbes; i++)
+		{
+			HeavyProbe& probe = Level->HeavyProbes[i];
+
+			probe.X = fr.ReadFloat();
+			probe.Y = fr.ReadFloat();
+			probe.Z = fr.ReadFloat();
+			probe.thingID = fr.ReadInt32();
+
+			probe.numSamples = fr.ReadUInt8();
+
+			for (int s = 0; s < 4; s++)
+			{
+				probe.samples[s].R = fr.ReadFloat();
+				probe.samples[s].G = fr.ReadFloat();
+				probe.samples[s].B = fr.ReadFloat();
+				probe.samples[s].dirX = fr.ReadFloat();
+				probe.samples[s].dirY = fr.ReadFloat();
+				probe.samples[s].dirZ = fr.ReadFloat();
+				probe.samples[s].groupID = fr.ReadUInt32();
+			}
+
+			MapThingsConverted[probe.thingID].HeavyProbeIndex = i;
 		}
 	}
 

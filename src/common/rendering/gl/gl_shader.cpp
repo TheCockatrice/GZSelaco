@@ -256,6 +256,9 @@ bool FShader::Load(const char * name, const char * vert_prog_lump, const char * 
 		uniform vec4 uSunDirection;
 		uniform float uDesaturationFactor;
 		uniform float uInterpolationFactor;
+		uniform int uHeavyProbeSampleCount;
+		uniform mat4 uHeavyProbeSampleColors;
+		uniform mat4 uHeavyProbeSampleDirs;
 
 		// Glowing walls stuff
 		uniform vec4 uGlowTopPlane;
@@ -612,6 +615,10 @@ bool FShader::Load(const char * name, const char * vert_prog_lump, const char * 
 	muTextureModulateColor.Init(hShader, "uTextureModulateColor");
 	muTextureBlendColor.Init(hShader, "uTextureBlendColor");
 	muTimer.Init(hShader, "timer");
+
+	muHeavyProbeSampleCount.Init(hShader, "uHeavyProbeSampleCount");
+	muHeavyProbeSampleColors.Init(hShader, "uHeavyProbeSampleColors");
+	muHeavyProbeSampleDirs.Init(hShader, "uHeavyProbeSampleDirs");
 
 	lights_index = glGetUniformLocation(hShader, "lights");
 	modelmatrix_index = glGetUniformLocation(hShader, "ModelMatrix");

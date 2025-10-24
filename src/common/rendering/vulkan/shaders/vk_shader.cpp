@@ -197,7 +197,6 @@ static const char *shaderBindings = R"(
 		vec4 uTextureModulateColor;
 		vec4 uTextureBlendColor;
 		vec4 uFogColor;
-		vec4 uSunDirection;
 		float uDesaturationFactor;
 		float uInterpolationFactor;
 		float timer; // timer data for material shaders
@@ -218,7 +217,10 @@ static const char *shaderBindings = R"(
 
 		vec4 uDetailParms;
 		vec4 uNpotEmulation;
-		vec4 padding1, padding2, padding3;
+
+		int uHeavyProbeSampleCount, pad1, pad2, pad3;
+		mat4 uHeavyProbeSampleColors;
+		mat4 uHeavyProbeSampleDirs;
 	};
 
 	layout(set = 1, binding = 2, std140) uniform StreamUBO {
@@ -308,7 +310,6 @@ static const char *shaderBindings = R"(
 	#define uTextureModulateColor data[uDataIndex].uTextureModulateColor
 	#define uTextureAddColor data[uDataIndex].uTextureAddColor
 	#define uFogColor data[uDataIndex].uFogColor
-	#define uSunDirection data[uDataIndex].uSunDirection
 	#define uDesaturationFactor data[uDataIndex].uDesaturationFactor
 	#define uInterpolationFactor data[uDataIndex].uInterpolationFactor
 	#define timer data[uDataIndex].timer
@@ -325,6 +326,9 @@ static const char *shaderBindings = R"(
 	#define uSplitBottomPlane data[uDataIndex].uSplitBottomPlane
 	#define uDetailParms data[uDataIndex].uDetailParms
 	#define uNpotEmulation data[uDataIndex].uNpotEmulation
+	#define uHeavyProbeSampleCount data[uDataIndex].uHeavyProbeSampleCount
+	#define uHeavyProbeSampleColors data[uDataIndex].uHeavyProbeSampleColors
+	#define uHeavyProbeSampleDirs data[uDataIndex].uHeavyProbeSampleDirs
 
 	#define SUPPORTS_SHADOWMAPS
 	#define VULKAN_COORDINATE_SYSTEM

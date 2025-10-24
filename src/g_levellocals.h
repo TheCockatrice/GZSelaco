@@ -476,6 +476,7 @@ public:
 	TArray<uint8_t> LMMasterTextureData;
 	TArray<IVector2> LMMasterTextureActualSizes;
 	TArray<LightProbe> LightProbes;
+	TArray<HeavyProbe> HeavyProbes;
 	TArray<FGameTexture*> Lightmaps;
 	TArray<MasterLightmapInfo> MasterLightmaps;
 	TArray<LMSectorInfo> LMSectorInfos;

@@ -13,6 +13,7 @@
 #include <utility>
 
 CVAR(Bool, lm_lightprobes, true, 0);
+CVAR(Bool, lm_heavyprobes, true, 0);
 CVAR(Bool, lm_dynamiclightmap, true, 0);
 CVAR(Int, lm_maxlightgroups, -1, 0);
 CVAR(Bool, lm_masterlightmaps, true, 0);
@@ -60,6 +61,31 @@ FVector3 LightProbe::CalculateColor(FLevelLocals* level) const
 	}
 
 	return result;
+}
+
+void HeavyProbe::CalculateSampleData(FLevelLocals* level, HeavyProbeSampleData *outSamples)
+{
+	for (int i = 0; i < numSamples; i++)
+	{
+		const HeavyProbe::Sample& sample = samples[i];
+
+		const LightGroupData& lightGroup = level->LightGroups[sample.groupID];
+
+		if (lightGroup.Enabled || sample.groupID == 0)
+		{
+			float r = sample.R * lightGroup.TintColor.r;
+			float g = sample.G * lightGroup.TintColor.g;
+			float b = sample.B * lightGroup.TintColor.b;
+
+			outSamples[i].Color = FVector4(r, g, b, 1) * lightGroup.Intensity;
+		}
+		else
+		{
+			outSamples[i].Color = FVector4(0, 0, 0, 1);
+		}
+
+		outSamples[i].Dir = FVector4(sample.dirX, sample.dirY, sample.dirZ, 1);
+	}
 }
 
 //==========================================================================
