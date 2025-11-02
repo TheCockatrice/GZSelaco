@@ -449,6 +449,7 @@ enum ActorFlag9
 	MF9_MVISBLOCKED			= 0x20000000,	// Monster(only) sight checks to actor always fail 				(@Cockatrice - Moved from MF8 during merge to prevent conflicts)
 	MF9_ONLYSLAMSOLID		= 0x40000000,		// [B] Things with skullfly will ignore non-solid Actors.	(@Cockatrice - Moved from MF8 during merge to prevent conflicts)
 	MF9_BLOCKLOS			= 0x80000000,	// @Cockatrice - Block LOF when calling CHECKLOF if 
+	MF9_MASTERLIGHTPROBES   = 0x01000000,	// @Cockatrice - When calculating lightprobes, use the master's position instead of the actor position
 };
 
 // --- mobj.renderflags ---
