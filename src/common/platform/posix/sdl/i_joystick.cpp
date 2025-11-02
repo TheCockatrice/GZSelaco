@@ -469,7 +469,13 @@ public:
 						axes[Axes[i].GameAxis] -= float(Axes[i].Value * Axes[i].Multiplier);
 					}
 					else {
-						axes[Axes[i].GameAxis] -= float(Axes[i].Value * Multiplier * Axes[i].Multiplier);
+						float val = float(Axes[i].Value * Multiplier * Axes[i].Multiplier);
+						
+						// @Cockatrice - Add global invert multiplier for look only
+						if (joy_invert_look && Axes[i].GameAxis == JOYAXIS_Pitch)
+							val *= -1.0f;
+						
+						axes[Axes[i].GameAxis] -= val;
 					}
 				}
 			}
