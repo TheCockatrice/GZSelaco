@@ -35,21 +35,50 @@ ADD_STAT(particles)
 	int64_t t = I_msTime();
 	if (t - lasttime > 250)
 	{
+		struct DefinitionCountInfo
+		{
+			DParticleDefinition* definition;
+			int count;
+		};
+
+		TArray<DefinitionCountInfo> countInfos;
+		TMap<DParticleDefinition*, int> definitionIndices;
+
 		particlelevelpool_t* pool = &level.DefinedParticlePool;
 
-		int count = 0;
+		int totalcount = 0;
 		if (pool)
 		{
 			int it = pool->ActiveParticles;
 			while (it != NO_PARTICLE)
 			{
-				count++;
-				it = pool->Particles[it].tnext;
+				totalcount++;
+				particledata_t* particle = &pool->Particles[it];
+				
+				if (auto node = definitionIndices.CheckKey(particle->definition))
+				{
+					countInfos[*node].count++;
+				}
+				else
+				{
+					definitionIndices.InsertNew(particle->definition) = (int)countInfos.size();
+					countInfos.push_back({ particle->definition, 1 });
+				}
+				
+				it = particle->tnext;
 			}
 		}
 
+		std::sort(countInfos.begin(), countInfos.end(), [](const DefinitionCountInfo& l, const DefinitionCountInfo& r) { return l.count < r.count; });
+
 		buff.Truncate(0);
-		buff.AppendFormat("Particles Active=%d", count);
+
+		for (const DefinitionCountInfo& it : countInfos)
+		{
+			buff.AppendFormat("%s = %d\n", it.definition->GetClass()->TypeName.GetChars(), it.count);
+		}
+
+		buff.AppendFormat("Total Particles Active=%d", totalcount);
 	}
 
 	return buff;
