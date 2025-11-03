@@ -9,6 +9,7 @@
 #include "texturemanager.h"
 #include "d_player.h"
 #include "actorinlines.h"
+#include "i_time.h"
 
 // NL: This is a helper to make sure that the particles are all linked correctly.
 //     If something breaks the chain, it can cause particles to stop updating and spawning
@@ -26,6 +27,33 @@ static int PARTICLE_COUNT = 0;
 
 const float DParticleDefinition::INVALID = -99999;
 const float DParticleDefinition::BOUNCE_SOUND_ATTENUATION = 1.5f;
+
+ADD_STAT(particles)
+{
+	static FString buff;
+	static int64_t lasttime = 0;
+	int64_t t = I_msTime();
+	if (t - lasttime > 250)
+	{
+		particlelevelpool_t* pool = &level.DefinedParticlePool;
+
+		int count = 0;
+		if (pool)
+		{
+			int it = pool->ActiveParticles;
+			while (it != NO_PARTICLE)
+			{
+				count++;
+				it = pool->Particles[it].tnext;
+			}
+		}
+
+		buff.Truncate(0);
+		buff.AppendFormat("Particles Active=%d", count);
+	}
+
+	return buff;
+}
 
 DEFINE_FIELD_X(ParticleData, particledata_t, master);
 DEFINE_FIELD_X(ParticleData, particledata_t, renderStyle);
@@ -878,7 +906,7 @@ void particledata_t::UpdateDrift()
 	vel *= definition->DriftSlowdown;
 
 	// Simulate chaotic directional changes
-	driftTime += definition->DriftDirectionSpeed;
+	driftTime += (int16_t)definition->DriftDirectionSpeed;
 
 	float pitchOscillation = dcos(driftTime + randomFactor) * ParticleRandom(-definition->DriftOscillationSpeed, definition->DriftOscillationSpeed);
 	float angleOscillation = dsin(driftTime + randomFactor) * ParticleRandom(-definition->DriftOscillationSpeed, definition->DriftOscillationSpeed); // Smaller random waves
