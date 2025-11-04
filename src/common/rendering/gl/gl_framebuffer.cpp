@@ -820,6 +820,25 @@ OpenGLFrameBuffer::~OpenGLFrameBuffer()
 // Initializes the GL renderer
 //
 //==========================================================================
+static const bool glIsArc() {
+	const char* vendor = (const char*)glGetString(GL_VENDOR);
+	const char* renderer = (const char*)glGetString(GL_RENDERER);
+	if (!vendor || !renderer) return false;
+
+	FString v(vendor);
+	FString r(renderer);
+	v.ToLower();
+	r.ToLower();
+
+	if (v.IndexOf("intel") < 0)
+		return false;
+
+	if (r.IndexOf("arc") >= 0)
+		return true;
+
+	return false;
+}
+
 
 void OpenGLFrameBuffer::InitializeState()
 {
@@ -844,11 +863,15 @@ void OpenGLFrameBuffer::InitializeState()
 	uniformblockalignment = gl.uniformblockalignment;
 	maxuniformblock = gl.maxuniformblock;
 	vendorstring = gl.vendorstring;
+	isArc = glIsArc();
 
 	if (first)
 	{
 		first=false;
 		gl_PrintStartupLog();
+		if (isArc) {
+			Printf(TEXTCOLOR_YELLOW"ARC GPU DETECTED\n");
+		}
 	}
 
 	glDepthFunc(GL_LESS);

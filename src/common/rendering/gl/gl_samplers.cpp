@@ -49,8 +49,10 @@ namespace OpenGLRenderer
 extern TexFilter_s TexFilter[];
 
 
-FSamplerManager::FSamplerManager()
+FSamplerManager::FSamplerManager(bool isArc)
 {
+	this->isArc = isArc;
+
 	glGenSamplers(NUMSAMPLERS, mSamplers);
 
 	glSamplerParameteri(mSamplers[CLAMP_X], GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -137,7 +139,7 @@ void FSamplerManager::SetTextureFilterMode()
 	{
 		glSamplerParameteri(mSamplers[i], GL_TEXTURE_MIN_FILTER, TexFilter[filter].minfilter);
 		glSamplerParameteri(mSamplers[i], GL_TEXTURE_MAG_FILTER, TexFilter[filter].magfilter);
-		glSamplerParameterf(mSamplers[i], GL_TEXTURE_MAX_ANISOTROPY_EXT, filter > 0? gl_texture_filter_anisotropic : 1.0);
+		glSamplerParameterf(mSamplers[i], GL_TEXTURE_MAX_ANISOTROPY_EXT, filter > 0 && (!isArc || TexFilter[filter].magfilter != GL_NEAREST) ? gl_texture_filter_anisotropic : 1.0);
 	}
 	glSamplerParameteri(mSamplers[CLAMP_XY_NOMIP], GL_TEXTURE_MIN_FILTER, TexFilter[filter].magfilter);
 	glSamplerParameteri(mSamplers[CLAMP_XY_NOMIP], GL_TEXTURE_MAG_FILTER, TexFilter[filter].magfilter);
