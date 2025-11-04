@@ -9,6 +9,7 @@
 #include "texturemanager.h"
 #include "d_player.h"
 #include "actorinlines.h"
+#include "i_time.h"
 
 // NL: This is a helper to make sure that the particles are all linked correctly.
 //     If something breaks the chain, it can cause particles to stop updating and spawning
@@ -26,6 +27,62 @@ static int PARTICLE_COUNT = 0;
 
 const float DParticleDefinition::INVALID = -99999;
 const float DParticleDefinition::BOUNCE_SOUND_ATTENUATION = 1.5f;
+
+ADD_STAT(particles)
+{
+	static FString buff;
+	static int64_t lasttime = 0;
+	int64_t t = I_msTime();
+	if (t - lasttime > 250)
+	{
+		struct DefinitionCountInfo
+		{
+			DParticleDefinition* definition;
+			int count;
+		};
+
+		TArray<DefinitionCountInfo> countInfos;
+		TMap<DParticleDefinition*, int> definitionIndices;
+
+		particlelevelpool_t* pool = &level.DefinedParticlePool;
+
+		int totalcount = 0;
+		if (pool)
+		{
+			int it = pool->ActiveParticles;
+			while (it != NO_PARTICLE)
+			{
+				totalcount++;
+				particledata_t* particle = &pool->Particles[it];
+				
+				if (auto node = definitionIndices.CheckKey(particle->definition))
+				{
+					countInfos[*node].count++;
+				}
+				else
+				{
+					definitionIndices.InsertNew(particle->definition) = (int)countInfos.size();
+					countInfos.push_back({ particle->definition, 1 });
+				}
+				
+				it = particle->tnext;
+			}
+		}
+
+		std::sort(countInfos.begin(), countInfos.end(), [](const DefinitionCountInfo& l, const DefinitionCountInfo& r) { return l.count < r.count; });
+
+		buff.Truncate(0);
+
+		for (const DefinitionCountInfo& it : countInfos)
+		{
+			buff.AppendFormat("%s = %d\n", it.definition->GetClass()->TypeName.GetChars(), it.count);
+		}
+
+		buff.AppendFormat("Total Particles Active=%d", totalcount);
+	}
+
+	return buff;
+}
 
 DEFINE_FIELD_X(ParticleData, particledata_t, master);
 DEFINE_FIELD_X(ParticleData, particledata_t, renderStyle);
@@ -878,7 +935,7 @@ void particledata_t::UpdateDrift()
 	vel *= definition->DriftSlowdown;
 
 	// Simulate chaotic directional changes
-	driftTime += definition->DriftDirectionSpeed;
+	driftTime += (int16_t)definition->DriftDirectionSpeed;
 
 	float pitchOscillation = dcos(driftTime + randomFactor) * ParticleRandom(-definition->DriftOscillationSpeed, definition->DriftOscillationSpeed);
 	float angleOscillation = dsin(driftTime + randomFactor) * ParticleRandom(-definition->DriftOscillationSpeed, definition->DriftOscillationSpeed); // Smaller random waves
