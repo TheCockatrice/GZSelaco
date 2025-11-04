@@ -226,6 +226,8 @@ public:
 
 	int camtexcount = 0;
 
+	bool isIntelArc() const { return isArc; }
+
 private:
 	struct QueuedPatch {
 		FGameTexture* tex;
@@ -244,6 +246,8 @@ private:
 	std::unique_ptr<GLModelLoadThread> modelThread;						// Loads models, always 1 thread
 
 	double fgTotalTime = 0, fgTotalCount = 0, fgMin = 0, fgMax = 0;		// Foreground integration time stats
+
+	bool isArc;															// @Cockatrice: Do some special fixes for ARC
 };
 
 }
