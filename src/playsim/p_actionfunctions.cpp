@@ -1757,7 +1757,7 @@ DEFINE_ACTION_FUNCTION(AActor, A_SpawnDefinedParticle)
 		return 0;
 	}
 
-	if (DParticleDefinition* definition = *self->Level->ParticleDefinitionsByType.CheckKey(definitionClass->TypeName.GetIndex()))
+	if (DParticleDefinition* definition = dynamic_cast<DParticleDefinition*>(definitionClass->LevelInstance))
 	{
 		if (!(flags & DPF_ABSOLUTEANGLE)) angle += self->Angles.Yaw;
 		double s = angle.Sin();
@@ -1859,7 +1859,7 @@ particledata_t* A_SpawnDefinedParticleProjectile(AActor* self, PClass* definitio
 		return nullptr;
 	}
 
-	DParticleDefinition* definition = *self->Level->ParticleDefinitionsByType.CheckKey(definitionClass->TypeName.GetIndex());
+	DParticleDefinition* definition = dynamic_cast<DParticleDefinition*>(definitionClass->LevelInstance);
 	if (!definition)
 	{
 		return nullptr;

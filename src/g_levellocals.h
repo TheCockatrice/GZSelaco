@@ -699,6 +699,7 @@ public:
 
 	particlelevelpool_t				DefinedParticlePool;
 	TArray<uint16_t>				DefinedParticlesInSubsec;
+	TArray<DParticleDefinition*>	ParticleDefinitions;
 	TMap<int, DParticleDefinition*>	ParticleDefinitionsByType;
 
 	TArray<DVector2>	Scrolls;		// NULL if no DScrollers in this level

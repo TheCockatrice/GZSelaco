@@ -301,7 +301,7 @@ DEFINE_ACTION_FUNCTION(DParticleDefinition, SpawnParticle)
 		return 0;
 	}
 
-	if (DParticleDefinition* definition = *currentVMLevel->ParticleDefinitionsByType.CheckKey(definitionClass->TypeName.GetIndex()))
+	if (DParticleDefinition* definition = dynamic_cast<DParticleDefinition*>(definitionClass->LevelInstance))
 	{
 		double bobOffset = 0;
 
@@ -377,7 +377,7 @@ DEFINE_ACTION_FUNCTION(DParticleDefinition, EmitNative)
 		return 0;
 	}
 
-	if (DParticleDefinition* definition = *currentVMLevel->ParticleDefinitionsByType.CheckKey(definitionClass->TypeName.GetIndex()))
+	if (DParticleDefinition* definition = dynamic_cast<DParticleDefinition*>(definitionClass->LevelInstance))
 	{
 		DParticleDefinition_Emit(definition, master, chance, numTries, angle, pitch, speed, offsetX, offsetY, offsetZ, velocityX, velocityY, velocityZ, flags, scaleBoost, particleSpawnOffsets, particleLifetimeModifier, additionalAngleScale, additionalAngleChance);
 	}
@@ -1631,12 +1631,14 @@ void P_InitParticleDefinitions(FLevelLocals* Level)
 		if (cls != baseClass && cls->IsDescendantOf(baseClass))
 		{
 			DParticleDefinition* definition = (DParticleDefinition*)cls->CreateNew();
+			definition->GetClass()->LevelInstance = definition;
 			definition->Level = Level;
 			definition->cvarParticleIntensity = FindCVar("r_particleIntensity", nullptr);
 			definition->cvarParticleLifespan = FindCVar("r_particlelifespan", nullptr);
 			definition->cvarBloodQuality = FindCVar("r_bloodquality", nullptr);
 			definition->CallInit();
 
+			Level->ParticleDefinitions.Push(definition);
 			Level->ParticleDefinitionsByType.Insert(cls->TypeName.GetIndex(), definition);
 		}
 	}
@@ -1671,13 +1673,17 @@ void P_ClearAllDefinedParticles(FLevelLocals* Level)
 
 void P_DestroyAllParticleDefinitions(FLevelLocals* Level)
 {
-	TMapIterator<int, DParticleDefinition*> it(Level->ParticleDefinitionsByType);
-	TMap<int, DParticleDefinition*>::Pair* pair;
-	while (it.NextPair(pair))
+	for (auto definition : Level->ParticleDefinitions)
 	{
-		pair->Value->Destroy();
+		if (definition->GetClass()->LevelInstance == definition)
+		{
+			definition->GetClass()->LevelInstance = nullptr;
+		}
+
+		definition->Destroy();
 	}
 
+	Level->ParticleDefinitions.Clear();
 	Level->ParticleDefinitionsByType.Clear();
 	Level->DefinedParticlePool.Particles.Clear();
 }
