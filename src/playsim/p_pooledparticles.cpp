@@ -1848,7 +1848,17 @@ void P_ThinkDefinedParticles(FLevelLocals* Level)
 
 			if (particle->HasFlag(DPF_ATREST))
 			{
-				particle->floorz = (float)particle->restplane->ZatPoint(particle->pos) + 0.1f;
+				if (!particle->restplane)
+				{
+					// This only happens after a load, because we can't store the floor plane
+					particle->subsector = Level->PointInRenderSubsector(particle->pos);
+					particle->restplane = particle->GetFloorPlane();
+				}
+
+				if (particle->restplane)
+				{
+					particle->floorz = (float)particle->restplane->ZatPoint(particle->pos) + 0.1f;
+				}
 
 				// We're setting the vel rather than the pos so that we get proper interpolation for moving floors
 				particle->pos.Z += particle->vel.Z;
@@ -2333,22 +2343,28 @@ FSerializer& Serialize(FSerializer& arc, const char* key, particledata_t& p, par
 			{
 				p.definition = nullptr;
 			}
+
+			p.restplane = nullptr;
 		}
 
 		arc ("master", p.master)
 			("renderStyle", p.renderStyle)
 		    ("life", p.life)
 			("startLife", p.startLife)
+			("driftTime", p.driftTime)
 			("prevpos", p.prevpos)
 			("pos", p.pos)
 			("vel", p.vel)
+			("gravity", p.gravity)
 			("alpha", p.alpha)
 			("alphastep", p.alphaStep)
+			("fadeAlpha", p.fadeAlpha)
 			("scale", p.scale)
 			("scalestep", p.scaleStep)
 			("startScale", p.startScale)
-			("pitch", p.angle)
-			("pitchstep", p.angleStep)
+			("fadeScale", p.fadeScale)
+			("angle", p.angle)
+			("angleStep", p.angleStep)
 			("pitch", p.pitch)
 			("pitchstep", p.pitchStep)
 			("roll", p.roll)
@@ -2359,9 +2375,11 @@ FSerializer& Serialize(FSerializer& arc, const char* key, particledata_t& p, par
 			("ceilingz", p.ceilingz)
 			("color", p.color)
 			("texture", p.texture)
+			("lastTexture", p.lastTexture)
 			("animframe", p.animFrame)
 			("animTick", p.animTick)
 			("invalidateTicks", p.invalidateTicks)
+			("sleepFor", p.sleepFor)
 			("flags", p.flags)
 			("user1", p.user1)
 			("user2", p.user2)
