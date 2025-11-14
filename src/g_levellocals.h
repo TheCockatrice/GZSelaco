@@ -467,6 +467,7 @@ public:
 	TArray<FLinePortal> linePortals;
 
 	int LMVersion = -1;
+	bool LMInvalidBake = false;
 	bool LMNeedsRebuild = true;
 	uint32_t LMRenderFrame = 0;
 	TArray<LightmapSurface> LMSurfaces;

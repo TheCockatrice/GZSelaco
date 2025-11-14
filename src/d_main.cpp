@@ -120,6 +120,7 @@
 #include "shiftstate.h"
 #include "s_loader.h"
 #include "fs_findfile.h"
+#include "a_lightgroup.h"
 
 #include "statdb.h"
 
@@ -897,6 +898,7 @@ static void DrawOverlays()
 	C_DrawConsole ();
 	M_Drawer ();
 	DrawRateStuff();
+	DrawLightmapStatus();
 	if (!hud_toggled)
 		FStat::PrintStat (twod);
 }

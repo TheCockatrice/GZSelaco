@@ -670,3 +670,17 @@ ADD_STAT(lightmaps)
 
 	return buff;
 }
+
+void DrawLightmapStatus()
+{
+	if (level.LMInvalidBake)
+	{
+		const char* str = "LIGHTMAPS NEED REBUILD";
+		double width = CurrentConsoleFont->StringWidth(str);
+
+		double xPos = (twod->GetWidth() - width) / 2.0;
+		double yPos = 10;
+
+		DrawText(twod, CurrentConsoleFont, CR_RED, xPos, yPos, str, TAG_DONE);
+	}
+}

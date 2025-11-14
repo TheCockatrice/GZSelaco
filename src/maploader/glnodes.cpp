@@ -820,6 +820,7 @@ bool MapLoader::LoadGLNodes(MapData * map)
 		const int idcheck1b = MAKE_ID('X','G','L','N');
 		const int idcheck2b = MAKE_ID('X','G','L','2');
 		const int idcheck3b = MAKE_ID('X','G','L','3');
+		const int idchecksum = MAKE_ID('C', 'H', 'K', 'S');
 		int id = 0;
 
 		auto &file = map->Reader(ML_GLZNODES);
@@ -827,6 +828,24 @@ bool MapLoader::LoadGLNodes(MapData * map)
 		if (id == idcheck1a || id == idcheck2a || id == idcheck3a ||
 			id == idcheck1b || id == idcheck2b || id == idcheck3b)
 		{
+			ptrdiff_t originalPos = file.Tell();
+
+			// Check if we have a checksum header
+			int checksumheader = 0;
+			file.Read(&checksumheader, 4);
+			if (checksumheader == idchecksum)
+			{
+				for (int i = 0; i < 16; i++)
+				{
+					NodeChecksum[i] = file.ReadUInt8();
+				}
+			}
+			else
+			{
+				// otherwise just go back to where we were
+				file.Seek(originalPos, FileSys::FileReader::SeekSet);
+			}
+
 			try
 			{
 				Level->subsectors.Clear();

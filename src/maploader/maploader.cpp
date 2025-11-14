@@ -3070,7 +3070,7 @@ void MapLoader::LoadLevel(MapData *map, const char *lumpname, int position)
 	{
 		// Check for compressed nodes first, then uncompressed nodes
 		FileReader *fr = nullptr;
-		uint32_t id = MAKE_ID('X', 'x', 'X', 'x'), idcheck = 0, idcheck2 = 0, idcheck3 = 0, idcheck4 = 0, idcheck5 = 0, idcheck6 = 0;
+		uint32_t id = MAKE_ID('X', 'x', 'X', 'x'), idcheck = 0, idcheck2 = 0, idcheck3 = 0, idcheck4 = 0, idcheck5 = 0, idcheck6 = 0, idchecksum = MAKE_ID('C', 'H', 'K', 'S');
 
 		if (map->Size(ML_ZNODES) != 0)
 		{
@@ -3094,6 +3094,24 @@ void MapLoader::LoadLevel(MapData *map, const char *lumpname, int position)
 		if (fr != nullptr && fr->isOpen()) fr->Read(&id, 4);
 		if (id != 0 && (id == idcheck || id == idcheck2 || id == idcheck3 || id == idcheck4 || id == idcheck5 || id == idcheck6))
 		{
+			ptrdiff_t originalPos = fr->Tell();
+
+			// Check if we have a checksum header
+			int checksumheader = 0;
+			fr->Read(&checksumheader, 4);
+			if (checksumheader == idchecksum)
+			{
+				for (int i = 0; i < 16; i++)
+				{
+					NodeChecksum[i] = fr->ReadUInt8();
+				}
+			}
+			else
+			{
+				// otherwise just go back to where we were
+				fr->Seek(originalPos, FileSys::FileReader::SeekSet);
+			}
+
 			NodesLoaded = LoadExtendedNodes(*fr, id);
 		}
 		else if (!map->isText)	// regular nodes are not supported for text maps
@@ -3423,12 +3441,48 @@ void MapLoader::LoadLightmap(MapData *map)
 	// The *actual* version number, minus the 'Selaco' identifier
 	version = version & 0x000000FF;
 
-	if (version > 4)
+	if (version > 5)
 	{
 		Printf(PRINT_HIGH, "LoadLightmap: Unsupported lightmap lump version\n");
 		return;
 	}
 
+	if (version >= 5)
+	{
+		uint8_t lmChecksum[16];
+		for (int i = 0; i < 16; i++)
+		{
+			lmChecksum[i] = fr.ReadUInt8();
+		}
+
+		if (memcmp(lmChecksum, NodeChecksum, 16) != 0 && !Args->CheckParm("-ignorelmchecksum"))
+		{
+			Printf(TEXTCOLOR_RED "Lightmap checksum mismatch! Lightmaps need to be rebaked.\n");
+			Printf("\tExpected: 0x");
+			for (int i = 0; i < 16; i++)
+			{
+				Printf("%02X", (int)lmChecksum[i]);
+			}
+			Printf("\n\tFound:    0x");
+			for (int i = 0; i < 16; i++)
+			{
+				Printf("%02X", (int)NodeChecksum[i]);
+			}
+			Printf("\n");
+
+			Level->LMInvalidBake = true;
+
+			// Make everything in the map fullbright
+			for (sector_t& sector : Level->sectors)
+			{
+				sector.lightlevel = 255;
+			}
+
+			return;
+		}
+	}
+
+	Level->LMInvalidBake = false;
 	Level->LMVersion = version;
 
 	IVector2 textureSize;

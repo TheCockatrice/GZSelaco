@@ -126,6 +126,7 @@ private:
 	TMap<int, EDLinedef> EDLines;
 	TMap<int, EDSector> EDSectors;
 	TMap<int, EDMapthing> EDThings;
+	uint8_t NodeChecksum[16];
 
 	// Polyobject init
 	TArray<int32_t> KnownPolySides;
