@@ -675,12 +675,17 @@ void DrawLightmapStatus()
 {
 	if (level.LMInvalidBake)
 	{
-		const char* str = "LIGHTMAPS NEED REBUILD";
+		int textScale = max(active_con_scale(twod), 2);
+
+		const char* str = "LIGHTMAPS NEED TO BE REBAKED";
 		double width = CurrentConsoleFont->StringWidth(str);
 
-		double xPos = (twod->GetWidth() - width) / 2.0;
-		double yPos = 10;
+		double xPos = (twod->GetWidth() / (double)textScale - width) / 2.0;
+		double yPos = 10 / (double)textScale;
 
-		DrawText(twod, CurrentConsoleFont, CR_RED, xPos, yPos, str, TAG_DONE);
+		DrawText(twod, CurrentConsoleFont, CR_RED, xPos, yPos, str, 
+			DTA_VirtualWidth, twod->GetWidth() / textScale,
+			DTA_VirtualHeight, twod->GetHeight() / textScale,
+			DTA_KeepRatio, true, TAG_DONE);
 	}
 }
