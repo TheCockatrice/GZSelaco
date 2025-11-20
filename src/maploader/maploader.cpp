@@ -3476,6 +3476,7 @@ void MapLoader::LoadLightmap(MapData *map)
 			for (sector_t& sector : Level->sectors)
 			{
 				sector.lightlevel = 255;
+				sector.Colormap.LightColor = PalEntry(255, 255, 255);
 			}
 
 			return;
