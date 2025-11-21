@@ -204,7 +204,7 @@ public:
 	float BounceFudge = 0.15f;
 	float MinBounceDeflect = -25, MaxBounceDeflect = 25;
 
-	float QualityChanceLow = 0.1f, QualityChanceMed = 0.25f, QualityChanceHigh = 0.6f, QualityChanceUlt = 1, QualityChanceInsane = 9999;
+	float QualityChanceLow = 0.1f, QualityChanceMed = 0.25f, QualityChanceHigh = 0.6f, QualityChanceUlt = 1, QualityChanceInsane = 1.25f;
 	float LifeMultLow = 0.07f, LifeMultMed = 0.1f, LifeMultHigh = 0.3f, LifeMultUlt = 1, LifeMultInsane = 3;
 
 	uint32_t Flags = 
