@@ -87,6 +87,7 @@ struct particledata_t
 	uint8_t renderStyle;						// +1
 	int16_t life;								// +2 
 	int16_t startLife;							// +2 
+	int16_t tics;								// +2
 	int16_t driftTime;							// +2
 	DVector3 prevpos;							// +24
 	DVector3 pos;								// +24
@@ -203,6 +204,8 @@ public:
 	float BounceSoundPitchMin = 0.95f, BounceSoundPitchMax = 1.05f;
 	float BounceFudge = 0.15f;
 	float MinBounceDeflect = -25, MaxBounceDeflect = 25;
+
+	float AlphaFadeInTime = 0;
 
 	float QualityChanceLow = 0.1f, QualityChanceMed = 0.25f, QualityChanceHigh = 0.6f, QualityChanceUlt = 1, QualityChanceInsane = 1.25f;
 	float LifeMultLow = 0.07f, LifeMultMed = 0.1f, LifeMultHigh = 0.3f, LifeMultUlt = 1, LifeMultInsane = 3;

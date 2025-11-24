@@ -191,6 +191,7 @@ DEFINE_FIELD(DParticleDefinition, BounceSoundMinSpeed)
 DEFINE_FIELD(DParticleDefinition, BounceSoundPitchMin) DEFINE_FIELD(DParticleDefinition, BounceSoundPitchMax)
 DEFINE_FIELD(DParticleDefinition, BounceFudge)
 DEFINE_FIELD(DParticleDefinition, MinBounceDeflect) DEFINE_FIELD(DParticleDefinition, MaxBounceDeflect)
+DEFINE_FIELD(DParticleDefinition, AlphaFadeInTime)
 DEFINE_FIELD(DParticleDefinition, QualityChanceLow)
 DEFINE_FIELD(DParticleDefinition, QualityChanceMed)
 DEFINE_FIELD(DParticleDefinition, QualityChanceHigh)
@@ -768,6 +769,7 @@ void particledata_t::Init(FLevelLocals* Level, DVector3 initialPos)
 	master = nullptr;
 	renderStyle = definition->DefaultRenderStyle;
 	startLife = life = 35;
+	tics = 0;
 	pos = prevpos = initialPos;
 	vel = DVector3();
 	gravity = 0;
@@ -1839,6 +1841,8 @@ void P_ThinkDefinedParticles(FLevelLocals* Level)
 			continue;
 		}
 
+		particle->tics++;
+
 		particle->prevpos = particle->pos;
 		float prevFloorZ = particle->floorz;
 
@@ -2351,6 +2355,7 @@ FSerializer& Serialize(FSerializer& arc, const char* key, particledata_t& p, par
 			("renderStyle", p.renderStyle)
 		    ("life", p.life)
 			("startLife", p.startLife)
+			("tics", p.tics)
 			("driftTime", p.driftTime)
 			("prevpos", p.prevpos)
 			("pos", p.pos)

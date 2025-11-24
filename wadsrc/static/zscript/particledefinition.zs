@@ -204,6 +204,8 @@ class ParticleDefinition native play
 	native float BounceFudge;
 	native float MinBounceDeflect, MaxBounceDeflect;
 
+    native float AlphaFadeInTime;
+
     native int Flags;
 
 	native float QualityChanceLow, QualityChanceMed, QualityChanceHigh, QualityChanceUlt, QualityChanceInsane;
