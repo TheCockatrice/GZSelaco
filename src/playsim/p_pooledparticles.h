@@ -77,7 +77,8 @@ enum EParticleEmitterFlags
     PE_ABSOLUTE_SPEED           = 1 << 7,	// Ignore random speed
     PE_ABSOLUTE_VELOCITY        = 1 << 8,	// Velocity is added in absolute coords, ignoring emitter orientation
     PE_NO_INSANE_PARTICLES      = 1 << 9,	// Do not spawn additional particles on INSANE
-    PE_ISBLOOD                  = 1 << 10	// Treat this particle as blood, same as bIsBlood on SelacoParticle
+    PE_ISBLOOD                  = 1 << 10,	// Treat this particle as blood, same as bIsBlood on SelacoParticle
+	PE_IGNORE_DISTANCE			= 1 << 11,	// Do not cull the particle based on distance from camera
 };
 
 struct particledata_t
@@ -206,6 +207,7 @@ public:
 	float MinBounceDeflect = -25, MaxBounceDeflect = 25;
 
 	float AlphaFadeInTime = 0;
+	float MaxEmitDistanceStart = 0, MaxEmitDistanceEnd = 0;
 
 	float QualityChanceLow = 0.1f, QualityChanceMed = 0.25f, QualityChanceHigh = 0.6f, QualityChanceUlt = 1, QualityChanceInsane = 1.25f;
 	float LifeMultLow = 0.07f, LifeMultMed = 0.1f, LifeMultHigh = 0.3f, LifeMultUlt = 1, LifeMultInsane = 3;

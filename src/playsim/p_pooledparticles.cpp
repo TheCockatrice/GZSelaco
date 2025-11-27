@@ -192,6 +192,7 @@ DEFINE_FIELD(DParticleDefinition, BounceSoundPitchMin) DEFINE_FIELD(DParticleDef
 DEFINE_FIELD(DParticleDefinition, BounceFudge)
 DEFINE_FIELD(DParticleDefinition, MinBounceDeflect) DEFINE_FIELD(DParticleDefinition, MaxBounceDeflect)
 DEFINE_FIELD(DParticleDefinition, AlphaFadeInTime)
+DEFINE_FIELD(DParticleDefinition, MaxEmitDistanceStart) DEFINE_FIELD(DParticleDefinition, MaxEmitDistanceEnd)
 DEFINE_FIELD(DParticleDefinition, QualityChanceLow)
 DEFINE_FIELD(DParticleDefinition, QualityChanceMed)
 DEFINE_FIELD(DParticleDefinition, QualityChanceHigh)
@@ -1023,6 +1024,19 @@ void DParticleDefinition::Emit(AActor* master, double chance, int numTries, doub
 				chance *= QualityChanceHigh;
 				chance *= 1.0 - ((std::clamp(distance, 600.0, 1800.0) - 600.0) / 1200.0);
 				break;
+		}
+
+		if (!(flags & PE_IGNORE_DISTANCE) && MaxEmitDistanceEnd > 0.0f && distance > MaxEmitDistanceStart)
+		{
+			double range = MaxEmitDistanceEnd - MaxEmitDistanceStart;
+			if (range > 0)
+			{
+				chance *= 1.0 - std::min(1.0, (distance - MaxEmitDistanceStart) / range);
+			}
+			else
+			{
+				chance = 0.0;
+			}
 		}
 	}
 

@@ -206,6 +206,8 @@ class ParticleDefinition native play
 
     native float AlphaFadeInTime;
 
+    native float MaxEmitDistanceStart, MaxEmitDistanceEnd;
+
     native int Flags;
 
 	native float QualityChanceLow, QualityChanceMed, QualityChanceHigh, QualityChanceUlt, QualityChanceInsane;
@@ -262,6 +264,7 @@ class ParticleDefinition native play
     void BounceSoundPitchRange(float min, float max)        { BounceSoundPitchMin = min; BounceSoundPitchMax = max; }
     void RestorePitch(float min, float max, float speed)    { RestingPitchMin = min; RestingPitchMax = max; RestingPitchSpeed = speed; }
     void RestoreRoll(float min, float max, float speed)     { RestingRollMin = min; RestingRollMax = max; RestingRollSpeed = speed; }
+    void MaxEmitDistance(float start, float end)            { MaxEmitDistanceStart = start; MaxEmitDistanceEnd = end; }
 
     virtual void Init() { }
     virtual void OnCreateParticle(in out ParticleData particle, Actor refActor) { }
