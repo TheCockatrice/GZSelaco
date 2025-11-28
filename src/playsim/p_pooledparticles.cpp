@@ -2187,14 +2187,30 @@ void P_ThinkDefinedParticles(FLevelLocals* Level)
 			}
 		}
 
-		if (particleCount > cullLimit)
-		{
-			definition->CullParticle(particle);
-		}
-
 		particle->ClearFlag(DPF_FIRSTUPDATE);
 
 		particleCount++;
+	}
+
+	// If we've gone over the cull limit, start destroying some old particles
+	if (particleCount > cullLimit && cullLimit < particleLimit)
+	{
+		int delta = cullLimit - particleCount;
+		float fullDelta = float(delta) / float(particleLimit - cullLimit);
+
+		// Randomly destroy some particles, with the number to destroy per frame getting higher the closer we are to the limit
+		int numToCull = ParticleRandom(0, (int)ceilf(fullDelta * delta * 0.25f));
+
+		int i = pool->OldestParticle;
+		while (i != NO_PARTICLE && numToCull > 0)
+		{
+			particledata_t& particle = pool->Particles[i];
+			int particleIndex = i;
+			i = particle.tprev;
+
+			P_DestroyDefinedParticle(Level, particleIndex);
+			numToCull--;
+		}
 	}
 }
 
