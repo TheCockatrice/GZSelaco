@@ -68,6 +68,7 @@ struct ParticleData
     native color        Color;
     native TextureID    Texture;
     native uint8        AnimFrame, AnimTick;
+    native int8         AnimFrameLengthTicks;
     native uint8        InvalidateTicks;
     native uint16       SleepFor;
     native int          Flags;
