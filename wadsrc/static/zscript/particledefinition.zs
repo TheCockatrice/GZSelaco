@@ -312,21 +312,21 @@ class ParticleDefinition native play
     // Particles are removed immediately when going over this number
     static const int particleLimits[] = 
     { 
-        600,    // Low
-        900,    // Med
-        1700,   // High
-        2100,   // Ultra    
-        6000    // Insane
+        1500,   // Low
+        2000,   // Med
+        4000,   // High
+        5000,   // Ultra    
+        10000    // Insane
     };
 
     // Particles start to fade out where possible when going over this number
     static const int cullLimits[] = 
     { 
-        350,    // Low
-        500,    // Med
-        900,    // High
-        1100,   // Ultra   
-        3000    // Insane
+        700,    // Low
+        1000,   // Med
+        1800,   // High
+        2200,   // Ultra   
+        6000    // Insane
     };
 
     static int GetParticleLimit()
