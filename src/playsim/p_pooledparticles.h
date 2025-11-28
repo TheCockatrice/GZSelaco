@@ -107,6 +107,7 @@ struct particledata_t
 	int color;									// +4
 	FTextureID texture, lastTexture;			// +8
 	uint8_t animFrame, animTick;				// +2 
+	int8_t animFrameLengthTicks;				// +1
 	uint8_t invalidateTicks;					// +1
 	uint16_t sleepFor;							// +2
 	uint32_t flags;								// +4 
@@ -208,6 +209,8 @@ public:
 
 	float AlphaFadeInTime = 0;
 	float MaxEmitDistanceStart = 0, MaxEmitDistanceEnd = 0;
+
+	int MinAnimFrameLengthTicks = -1, MaxAnimFrameLengthTicks = -1;
 
 	float QualityChanceLow = 0.1f, QualityChanceMed = 0.25f, QualityChanceHigh = 0.6f, QualityChanceUlt = 1, QualityChanceInsane = 1.25f;
 	float LifeMultLow = 0.07f, LifeMultMed = 0.1f, LifeMultHigh = 0.3f, LifeMultUlt = 1, LifeMultInsane = 3;

@@ -111,6 +111,7 @@ DEFINE_FIELD_X(ParticleData, particledata_t, color);
 DEFINE_FIELD_X(ParticleData, particledata_t, texture);
 DEFINE_FIELD_X(ParticleData, particledata_t, animFrame);
 DEFINE_FIELD_X(ParticleData, particledata_t, animTick);
+DEFINE_FIELD_X(ParticleData, particledata_t, animFrameLengthTicks);
 DEFINE_FIELD_X(ParticleData, particledata_t, invalidateTicks);
 DEFINE_FIELD_X(ParticleData, particledata_t, sleepFor);
 DEFINE_FIELD_X(ParticleData, particledata_t, flags);
@@ -193,6 +194,7 @@ DEFINE_FIELD(DParticleDefinition, BounceFudge)
 DEFINE_FIELD(DParticleDefinition, MinBounceDeflect) DEFINE_FIELD(DParticleDefinition, MaxBounceDeflect)
 DEFINE_FIELD(DParticleDefinition, AlphaFadeInTime)
 DEFINE_FIELD(DParticleDefinition, MaxEmitDistanceStart) DEFINE_FIELD(DParticleDefinition, MaxEmitDistanceEnd)
+DEFINE_FIELD(DParticleDefinition, MinAnimFrameLengthTicks) DEFINE_FIELD(DParticleDefinition, MaxAnimFrameLengthTicks)
 DEFINE_FIELD(DParticleDefinition, QualityChanceLow)
 DEFINE_FIELD(DParticleDefinition, QualityChanceMed)
 DEFINE_FIELD(DParticleDefinition, QualityChanceHigh)
@@ -795,6 +797,7 @@ void particledata_t::Init(FLevelLocals* Level, DVector3 initialPos)
 	color = 0xffffff;
 	animFrame = 0;
 	animTick = 0;
+	animFrameLengthTicks = 0;
 	invalidateTicks = 0;
 	sleepFor = 0;
 	flags = flags | definition->DefaultParticleFlags | DPF_FIRSTUPDATE;
@@ -1916,7 +1919,8 @@ void P_ThinkDefinedParticles(FLevelLocals* Level)
 				// Don't update the frame on the first update, or if the animFrame has been changed during CallThinkParticle
 				if (!particle->HasFlag(DPF_FIRSTUPDATE) && particle->animFrame == prevAnimFrame)
 				{
-					if (++particle->animTick >= animFrame.duration)
+					int8_t duration = particle->animFrameLengthTicks > 0 ? particle->animFrameLengthTicks : animFrame.duration;
+					if (++particle->animTick >= duration)
 					{
 						particle->animTick = 0;
 						particle->animFrame++;
@@ -2234,6 +2238,7 @@ particledata_t* P_SpawnDefinedParticle(FLevelLocals* Level, DParticleDefinition*
 		particle->roll = ParticleRandom(definition->MinRoll, definition->MaxRoll);
 		particle->rollStep = ParticleRandom(definition->MinRollSpeed, definition->MaxRollSpeed);
 		particle->maxBounces = ParticleRandom(definition->MinRandomBounces, definition->MaxRandomBounces);
+		particle->animFrameLengthTicks = ParticleRandom(definition->MinAnimFrameLengthTicks, definition->MaxAnimFrameLengthTicks);
 
 		if (definition->cvarParticleLifespan)
 		{
@@ -2413,6 +2418,7 @@ FSerializer& Serialize(FSerializer& arc, const char* key, particledata_t& p, par
 			("lastTexture", p.lastTexture)
 			("animframe", p.animFrame)
 			("animTick", p.animTick)
+			("animTickModifier", p.animFrameLengthTicks)
 			("invalidateTicks", p.invalidateTicks)
 			("sleepFor", p.sleepFor)
 			("flags", p.flags)

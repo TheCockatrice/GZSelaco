@@ -208,6 +208,8 @@ class ParticleDefinition native play
 
     native float MaxEmitDistanceStart, MaxEmitDistanceEnd;
 
+    native int MinAnimFrameLengthTicks, MaxAnimFrameLengthTicks;
+
     native int Flags;
 
 	native float QualityChanceLow, QualityChanceMed, QualityChanceHigh, QualityChanceUlt, QualityChanceInsane;
@@ -265,6 +267,7 @@ class ParticleDefinition native play
     void RestorePitch(float min, float max, float speed)    { RestingPitchMin = min; RestingPitchMax = max; RestingPitchSpeed = speed; }
     void RestoreRoll(float min, float max, float speed)     { RestingRollMin = min; RestingRollMax = max; RestingRollSpeed = speed; }
     void MaxEmitDistance(float start, float end)            { MaxEmitDistanceStart = start; MaxEmitDistanceEnd = end; }
+    void AnimFrameLengthTicks(int min, int max)             { MinAnimFrameLengthTicks = min; MaxAnimFrameLengthTicks = max; }
 
     virtual void Init() { }
     virtual void OnCreateParticle(in out ParticleData particle, Actor refActor) { }
