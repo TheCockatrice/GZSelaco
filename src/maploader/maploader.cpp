@@ -3285,15 +3285,15 @@ void MapLoader::LoadLevel(MapData *map, const char *lumpname, int position)
 	}
 
 	InitRenderInfo();				// create hardware independent renderer resources for the level. This must be done BEFORE the PolyObj Spawn!!!
+	
 	Level->ClearDynamic3DFloorData();	// CreateVBO must be run on the plain 3D floor data.
-	CreateVBO(screen->mVertexData, Level->sectors);
-
-	screen->InitLightmap(Level->LMMasterTextureSize, Level->LMTextureCount, Level->LMMasterTextureData);
-
-	for (auto &sec : Level->sectors)
+	for (auto& sec : Level->sectors)
 	{
 		P_Recalculate3DFloors(&sec);
 	}
+
+	CreateVBO(screen->mVertexData, Level->sectors);
+	screen->InitLightmap(Level->LMMasterTextureSize, Level->LMTextureCount, Level->LMMasterTextureData);
 
 	SWRenderer->SetColormap(Level);	//The SW renderer needs to do some special setup for the level's default colormap.
 	InitPortalGroups(Level);
