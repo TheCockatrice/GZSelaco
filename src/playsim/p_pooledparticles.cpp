@@ -18,6 +18,8 @@
 //     DO NOT SET THIS TO TRUE UNLESS YOU'RE DIAGNOSING A BUG, IT'S EXPENSIVE!
 #define ENABLE_CONTINUITY_CHECKS false
 
+CVAR(Bool, r_particleHardLimit, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
+
 #if ENABLE_CONTINUITY_CHECKS
 static int PARTICLE_COUNT = 0;
 #endif
@@ -1838,6 +1840,12 @@ void P_ThinkDefinedParticles(FLevelLocals* Level)
 	int particleCount = 0;
 	int particleLimit = DParticleDefinition::GetParticleLimit();
 	int cullLimit = DParticleDefinition::GetParticleCullLimit();
+	
+	// 'Hard limit' treats the soft limit as the hard limit, so particles will be culled as soon as they go over the soft limit
+	if (r_particleHardLimit->ToInt())
+	{
+		particleLimit = cullLimit;
+	}
 
 	if (particleLimit != pool->Particles.Size())
 	{
