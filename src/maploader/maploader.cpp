@@ -3455,7 +3455,7 @@ void MapLoader::LoadLightmap(MapData *map)
 			lmChecksum[i] = fr.ReadUInt8();
 		}
 
-		if (memcmp(lmChecksum, NodeChecksum, 16) != 0 && !Args->CheckParm("-ignorelmchecksum"))
+		if (memcmp(lmChecksum, NodeChecksum, 16) != 0 && Args->CheckParm("-uselmchecksum"))
 		{
 			Printf(TEXTCOLOR_RED "Lightmap checksum mismatch! Lightmaps need to be rebaked.\n");
 			Printf("\tExpected: 0x");
