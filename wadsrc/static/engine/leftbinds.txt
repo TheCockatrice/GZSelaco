@@ -11,6 +11,6 @@ w +use
 mouse2 +altattack
 h usemeds
 a Toggle_Flashlight
-t switchGadget
+t +switchGadget
 v LastWeapon
 mapbind r am_togglefollow
