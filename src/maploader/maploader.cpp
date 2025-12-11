@@ -3097,6 +3097,8 @@ void MapLoader::LoadLevel(MapData *map, const char *lumpname, int position)
 			ptrdiff_t originalPos = fr->Tell();
 
 			// Check if we have a checksum header
+			// NL: NOTE: This code is old! Just keeping here to preserve compatibility with older maps.
+			//           We now get the checksum from the LMCHKSUM lump.
 			int checksumheader = 0;
 			fr->Read(&checksumheader, 4);
 			if (checksumheader == idchecksum)
@@ -3449,6 +3451,15 @@ void MapLoader::LoadLightmap(MapData *map)
 
 	if (version >= 5)
 	{
+		if (map->Size(ML_LMCHKSUM))
+		{
+			FileReader& fr = map->Reader(ML_LMCHKSUM);
+			for (int i = 0; i < 16; i++)
+			{
+				NodeChecksum[i] = fr.ReadUInt8();
+			}
+		}
+
 		uint8_t lmChecksum[16];
 		for (int i = 0; i < 16; i++)
 		{

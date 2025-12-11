@@ -293,6 +293,10 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck, int forceVersion)
 					{
 						index = ML_LIGHTGRP;
 					}
+					else if (!stricmp(lumpname, "LMCHKSUM"))
+					{
+						index = ML_LMCHKSUM;
+					}
 					else if (!stricmp(lumpname, "ENDMAP"))
 					{
 						break;

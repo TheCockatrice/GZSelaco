@@ -64,6 +64,7 @@ enum
 	ML_CONVERSATION,	// Strife dialog (only for TEXTMAP format)
 	ML_LIGHTMAP,		// ZDRay generated lightmap
 	ML_LIGHTGRP,		// ZDRay generated lightgroups
+	ML_LMCHKSUM,		// ZDRay generated nodes checksum
 	ML_MAX,
 
 	// [RH] These are compressed (and extended) nodes. They combine the data from
