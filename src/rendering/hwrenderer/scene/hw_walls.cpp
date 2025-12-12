@@ -1799,7 +1799,7 @@ void HWWall::BuildFFBlock(HWWallDispatcher *di, seg_t * seg, F3DFloor * rover, i
 		lightmap = seg->linedef->sidedef[0]->lightmap;
 
 	if (lightmap)
-		lightmap += 4 + roverIndex;
+		lightmap += 4 + rover->lmindex;
 
 	if (rover->flags&FF_FOG)
 	{

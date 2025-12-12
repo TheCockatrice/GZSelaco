@@ -117,6 +117,7 @@ void P_Add3DFloor(sector_t* sec, sector_t* sec2, line_t* master, int flags, int 
 	
 	//Add the floor
 	ffloor = new F3DFloor;
+	ffloor->lmindex = 0;
 	ffloor->top.copied = ffloor->bottom.copied = false;
 	ffloor->top.model = ffloor->bottom.model = ffloor->model = sec2;
 	ffloor->target = sec;

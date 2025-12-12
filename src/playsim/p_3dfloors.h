@@ -93,6 +93,8 @@ struct F3DFloor
 	int					lastlight;
 	int					alpha;
 
+	int					lmindex;
+
 	FColormap GetColormap();
 	void UpdateColormap(FColormap &map);
 	PalEntry GetBlend();

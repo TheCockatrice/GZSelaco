@@ -3346,12 +3346,13 @@ void MapLoader::SetSubsectorLightmap(const LightmapSurface &surface)
 	else
 	{
 		int index = surface.Type == ST_CEILING ? 0 : 1;
-		const auto &ffloors = surface.Subsector->sector->e->XFloor.ffloors;
+		auto &ffloors = surface.Subsector->sector->e->XFloor.ffloors;
 		for (unsigned int i = 0; i < ffloors.Size(); i++)
 		{
 			if (ffloors[i]->model == surface.ControlSector)
 			{
 				surface.Subsector->lightmap[index][i + 1] = surface;
+				ffloors[i]->lmindex = i;
 			}
 		}
 	}
