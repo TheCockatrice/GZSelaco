@@ -1747,6 +1747,19 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, CopyBloodColor, CopyBloodColor)
 	return 0;
 }
 
+static void A_CopyHeavyProbeTo(AActor* self, AActor* other)
+{
+	other->HeavyProbeIndex = self->HeavyProbeIndex;
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_CopyHeavyProbeTo, A_CopyHeavyProbeTo)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	PARAM_OBJECT(other, AActor);
+	A_CopyHeavyProbeTo(self, other);
+	return 0;
+}
+
 //=====================================================================================
 //
 // Inventory exports
