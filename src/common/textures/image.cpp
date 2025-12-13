@@ -209,7 +209,7 @@ int FImageSource::ReadTranslatedPixels(FileReader *reader, FBitmap *bmp, const P
 // @Cockatrice: This should only ever be used for textures that are in a GPU readable compressed format
 int FImageSource::ReadCompressedPixels(FileReader* reader, unsigned char** data, size_t& size, size_t& unitSize, int& mipLevels) {
 	FString lumpname = fileSystem.GetFileFullName(SourceLump);
-	I_FatalError("FImageSource::ReadCompressedPixels() was called on an image source that does not support it! (%s)", lumpname);
+	I_FatalError("FImageSource::ReadCompressedPixels() was called on an image source that does not support it! (%s)", lumpname.GetChars());
 	return 0;
 }
 
