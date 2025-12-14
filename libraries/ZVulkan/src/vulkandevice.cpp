@@ -21,7 +21,8 @@ VulkanDevice::VulkanDevice(std::shared_ptr<VulkanInstance> instance, std::shared
 	DebugLayerActive = instance->DebugLayerActive;
 
 	// Detect ARC since it requires special handling due to immature drivers
-	isARC = PhysicalDevice.Properties.Properties.vendorID == 0x8086 && strstr(PhysicalDevice.Properties.Properties.deviceName, "Arc");
+	// Just detect all Intel devices for now since most of them exibit the same problem, and the vendor string is corrupt sometimes under Linux
+	isARC = PhysicalDevice.Properties.Properties.vendorID == 0x8086/* && strstr(PhysicalDevice.Properties.Properties.deviceName, "Arc")*/;
 	
 	// @Cockatrice - Special case for ARC GPU, try not to use concurrent mode swapchain
 	if (isARC || flags & VK_DEVICE_FLAG_FORCE_EXCLUSIVE_PRESENT) {
