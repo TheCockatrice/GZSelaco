@@ -181,14 +181,29 @@ static void I_CheckGUICapture ()
 
 void I_SetMouseCapture()
 {
-	// Clear out any mouse movement.
-	SDL_GetRelativeMouseState (NULL, NULL);
-	SDL_SetRelativeMouseMode (SDL_TRUE);
+	SDL_CaptureMouse(SDL_TRUE);
 }
 
 void I_ReleaseMouseCapture()
 {
-	SDL_SetRelativeMouseMode (SDL_FALSE);
+	SDL_CaptureMouse(SDL_FALSE);
+}
+
+
+void I_LockMouseToWindow() {
+	auto window = SDL_GetKeyboardFocus();
+	if(window == NULL)
+		return;
+
+	SDL_SetWindowGrab(window, SDL_TRUE);
+}
+
+void I_UnlockMouseFromWindow() {
+	auto window = SDL_GetKeyboardFocus();
+	if(window == NULL)
+		return;
+	
+	SDL_SetWindowGrab(window, SDL_FALSE);
 }
 
 static void MouseRead ()

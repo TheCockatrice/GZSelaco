@@ -157,6 +157,26 @@ void I_ReleaseMouseCapture()
 	ReleaseCapture();
 }
 
+void I_LockMouseToWindow() {
+	RECT rect;
+	POINT cp;
+
+	// Copied from i_mouse.cpp
+	GetCursorPos(&cp);
+	ClipCursor(NULL);		// helps with Win95?
+	GetClientRect(mainwindow.GetHandle(), &rect);
+
+	// Reposition the rect so that it only covers the client area.
+	ClientToScreen(mainwindow.GetHandle(), (LPPOINT)&rect.left);
+	ClientToScreen(mainwindow.GetHandle(), (LPPOINT)&rect.right);
+
+	ClipCursor(&rect);
+}
+
+void I_UnlockMouseFromWindow() {
+	ClipCursor(NULL);
+}
+
 bool GUIWndProcHook(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam, LRESULT *result)
 {
 	event_t ev = { EV_GUI_Event };

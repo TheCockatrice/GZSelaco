@@ -349,6 +349,18 @@ DEFINE_ACTION_FUNCTION_NATIVE(DMenu, SetMouseCapture, SetMouseCapture)
 	return 0;
 }
 
+static void SetMouseLock(bool on)
+{
+	if (on) I_LockMouseToWindow();
+	else I_UnlockMouseFromWindow();
+}
+DEFINE_ACTION_FUNCTION_NATIVE(DMenu, SetMouseLock, SetMouseLock) {
+	PARAM_PROLOGUE;
+	PARAM_BOOL(on);
+	SetMouseLock(on);
+	return 0;
+}
+
 void DMenu::Close ()
 {
 	if (CurrentMenu == nullptr) return;	// double closing can happen in the save menu.
@@ -935,6 +947,8 @@ void M_ClearMenus()
 	if (CurrentScaleOverrider)  delete CurrentScaleOverrider;
 	CurrentScaleOverrider = nullptr;
 	if (sysCallbacks.MenuClosed) sysCallbacks.MenuClosed();
+
+	I_UnlockMouseFromWindow(); 	// @Cockatrice - If the menu locked the mouse to the window, undo it here
 }
 
 //=============================================================================
