@@ -233,10 +233,12 @@ static void I_CheckNativeMouse ()
 	{
 		NativeMouse = wantNative;
 		SDL_ShowCursor (wantNative);
-		if (wantNative)
+		if (wantNative) {
+			SDL_SetRelativeMouseMode(SDL_FALSE);
 			I_ReleaseMouseCapture ();
-		else
-			I_SetMouseCapture ();
+		} else {
+			SDL_SetRelativeMouseMode(SDL_TRUE);
+		}
 	}
 }
 
