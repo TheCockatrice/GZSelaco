@@ -237,6 +237,9 @@ static void I_CheckNativeMouse ()
 			SDL_SetRelativeMouseMode(SDL_FALSE);
 			I_ReleaseMouseCapture ();
 		} else {
+			// Clear previous mouse movements so they don't apply when switching modes
+			int dx, dy;
+			SDL_GetRelativeMouseState(&dx, &dy);
 			SDL_SetRelativeMouseMode(SDL_TRUE);
 		}
 	}
