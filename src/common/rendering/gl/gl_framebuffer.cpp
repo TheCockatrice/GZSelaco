@@ -820,7 +820,7 @@ OpenGLFrameBuffer::~OpenGLFrameBuffer()
 // Initializes the GL renderer
 //
 //==========================================================================
-static const bool glIsArc() {
+static bool glIsArc() {
 	const char* vendor = (const char*)glGetString(GL_VENDOR);
 	const char* renderer = (const char*)glGetString(GL_RENDERER);
 	if (!vendor || !renderer) return false;
@@ -833,10 +833,12 @@ static const bool glIsArc() {
 	if (v.IndexOf("intel") < 0)
 		return false;
 
-	if (r.IndexOf("arc") >= 0)
+	// Removed to return all Intel cards
+	/*if (r.IndexOf("arc") >= 0)
 		return true;
 
-	return false;
+	return false;*/
+	return true;
 }
 
 
