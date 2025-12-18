@@ -1441,6 +1441,8 @@ void HWWall::DoMidTexture(HWWallDispatcher *di, seg_t * seg, bool drawfogboundar
 	bool wrap = (seg->linedef->flags&ML_WRAP_MIDTEX) || (seg->sidedef->Flags&WALLF_WRAP_MIDTEX);
 	bool mirrory = false;
 	float rowoffset = 0;
+	bool useClipOfs = false;
+	float clipOfs[4] = { 0 };
 
 	if (seg->sidedef->lightmap)
 	{
@@ -1578,6 +1580,28 @@ void HWWall::DoMidTexture(HWWallDispatcher *di, seg_t * seg, bool drawfogboundar
 		topright = texturetop + skew;
 		bottomleft = texturebottom;
 		bottomright = texturebottom + skew;
+
+		float preclip_topleft = fch1;
+		float preclip_topright = fch2;
+		float preclip_bottomleft = ffh1;
+		float preclip_bottomright = ffh2;
+
+		float cliphl = preclip_topleft - preclip_bottomleft;
+		float cliphr = preclip_topright - preclip_bottomright;
+
+		if (cliphl != 0)
+		{
+			useClipOfs = true;
+			clipOfs[UPLFT] = (topleft - preclip_topleft) / cliphl;
+			clipOfs[LOLFT] = (bottomleft - preclip_bottomleft) / cliphl;
+		}
+
+		if (cliphr != 0)
+		{
+			useClipOfs = true;
+			clipOfs[UPRGT] = (topright - preclip_topright) / cliphr;
+			clipOfs[LORGT] = (bottomright - preclip_bottomright) / cliphr;
+		}
 	}
 
 	// nothing visible - skip the rest
@@ -1641,7 +1665,7 @@ void HWWall::DoMidTexture(HWWallDispatcher *di, seg_t * seg, bool drawfogboundar
 		flags |= HWF_SKYHACK;
 	}
 
-	SetWallCoordinates(seg, &tci, texturetop, topleft, topright, bottomleft, bottomright, t_ofs, skew, nullptr);
+	SetWallCoordinates(seg, &tci, texturetop, topleft, topright, bottomleft, bottomright, t_ofs, skew, useClipOfs ? clipOfs : nullptr);
 
 	//
 	//
