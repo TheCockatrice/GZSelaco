@@ -56,9 +56,6 @@ private:
 	int glTextureBytes;
 	bool mipmapped = false;
 
-	HardwareState hwStates[MAX_TEXTURES] = { HardwareState::NONE };
-
-
 	int GetDepthBuffer(int w, int h);
 
 public:
@@ -96,10 +93,9 @@ public:
 	bool SwapToLoadedImage();
 	void CreateInvalid(int texUnit);
 	void DestroyLoadedImage();
-	HardwareState GetState(int texUnit) override { return hwStates[texUnit]; }
+	HardwareState GetState(int texUnit) override { return hwState; }
 	void SetHardwareState(HardwareState hws, int texUnit = 0) override { 
-		hwStates[texUnit] = hws;
-		if (texUnit == 0) hwState = hws;
+		hwState = hws;
 	}
 };
 

@@ -447,38 +447,42 @@ bool OpenGLFrameBuffer::BackgroundCacheMaterial(FMaterial* mat, FTranslationID t
 		}
 	}
 	else if (lumpExists && systex->GetState(0) == IHardwareTexture::HardwareState::NONE) {
-		assert(systex->GetTextureHandle() == 0);
-		systex->SetHardwareState(secondary ? IHardwareTexture::HardwareState::CACHING : IHardwareTexture::HardwareState::LOADING, 0);
-		
-		FImageTexture* fLayerTexture = dynamic_cast<FImageTexture*>(layer->layerTexture);
-		params = layer->layerTexture->GetImage()->NewLoaderParams(
-			fLayerTexture ? (fLayerTexture->GetNoRemap0() ? FImageSource::noremap0 : FImageSource::normal) : FImageSource::normal,
-			translation.index(),
-			remap
-		);
+		if(systex->GetTextureHandle() != 0) {
+			// We already have a texture handle, keep it
+			systex->SetHardwareState(IHardwareTexture::HardwareState::READY, 0);
+		} else {
+			systex->SetHardwareState(secondary ? IHardwareTexture::HardwareState::CACHING : IHardwareTexture::HardwareState::LOADING, 0);
+			
+			FImageTexture* fLayerTexture = dynamic_cast<FImageTexture*>(layer->layerTexture);
+			params = layer->layerTexture->GetImage()->NewLoaderParams(
+				fLayerTexture ? (fLayerTexture->GetNoRemap0() ? FImageSource::noremap0 : FImageSource::normal) : FImageSource::normal,
+				translation.index(),
+				remap
+			);
 
-		if (params != nullptr) {
-			// Only generate SPI if it's not already there
-			spi.generateSpi = makeSPI && !mat->sourcetex->HasSpritePositioning();
-			spi.notrimming = mat->sourcetex->GetNoTrimming();
-			spi.shouldExpand = shouldExpand;
+			if (params != nullptr) {
+				// Only generate SPI if it's not already there
+				spi.generateSpi = makeSPI && !mat->sourcetex->HasSpritePositioning();
+				spi.notrimming = mat->sourcetex->GetNoTrimming();
+				spi.shouldExpand = shouldExpand;
 
-			GlTexLoadIn in = {
-				layer->layerTexture->GetImage(),
-				params,
-				spi,
-				systex,
-				mat->sourcetex,
-				0,
-				flags
-			};
+				GlTexLoadIn in = {
+					layer->layerTexture->GetImage(),
+					params,
+					spi,
+					systex,
+					mat->sourcetex,
+					0,
+					flags
+				};
 
-			if (secondary) secondaryTexQueue.queue(in);
-			else primaryTexQueue.queue(in);
-		}
-		else {
-			systex->SetHardwareState(IHardwareTexture::HardwareState::READY, 0); // TODO: Set state to a special "unloadable" state
-			return false;
+				if (secondary) secondaryTexQueue.queue(in);
+				else primaryTexQueue.queue(in);
+			}
+			else {
+				systex->SetHardwareState(IHardwareTexture::HardwareState::READY, 0); // TODO: Set state to a special "unloadable" state
+				return false;
+			}
 		}
 	}
 
@@ -493,6 +497,12 @@ bool OpenGLFrameBuffer::BackgroundCacheMaterial(FMaterial* mat, FTranslationID t
 		lump = layer->layerTexture->GetSourceLump();
 		bool lumpExists = fileSystem.FileLength(lump) >= 0;
 
+		if (lump == 0) {
+			// Unloadable
+			syslayer->SetHardwareState(IHardwareTexture::HardwareState::READY, i);
+			continue;
+		}
+
 		if (lumpExists && !secondary && syslayer->GetState(i) == IHardwareTexture::HardwareState::CACHING) {
 			GlTexLoadIn in;
 			if (secondaryTexQueue.dequeueSearch(in, syslayer,
@@ -504,6 +514,12 @@ bool OpenGLFrameBuffer::BackgroundCacheMaterial(FMaterial* mat, FTranslationID t
 			}
 		}
 		else if (lumpExists && syslayer->GetState(i) == IHardwareTexture::HardwareState::NONE) {
+			if(syslayer->GetTextureHandle() != 0) {
+				// We already have a texture handle, keep it
+				syslayer->SetHardwareState(IHardwareTexture::HardwareState::READY, i);
+				continue;
+			}
+
 			syslayer->SetHardwareState(secondary ? IHardwareTexture::HardwareState::CACHING : IHardwareTexture::HardwareState::LOADING, i);
 
 			FImageTexture* fLayerTexture = dynamic_cast<FImageTexture*>(layer->layerTexture);
@@ -514,8 +530,6 @@ bool OpenGLFrameBuffer::BackgroundCacheMaterial(FMaterial* mat, FTranslationID t
 			);
 
 			if (params != nullptr) {
-				assert(syslayer->GetTextureHandle() == 0);
-
 				GlTexLoadIn in = {
 					layer->layerTexture->GetImage(),
 					params,
