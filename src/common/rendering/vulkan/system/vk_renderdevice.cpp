@@ -1067,6 +1067,7 @@ void VulkanRenderDevice::Update()
 
 void VulkanRenderDevice::OnApplicationActivated(bool active) {
 	// Intel ARC drivers do not work properly, we need to signal the swapchain that it has been invalidated
+	// @Cockatrice - This fix can be removed, drivers have no problems regarding this any longer
 	/*if (device && device->isARC && mFramebufferManager && mFramebufferManager->SwapChain) {
 		vkDeviceWaitIdle(device->device);
 		mFramebufferManager->SwapChain->SetLost();
@@ -1082,7 +1083,8 @@ void VulkanRenderDevice::OnApplicationActivated(bool active) {
 bool VulkanRenderDevice::CanDisplay(bool active) {
 	// @Cockatrice - Do not display in the background when fullscreen on ARC. 
 	// This almost always results in losing the device due to driver issues
-	return !device->isARC || (active || !IsFullscreen());
+	// @Cockatrice - Disabling this now, as the ARC driver updates seem to have fixed this problem
+	return true;// !device->isARC || (active || !IsFullscreen());
 }
 
 bool VulkanRenderDevice::CompileNextShader()
