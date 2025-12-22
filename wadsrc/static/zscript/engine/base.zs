@@ -959,6 +959,7 @@ struct StringStruct native
 	native void StripLeft(String junk = "");
 	native void StripRight(String junk = "");
 	native void StripLeftRight(String junk = "");
+	native bool WriteOut(String filePath);
 }
 
 struct Translation version("2.4")
