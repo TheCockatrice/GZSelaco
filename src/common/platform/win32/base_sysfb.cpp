@@ -60,6 +60,13 @@ extern "C" {
 EXTERN_CVAR(Int, vid_defwidth)
 EXTERN_CVAR(Int, vid_defheight)
 
+
+// @Cockatrice - Thanks to UZDoom folks noticing that WSPOPUP was being used still
+// Inverse of how UZDoom patched it, this CVAR will optionally turn WS_POPUP back on in fullscreen mode
+CUSTOM_CVAR(Bool, vid_wspopup, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG | CVAR_NOINITCALL) {
+	setmodeneeded = true;
+}
+
 //==========================================================================
 //
 // Windows framebuffer
@@ -302,42 +309,56 @@ void SystemBaseFrameBuffer::PositionWindow(bool fullscreen, bool initialcall)
 
 	ShowWindow(mainwindow.GetHandle(), SW_SHOW);
 
-	GetWindowRect(mainwindow.GetHandle(), &r);
-	style = WS_VISIBLE | WS_CLIPSIBLINGS;
-	exStyle = 0;
-
 	if (fullscreen) {
-		style |= WS_POPUP;
-		exStyle |= WS_EX_APPWINDOW;
-	} 
+		style = vid_wspopup ? (WS_VISIBLE | WS_CLIPSIBLINGS | WS_POPUP) : (WS_VISIBLE | WS_OVERLAPPED);
+		exStyle = WS_EX_APPWINDOW;
+	}
 	else
 	{
-		style |= WS_OVERLAPPEDWINDOW;
-		exStyle |= WS_EX_WINDOWEDGE;
+		style = WS_VISIBLE | WS_CLIPSIBLINGS | WS_OVERLAPPEDWINDOW;
+		exStyle = WS_EX_WINDOWEDGE;
 	}
-
-	SetWindowLong(mainwindow.GetHandle(), GWL_STYLE, style);
-	SetWindowLong(mainwindow.GetHandle(), GWL_EXSTYLE, exStyle);
 
 	if (fullscreen)
 	{
-		SetWindowPos(mainwindow.GetHandle(), 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
-		MoveWindow(mainwindow.GetHandle(), monRect.left, monRect.top, monRect.right-monRect.left, monRect.bottom-monRect.top, FALSE);
+		if(!vid_wspopup) {
+			// @Cockatrice - Set the window frame using WS_POPUP first, this should give us the right frame positioning and size even if Windows decides to add decoration
+			SetWindowLong(mainwindow.GetHandle(), GWL_STYLE, WS_VISIBLE | WS_CLIPSIBLINGS | WS_POPUP);
+			SetWindowLong(mainwindow.GetHandle(), GWL_EXSTYLE, WS_EX_APPWINDOW);
+			SetWindowPos(mainwindow.GetHandle(), HWND_TOP, monRect.left, monRect.top, int(monRect.right - monRect.left), int(monRect.bottom - monRect.top), SWP_FRAMECHANGED);
 
-		// And now, seriously, it IS in the right place. Promise.
+			// Change style back and update the window
+			SetWindowLong(mainwindow.GetHandle(), GWL_STYLE, style);
+			SetWindowLong(mainwindow.GetHandle(), GWL_EXSTYLE, exStyle);
+			SetWindowPos(mainwindow.GetHandle(), HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+		
+		} else {
+			SetWindowLong(mainwindow.GetHandle(), GWL_STYLE, style);
+			SetWindowLong(mainwindow.GetHandle(), GWL_EXSTYLE, exStyle);
+
+			// Original window positioning code as it was for a billion years
+			SetWindowPos(mainwindow.GetHandle(), 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+			MoveWindow(mainwindow.GetHandle(), monRect.left, monRect.top, monRect.right - monRect.left, monRect.bottom - monRect.top, FALSE);
+			// And now, seriously, it IS in the right place. Promise.
+		}
 	}
 	else
 	{
+		SetWindowLong(mainwindow.GetHandle(), GWL_STYLE, style);
+		SetWindowLong(mainwindow.GetHandle(), GWL_EXSTYLE, exStyle);
+
 		RestoreWindowedPos();
 		// This doesn't restore the window size properly so we must force a set size the next tic.
 		if (m_Fullscreen)
 		{
 			::vid_fullscreen = false;
 		}
-
+		ShowWindow(mainwindow.GetHandle(), SW_SHOW);
 	}
 	m_Fullscreen = fullscreen;
 	SetSize(GetClientWidth(), GetClientHeight());
+
+	
 }
 
 //==========================================================================
