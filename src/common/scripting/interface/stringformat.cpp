@@ -652,7 +652,7 @@ DEFINE_ACTION_FUNCTION_NATIVE(FStringStruct, GetNextCodePoint, StringNextCodePoi
 
 
 
-bool isFilePathInsideAppDir(const char *path) {
+bool isFilePathInsideAppDir(const char *path, bool mustExist = false) {
     try {
         // Resolve app directory and parent path
 		std::string pathStr(path);
@@ -664,6 +664,10 @@ bool isFilePathInsideAppDir(const char *path) {
 		}
 
 		if (!std::filesystem::is_directory(parentDir)) {
+			return false;
+		}
+
+		if (mustExist && !std::filesystem::exists(std::filesystem::canonical(pathStr))) {
 			return false;
 		}
 
@@ -725,4 +729,48 @@ DEFINE_ACTION_FUNCTION_NATIVE(FStringStruct, WriteOut, StringWriteOut) {
 	ACTION_RETURN_BOOL((bool)StringWriteOut(self, &path));
 }
 
+
+static int StringReadIn(FString* self, const FString* path) {
+	if (!Args->CheckParm("-UNSAFE_ALLOW_FILESYSTEM_ACCESS")) {
+		ThrowAbortException(X_OTHER, "String.ReadIn is unavailable unless the game is launched with -UNSAFE_ALLOW_FILESYSTEM_ACCESS");
+	}
+
+	if (path == nullptr || path->IsEmpty()) {
+		ThrowAbortException(X_OTHER, "String.ReadIn requires a valid file path.");
+	}
+
+	FStringf fullPath("%s/%s", progdir.GetChars(), path->GetChars());
+
+	// Restrict the file path to the application directory and its subdirectories
+	if (!isFilePathInsideAppDir(fullPath.GetChars(), true)) {
+		// Silently fail for security reasons
+		Printf(TEXTCOLOR_RED"Failed to read from %s\n", std::filesystem::weakly_canonical(fullPath.GetChars()).c_str());
+		return false;
+	}
+
+	// Read the text file
+	FILE* fl = fopen(fullPath.GetChars(), "rb");
+	if (fl == nullptr) {
+		return false;
+	}
+	size_t size = 0;
+	fseek(fl, 0, SEEK_END);
+	size = ftell(fl);
+	fseek(fl, 0, SEEK_SET);
+
+	char *buff = self->LockNewBuffer(size);
+	size_t readSize = fread(buff, 1, size, fl);
+	fclose(fl);
+
+	Printf(TEXTCOLOR_CYAN"Read %zu bytes from %s\n", readSize, std::filesystem::weakly_canonical(fullPath.GetChars()).c_str());
+
+	return true;
+}
+
+
+DEFINE_ACTION_FUNCTION_NATIVE(FStringStruct, ReadIn, StringReadIn) {
+	PARAM_SELF_STRUCT_PROLOGUE(FString);
+	PARAM_STRING(path);
+	ACTION_RETURN_BOOL((bool)StringReadIn(self, &path));
+}
 
