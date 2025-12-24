@@ -476,6 +476,13 @@ public:
 
 	// Scaled angle adjustment info. Not for direct manipulation.
 	DRotator angleOffsetTargets;
+
+	// Camera utilities
+	DVector3 WorldToView(DVector3 worldPosition);
+	double DepthToViewScale(double depth, double size);
+	double GetNearPlane();
+	double GetFarPlane();
+	double GetFOV();
 };
 
 // Bookkeeping on players - state.

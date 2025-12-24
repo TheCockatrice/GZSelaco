@@ -19,21 +19,13 @@ class FGLDebug;
 
 /* Background loader classes: TODO: Split GPU and File loading. */
 struct GlTexLoadSpiFull {
-	bool generateSpi, shouldExpand, notrimming;
+	bool generateSpi = false, shouldExpand = false, notrimming = false;
 	SpritePositioningInfo info[2];
 };
 
 
 struct GlTexLoadSpi {
-	bool generateSpi, shouldExpand, notrimming;
-};
-
-
-enum GLTexLoadFlags {
-	GL_TEXLOAD_ALLOWMIPS		= 1,		// Mipmaps allowed at all (IN)
-	GL_TEXLOAD_CREATEMIPS		= 1 << 1,	// Create mipmaps in main thread (OUT)
-	GL_TEXLOAD_ALLOWQUALITY		= 1 << 2,	// Allow quality reduction from gl_texture_quality (IN/OUT)
-	GL_TEXLOAD_ISTRANSLUCENT	= 1 << 3	// Texture loaded was translucent (OUT)
+	bool generateSpi = false, shouldExpand = false, notrimming = false;
 };
 
 
@@ -57,28 +49,40 @@ static_assert(sizeof(GLTexLoadField) == sizeof(uint8_t));
 
 
 struct GlTexLoadIn {
-	FImageSource* imgSource;
-	FImageLoadParams* params;
+	FImageSource* imgSource		= nullptr;
+	FImageLoadParams* params	= nullptr;
 	GlTexLoadSpi spi;
-	FHardwareTexture* tex;
-	FGameTexture* gtex;
-	int texUnit;
+	FHardwareTexture* tex		= nullptr;
+	FGameTexture* gtex			= nullptr;
+	int texUnit					= 0;
 	GLTexLoadField flags;
 	//bool allowMipmaps; // Moved to flags
 };
 
+typedef struct __GLsync* GLsync;
+
+enum GlTexLoadError {
+	GL_TEXLOAD_ERR_NONE			= 0,
+	GL_TEXLOAD_ERR_FILE,		// File could not be found or opened
+	GL_TEXLOAD_ERR_FORMAT,		// Image data could not be understood or fully read
+	GL_TEXLOAD_ERR_UPLOAD,		// Texture failed to upload in background thread when the hardware should have been capable
+	GL_TEXLOAD_ERR_MEM,			// Ran out of memory when trying to load the file, unused so far
+	GL_TEXLOAD_ERR_UNKNOWN		// Any other error
+};
+
 struct GlTexLoadOut {
-	FHardwareTexture* tex;
-	FGameTexture* gtex;
+	FHardwareTexture* tex		= nullptr;
+	FGameTexture* gtex			= nullptr;
 	GlTexLoadSpiFull spi;
-	int conversion, translation, texUnit;
-	//bool isTranslucent;					// Moved to flags
-	FImageSource* imgSource;
-	unsigned char* pixels = nullptr;		// Returned when we can't upload in the backghround thread
+	int conversion = 0, translation = 0, texUnit = 0;
+	FImageSource* imgSource		= nullptr;
+	unsigned char* pixels		= nullptr;		// Returned when we can't upload in the backghround thread
 	size_t pixelsSize = 0, totalDataSize = 0;
 	int pixelW = 0, pixelH = 0, mipLevels = -1;
-	//bool createMipmaps = false;			// Moved to flags
 	GLTexLoadField flags;
+	GLsync uploadFence;
+	int lump = -1;
+	GlTexLoadError error = GL_TEXLOAD_ERR_NONE;
 };
 
 struct GLModelLoadIn {
@@ -109,13 +113,15 @@ public:
 	~GlTexLoadThread() override {};
 
 	bool uploadPossible() const { return auxContext >= 0; }
+	int startupStatus() const { return startup.load(); }
 
 protected:
 	OpenGLFrameBuffer* cmd;
 
 	int submits, auxContext;
 
-	std::atomic<int> maxQueue;
+	std::atomic<int> maxQueue = 0;
+	std::atomic<int> startup = 0;
 
 	bool loadResource(GlTexLoadIn& input, GlTexLoadOut& output) override;
 	void cancelLoad() override {  }		// TODO: Actually finish this
@@ -212,13 +218,15 @@ public:
 
 	// Cache stats helpers
 	
-	void GetBGQueueSize(int& current, int& currentSec, int& collisions, int& max, int& maxSec, int& total, int &outSize, int &models);
+	void GetBGQueueSize(int& current, int& currentSec, int& collisions, int& max, int& maxSec, int& total, int &outSize, int &models, int &errs);
 	void GetBGStats(double& min, double& max, double& avg);
 	void GetBGStats2(double& min, double& max, double& avg);
 	int GetNumThreads() { return (int)bgTransferThreads.size(); }
 	void ResetBGStats();
 
 	int camtexcount = 0;
+
+	bool isIntelArc() const { return isArc; }
 
 private:
 	struct QueuedPatch {
@@ -228,7 +236,7 @@ private:
 		bool generateSPI;
 	};
 
-	int statMaxQueued = 0, statMaxQueuedSecondary = 0, statCollisions = 0, statModelsLoaded = 0;
+	int statMaxQueued = 0, statMaxQueuedSecondary = 0, statCollisions = 0, statModelsLoaded = 0, statErrors = 0;
 	TSQueue<GlTexLoadIn> primaryTexQueue, secondaryTexQueue;
 	TSQueue<GlTexLoadOut> outputTexQueue;
 	TSQueue<GLModelLoadIn> modelInQueue;
@@ -238,6 +246,8 @@ private:
 	std::unique_ptr<GLModelLoadThread> modelThread;						// Loads models, always 1 thread
 
 	double fgTotalTime = 0, fgTotalCount = 0, fgMin = 0, fgMax = 0;		// Foreground integration time stats
+
+	bool isArc;															// @Cockatrice: Do some special fixes for ARC
 };
 
 }

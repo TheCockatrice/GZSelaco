@@ -5,9 +5,9 @@
 #include <algorithm>
 #include <set>
 #include <string>
+#include <cstring>
 
-
-VulkanDevice::VulkanDevice(std::shared_ptr<VulkanInstance> instance, std::shared_ptr<VulkanSurface> surface, const VulkanCompatibleDevice& selectedDevice, int numUploadSlots) : Instance(instance), Surface(surface)
+VulkanDevice::VulkanDevice(std::shared_ptr<VulkanInstance> instance, std::shared_ptr<VulkanSurface> surface, const VulkanCompatibleDevice& selectedDevice, int numUploadSlots, int flags) : Instance(instance), Surface(surface)
 {
 	PhysicalDevice = *selectedDevice.Device;
 	EnabledDeviceExtensions = selectedDevice.EnabledDeviceExtensions;
@@ -18,6 +18,16 @@ VulkanDevice::VulkanDevice(std::shared_ptr<VulkanInstance> instance, std::shared
 	UploadFamily = selectedDevice.UploadFamily;
 	UploadFamilySupportsGraphics = selectedDevice.UploadFamilySupportsGraphics;
 	GraphicsTimeQueries = selectedDevice.GraphicsTimeQueries;
+	DebugLayerActive = instance->DebugLayerActive;
+
+	// Detect ARC since it requires special handling due to immature drivers
+	// Just detect all Intel devices for now since most of them exibit the same problem, and the vendor string is corrupt sometimes under Linux
+	isARC = PhysicalDevice.Properties.Properties.vendorID == 0x8086/* && strstr(PhysicalDevice.Properties.Properties.deviceName, "Arc")*/;
+	
+	// @Cockatrice - Special case for ARC GPU, try not to use concurrent mode swapchain
+	if (isARC || flags & VK_DEVICE_FLAG_FORCE_EXCLUSIVE_PRESENT) {
+		PresentFamily = -2;
+	}
 
 	// Test to see if we can fit more upload queues
 	int rqt = (UploadFamily == GraphicsFamily ? 1 : 0) + (PresentFamily == UploadFamily ? 1 : 0);
@@ -111,7 +121,6 @@ void VulkanDevice::CreateDevice(int numUploadSlots)
 	VulkanPrintLog("debug", "Present Family: " + std::to_string(PresentFamily));
 	VulkanPrintLog("debug", "Upload Family: " + std::to_string(UploadFamily));
 
-
 	std::vector<const char*> extensionNames;
 	extensionNames.reserve(EnabledDeviceExtensions.size());
 	for (const auto& name : EnabledDeviceExtensions)
@@ -163,6 +172,10 @@ void VulkanDevice::CreateDevice(int numUploadSlots)
 
 	VkResult result = vkCreateDevice(PhysicalDevice.Device, &deviceCreateInfo, nullptr, &device);
 	CheckVulkanError(result, "Could not create vulkan device");
+
+	if (isARC) {
+		VulkanPrintLog("debug", "Detected Intel ARC!");
+	}
 
 	volkLoadDevice(device);
 

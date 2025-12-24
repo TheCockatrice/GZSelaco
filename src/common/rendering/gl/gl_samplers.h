@@ -16,13 +16,13 @@ class FSamplerManager
 
 public:
 
-	FSamplerManager();
+	FSamplerManager(bool isArc = false);
 	~FSamplerManager();
 
 	uint8_t Bind(int texunit, int num, int lastval);
 	void SetTextureFilterMode();
 
-
+	bool isArc = false;		// @Cocaktrice - On IntelARC we cannot turn on anisotropy when using GL_NEAREST
 };
 
 }

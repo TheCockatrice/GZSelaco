@@ -96,8 +96,22 @@ void VkSamplerManager::CreateHWSamplers()
 		builder.MipmapMode(TexFilter[filter].mipfilter);
 		if (TexFilter[filter].mipmapping)
 		{
-			builder.Anisotropy(gl_texture_filter_anisotropic);
-			builder.MaxLod(100.0f); // According to the spec this value is clamped so something high makes it usable for all textures.
+			// @Cockatrice - Special case for Intel ARC GPU, any level of anisotropy creates linear sampling, so we have to turn it off when we have different min/mag modes
+			if( TexFilter[filter].magFilter != TexFilter[filter].minFilter &&
+				fb->device->isARC ) {
+
+				// Turning on Anisotropy on at all results in filtering on ARC, but only in Linux
+				#if !defined(__linux__)
+					builder.Anisotropy(1);
+				#endif
+
+				builder.MaxLod(100.0f);
+				builder.MipLodBias(-0.75);	// Try to push the blurry textures away from the camera so it's not just blur-city without anisotropy
+			}
+			else {
+				builder.Anisotropy(gl_texture_filter_anisotropic);
+				builder.MaxLod(100.0f); // According to the spec this value is clamped so something high makes it usable for all textures.
+			}
 		}
 		else
 		{
@@ -112,6 +126,7 @@ void VkSamplerManager::CreateHWSamplers()
 		.MinFilter(TexFilter[filter].magFilter)
 		.AddressMode(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_SAMPLER_ADDRESS_MODE_REPEAT)
 		.MipmapMode(VK_SAMPLER_MIPMAP_MODE_NEAREST)
+		.Anisotropy(1.0)
 		.MaxLod(0.25f)
 		.DebugName("VkSamplerManager.mSamplers")
 		.Create(fb->device.get());
@@ -145,7 +160,7 @@ void VkSamplerManager::CreateHWSamplers()
 		builder.MagFilter(VK_FILTER_LINEAR);
 		builder.MinFilter(VK_FILTER_LINEAR);
 		builder.AddressMode(VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_REPEAT);
-		builder.MipmapMode(VK_SAMPLER_MIPMAP_MODE_NEAREST);
+		builder.MipmapMode(VK_SAMPLER_MIPMAP_MODE_LINEAR);
 		builder.MaxLod(0.25f);
 		mSamplers[CLAMP_NONE_FORCE_FILTER] = builder.Create(fb->device.get());
 		mSamplers[CLAMP_NONE_FORCE_FILTER]->SetDebugName("VkSamplerManager.mSamplers");

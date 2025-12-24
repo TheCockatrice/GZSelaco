@@ -196,6 +196,14 @@ void I_ReleaseMouseCapture()
 {
 }
 
+void I_LockMouseToWindow() 
+{
+}
+
+void I_UnlockMouseFromWindow() 
+{
+}
+
 void I_SetNativeMouse(bool wantNative)
 {
 	static bool nativeMouse = true;

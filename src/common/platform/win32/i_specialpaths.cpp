@@ -490,10 +490,30 @@ FString M_GetSavegamesPath()
 		path = GetKnownFolder(-1, FOLDERID_SavedGames, true, false);
 
 		if (path.IsEmpty()) {
-			path = GetKnownFolder(CSIDL_PERSONAL, FOLDERID_Documents, true);
-			path << "/My Games/" GAMENAME "/";
+			// Try Documents folder
+			path = GetKnownFolder(CSIDL_PERSONAL, FOLDERID_Documents, true, false);
+			
+			if (!path.IsEmpty()) {
+				// Documents folder
+				path << "/My Games/" GAMENAME "/";
+			}
+			else {
+				// Last resort, use the AppData folder. This is probably because the user profile wasn't created properly
+				// I'm looking at you Windows11
+				path = GetKnownFolder(CSIDL_APPDATA, FOLDERID_RoamingAppData, true);
+				path += "/" GAME_DIR "/Save/";
+				CreatePath(path.GetChars());
+
+				// In Selaco, Steam isn't setup to synchronize cloud saves from this folder yet, so output an error to the console if we pick this
+				// Only warn once
+				static bool hasWarned = false;
+				if (!hasWarned) {
+					hasWarned = Printf(TEXTCOLOR_ORANGE"Error: No standard save path could be located.\n" TEXTCOLOR_ORANGE "Your savegames may not be synchronized over Steam Cloud.\n" TEXTCOLOR_ORANGE "Savegames are currently being saved to : \n\t" TEXTCOLOR_BLUE "% s\n", path) > 0;
+				}
+			}
 		}
-		else {
+		else {	
+			// Saved Games folder
 			path << "/" GAMENAME "/";
 		}
 	}
@@ -529,9 +549,17 @@ int M_GetSavegamesPaths(TArray<FString>& outputAr) {
 	path = "";
 
 	// Try Documents/My Games/ Folder
-	path = GetKnownFolder(CSIDL_PERSONAL, FOLDERID_Documents, false);
+	path = GetKnownFolder(CSIDL_PERSONAL, FOLDERID_Documents, false, false);
 	if(!path.IsEmpty()) {
 		path << "/My Games/" GAMENAME "/";
+		outputAr.Push(path);
+		cnt++;
+	}
+
+	// Try appdata/GAMENAMELOWERCASE/Save
+	path = GetKnownFolder(CSIDL_APPDATA, FOLDERID_RoamingAppData, true);
+	if (!path.IsEmpty()) {
+		path += "/" GAME_DIR "/Save/";
 		outputAr.Push(path);
 		cnt++;
 	}

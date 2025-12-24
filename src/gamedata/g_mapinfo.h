@@ -261,7 +261,7 @@ enum ELevelFlags : unsigned int
 	LEVEL3_HIDEAUTHORNAME		= 0x00000100,
 	LEVEL3_PROPERMONSTERFALLINGDAMAGE	= 0x00000200,	// Properly apply falling damage to the monsters
 	LEVEL3_SKYBOXAO				= 0x00000400,	// Apply SSAO to sector skies
-	LEVEL3_E1M8SPECIAL			= 0x00000800,
+	LEVEL3_E1M8SPECIAL			= 0x00000800,	// @Cockatrice - Used to be E1M8SPECIAL
 	LEVEL3_E2M8SPECIAL			= 0x00001000,
 	LEVEL3_E3M8SPECIAL			= 0x00002000,
 	LEVEL3_E4M8SPECIAL			= 0x00004000,
@@ -272,7 +272,8 @@ enum ELevelFlags : unsigned int
 	LEVEL3_LIGHTCREATED			= 0x00080000,	// a light had been created in the last frame
 	LEVEL3_NOFOGOFWAR			= 0x00100000,	// disables effect of r_radarclipper CVAR on this map
 	LEVEL3_RAINYMAP				= 0x00200000,	// @Cockatrice - Indicates map should draw rain effects under F_SKY
-	LEVEL3_SAFEROOM				= 0x00400000	// @Cockatrice - Indicates a saferoom is in this map, available for fast travel
+	LEVEL3_SAFEROOM				= 0x00400000,	// @Cockatrice - Indicates a saferoom is in this map, available for fast travel
+	LEVEL3_WINDYMAP				= 0x00800000	// @Cocaktrice - Wind effects under F_SKY instead of rain
 };
 
 

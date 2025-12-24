@@ -124,6 +124,7 @@ CVAR (Bool, cl_waitforsave, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
 CVAR (Bool, enablescriptscreenshot, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
 CVAR (Bool, cl_restartondeath, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
 EXTERN_CVAR (Float, con_midtime);
+EXTERN_CVAR(String, save_dir);
 
 //==========================================================================
 //
@@ -244,7 +245,7 @@ CVAR (Bool, teamplay, false, CVAR_SERVERINFO)
 #endif // _M_X64 && _MSC_VER < 1910
 
 // [RH] Allow turbo setting anytime during game
-CUSTOM_CVAR (Float, turbo, 100.f, CVAR_NOINITCALL)
+CUSTOM_CVAR (Float, turbo, 100.f, CVAR_NOINITCALL | CVAR_CHEAT)
 {
 	if (self < 10.f)
 	{
@@ -2274,6 +2275,27 @@ int G_BuildSaveNames(const char* prefix, TArray<FString> &outputAr) {
 		name << prefix;
 
 		outputAr.Push(name);
+	}
+
+
+	// If +save_dir or -savedir is specified, add that
+	// command argument overrides CVAR
+	FString savedir;
+	if (const char* const dir = Args->CheckValue("-savedir")) {
+		savedir = dir;
+	} else if(**save_dir) {
+		savedir = FString(save_dir);
+	}
+	
+	const size_t len = savedir.Len();
+	if (len) {
+		FixPathSeperator(savedir);
+		if (savedir[len - 1] != '/')
+			savedir << '/';
+
+		savedir = NicePath(savedir.GetChars());
+
+		outputAr.Push(savedir);
 	}
 
 	return paths.Size();

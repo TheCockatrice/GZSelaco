@@ -31,6 +31,7 @@ DEFINE_FIELD_X(ParticleData, particledata_t, master);
 DEFINE_FIELD_X(ParticleData, particledata_t, renderStyle);
 DEFINE_FIELD_X(ParticleData, particledata_t, life);
 DEFINE_FIELD_X(ParticleData, particledata_t, startLife);
+DEFINE_FIELD_X(ParticleData, particledata_t, driftTime);
 DEFINE_FIELD_X(ParticleData, particledata_t, pos);
 DEFINE_FIELD_X(ParticleData, particledata_t, vel);
 DEFINE_FIELD_X(ParticleData, particledata_t, gravity);
@@ -119,6 +120,11 @@ DEFINE_FIELD(DParticleDefinition, MinRollSpeed) DEFINE_FIELD(DParticleDefinition
 DEFINE_FIELD(DParticleDefinition, RollDamping) DEFINE_FIELD(DParticleDefinition, RollDampingBounce)
 DEFINE_FIELD(DParticleDefinition, RestingPitchMin) DEFINE_FIELD(DParticleDefinition, RestingPitchMax) DEFINE_FIELD(DParticleDefinition, RestingPitchSpeed)
 DEFINE_FIELD(DParticleDefinition, RestingRollMin) DEFINE_FIELD(DParticleDefinition, RestingRollMax) DEFINE_FIELD(DParticleDefinition, RestingRollSpeed)
+DEFINE_FIELD(DParticleDefinition, DriftSlowdown)
+DEFINE_FIELD(DParticleDefinition, DriftDirectionSpeed)
+DEFINE_FIELD(DParticleDefinition, DriftOscillationSpeed)
+DEFINE_FIELD(DParticleDefinition, DriftRandomFactor)
+DEFINE_FIELD(DParticleDefinition, DriftVelocityAdjustment)
 DEFINE_FIELD(DParticleDefinition, MaxStepHeight)
 DEFINE_FIELD(DParticleDefinition, MinGravity) DEFINE_FIELD(DParticleDefinition, MaxGravity)
 DEFINE_FIELD(DParticleDefinition, MinBounceFactor) DEFINE_FIELD(DParticleDefinition, MaxBounceFactor)
@@ -861,6 +867,36 @@ void particledata_t::UpdateUnderwater()
 			definition->CallOnParticleExitWater(this, surfaceHeight);
 		}
 	}
+}
+
+void particledata_t::UpdateDrift()
+{
+	// Introduce randomness to add variability
+	float randomFactor = ParticleRandom(-definition->DriftRandomFactor, definition->DriftRandomFactor); // Random small offsets for waving
+
+	// Gradually slow down the velocity
+	vel *= definition->DriftSlowdown;
+
+	// Simulate chaotic directional changes
+	driftTime += definition->DriftDirectionSpeed;
+
+	float pitchOscillation = dcos(driftTime + randomFactor) * ParticleRandom(-definition->DriftOscillationSpeed, definition->DriftOscillationSpeed);
+	float angleOscillation = dsin(driftTime + randomFactor) * ParticleRandom(-definition->DriftOscillationSpeed, definition->DriftOscillationSpeed); // Smaller random waves
+
+	// Add extra random shaking to make it messy
+	pitch += pitchOscillation + ParticleRandom(-25.0f, 25.0f);
+	angle += angleOscillation + ParticleRandom(-25.0f, 25.0f);
+
+	// Calculate velocity relative to the current angle and pitch
+	DVector3 direction = 
+	{
+		dcos(pitch) * dcos(angle),
+		dcos(pitch) * dsin(angle),
+		dsin(pitch)
+	};
+
+	// Update velocity direction
+	vel += direction * ParticleRandom(0.05f, definition->DriftVelocityAdjustment); // Random small adjustments
 }
 
 AActor* particledata_t::SpawnActor(PClassActor* actorClass, const DVector3& offset)
@@ -1819,6 +1855,13 @@ void P_ThinkDefinedParticles(FLevelLocals* Level)
 			}
 		}
 
+		if (definition->DriftVelocityAdjustment > 0) 
+		{
+			particle->UpdateDrift();
+		}
+
+		particle->vel *= 1.0f - definition->Drag;
+
 		particle->alpha += particle->alphaStep;
 		particle->scale = FVector2(particle->scale.X * particle->scaleStep.X, particle->scale.Y * particle->scaleStep.Y);
 		particle->angle += particle->angleStep;
@@ -1837,8 +1880,6 @@ void P_ThinkDefinedParticles(FLevelLocals* Level)
 
 		if (particle->gravity != 0)
 		{
-			particle->vel *= 1.0f - definition->Drag;
-
 			if (!particle->HasFlag(DPF_ATREST))
 			{
 				if ((definition->HasFlag(PDF_CHECKWATERSPAWN) && particle->HasFlag(DPF_SPAWNEDUNDERWATER)) || definition->HasFlag(PDF_CHECKWATER))

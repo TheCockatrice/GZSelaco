@@ -54,6 +54,7 @@ struct ParticleData
     native uint8        RenderStyle;
     native int16        Life;       // Tics to live, -1 = forever
     native int16        StartLife;  // The life this particle started with
+    native int16        DriftTime;
     native vector3      Pos;
     native vector3      Vel;
     native float        Gravity;
@@ -187,6 +188,12 @@ class ParticleDefinition native play
 	native float RestingPitchMin, RestingPitchMax, RestingPitchSpeed;
 	native float RestingRollMin, RestingRollMax, RestingRollSpeed;
 
+    native float DriftSlowdown;
+	native float DriftDirectionSpeed;
+	native float DriftOscillationSpeed;
+	native float DriftRandomFactor;
+	native float DriftVelocityAdjustment;
+
     native float MaxStepHeight;
     native float MinGravity, MaxGravity;
     native float MinBounceFactor, MaxBounceFactor;
@@ -300,20 +307,20 @@ class ParticleDefinition native play
     // Particles are removed immediately when going over this number
     static const int particleLimits[] = 
     { 
-        500,    // Low
-        800,    // Med
-        1600,   // High
-        2000,   // Ultra    
+        600,    // Low
+        900,    // Med
+        1700,   // High
+        2100,   // Ultra    
         6000    // Insane
     };
 
     // Particles start to fade out where possible when going over this number
     static const int cullLimits[] = 
     { 
-        250,    // Low
-        400,    // Med
-        800,    // High
-        1000,   // Ultra   
+        350,    // Low
+        500,    // Med
+        900,    // High
+        1100,   // Ultra   
         3000    // Insane
     };
 

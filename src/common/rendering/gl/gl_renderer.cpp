@@ -107,7 +107,7 @@ void FGLRenderer::Initialize(int width, int height)
 	mOldFBID = 0;
 
 	mShaderManager = new FShaderManager;
-	mSamplerManager = new FSamplerManager;
+	mSamplerManager = new FSamplerManager(framebuffer->isIntelArc());
 }
 
 FGLRenderer::~FGLRenderer() 

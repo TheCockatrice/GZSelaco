@@ -100,7 +100,7 @@ VkTextureImage *VkHardwareTexture::GetImage(FTexture *tex, int translation, int 
 {
 	if (!mImage->Image)
 	{
-		if (mLoadedImage && mLoadedImage->Image) {
+		if (mLoadedImage && mLoadedImage->Image && hwState == READY) {
 			SwapToLoadedImage();
 		}
 		else {
@@ -141,6 +141,7 @@ VkTextureImage *VkHardwareTexture::GetDepthStencil(FTexture *tex)
 }
 
 
+
 void VkHardwareTexture::CreateImage(FTexture *tex, int translation, int flags)
 {
 	
@@ -156,10 +157,13 @@ void VkHardwareTexture::CreateImage(FTexture *tex, int translation, int flags)
 			const char* n = fileSystem.GetFileFullName(tex->GetImage()->LumpNum());
 			Printf("Making texture2: %s\n", n != nullptr ? n : "No Lump Found!");
 		}
+		else {
+			Printf("Making texture3: %s  id: %d\n", "Unknown Name", tex->GetImage() ? tex->GetImage()->GetId() : -666);
+		}
 #endif
 
 		// @Cockatrice - Special case for GPU only textures
-		// These texture cannot be manipulated, so just straight up load them into the GPU now
+		// These textures cannot be manipulated, so just straight up load them into the GPU now
 		// We are completely ignoring any translations, upscaling, trimming or effects here
 		FImageSource* src = tex->GetImage();
 		if (src && src->IsGPUOnly()) {
@@ -175,13 +179,15 @@ void VkHardwareTexture::CreateImage(FTexture *tex, int translation, int flags)
 				hwState = READY;
 				return;
 			}
+			
+			VkFormat fmt = (VkFormat)src->getVKFormat();
+			uint32_t blockSize = fmt == VK_FORMAT_BC1_RGB_UNORM_BLOCK ? 8 : 16;
 
 			// Read pixels
 			src->ReadCompressedPixels(&reader, &pixelData, totalDataSize, pixelDataSize, mipLevels);
 
 			// Create texture
 			// Mipmaps must be read from the source image, they cannot be generated
-			// TODO: Find some way to prevent UI textures from loading mipmaps
 			uint32_t expectedMipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(srcWidth, srcHeight)))) + 1;
 			const int mipStart = flags & CTF_ReduceQuality ? min((int)gl_texture_quality, (int)expectedMipLevels - 1) : 0;
 
@@ -196,22 +202,24 @@ void VkHardwareTexture::CreateImage(FTexture *tex, int translation, int flags)
 					if (x >= mipStart) {
 						if (x == mipStart) {
 							// Base texture
-							CreateTexture(fb->GetCommands(), mImage.get(), mipWidth, mipHeight, 4, VK_FORMAT_BC7_UNORM_BLOCK, pixelData + dataPos, expectedMipLevels - mipStart, false, mipSize);
+							CreateTexture(fb->GetCommands(), mImage.get(), mipWidth, mipHeight, 0, fmt, pixelData + dataPos, expectedMipLevels - mipStart, false, mipSize);
 						}
 						else {
 							// Mip
-							CreateTextureMipMap(fb->GetCommands(), mImage.get(), x - mipStart, mipWidth, mipHeight, 4, VK_FORMAT_BC7_UNORM_BLOCK, pixelData + dataPos, mipSize);
+							CreateTextureMipMap(fb->GetCommands(), mImage.get(), x - mipStart, mipWidth, mipHeight, 0, fmt, pixelData + dataPos, mipSize);
 						}
 					}
 
 					dataPos += mipSize;
 					mipWidth = std::max(1u, (mipWidth >> 1));
 					mipHeight = std::max(1u, (mipHeight >> 1));
-					mipSize = (size_t)std::max(1u, ((mipWidth + 3) / 4)) * std::max(1u, ((mipHeight + 3) / 4)) * 16;
+					mipSize = (size_t)std::max(1u, ((mipWidth + 3) / 4)) * std::max(1u, ((mipHeight + 3) / 4)) * blockSize;
 				}
+				CheckFinalTransition(fb->GetCommands()->GetTransferCommands(), false);
 			}
 			else {
-				CreateTexture(fb->GetCommands(), mImage.get(), src->GetWidth(), src->GetHeight(), 4, VK_FORMAT_BC7_UNORM_BLOCK, pixelData, false, false, (int)pixelDataSize);
+				CreateTexture(fb->GetCommands(), mImage.get(), src->GetWidth(), src->GetHeight(), 4, fmt, pixelData, false, false, (int)pixelDataSize);
+				CheckFinalTransition(fb->GetCommands()->GetTransferCommands(), false);
 			}
 
 			
@@ -223,6 +231,7 @@ void VkHardwareTexture::CreateImage(FTexture *tex, int translation, int flags)
 			FTextureBuffer texbuffer = tex->CreateTexBuffer(translation, flags | CTF_ProcessData);
 			bool indexed = flags & CTF_Indexed;
 			CreateTexture(texbuffer.mWidth, texbuffer.mHeight, indexed ? 1 : 4, indexed ? VK_FORMAT_R8_UNORM : VK_FORMAT_B8G8R8A8_UNORM, texbuffer.mBuffer, !indexed);
+			CheckFinalTransition(fb->GetCommands()->GetTransferCommands(), false);
 		}
 	}
 	else
@@ -264,12 +273,21 @@ void VkHardwareTexture::CreateTexture(int w, int h, int pixelsize, VkFormat form
 	hwState = READY;
 }
 
+void VkHardwareTexture::CheckFinalTransition(VulkanCommandBuffer *cmd, bool background) {
+	assert(background ? mLoadedImage != nullptr : mImage != nullptr);
+
+	VkTextureImage* img = background ? mLoadedImage.get() : mImage.get();
+	if (img->Layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && img->Image) {
+		VkImageTransition()
+			.AddImage(img, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, img->Layout == VK_IMAGE_LAYOUT_UNDEFINED, 0, img->Image->mipLevels)
+			.Execute(cmd);
+	}
+}
+
+
 void VkHardwareTexture::BackgroundCreateTexture(VkCommandBufferManager* bufManager, int w, int h, int pixelsize, VkFormat format, const void *pixels, int numMipLevels, bool createMips, int totalSize) {
 	if (!mLoadedImage) mLoadedImage.reset(new VkTextureImage());
-	else {
-		assert(mLoadedImage != nullptr);
-		return; // We cannot reset the loaded image on a different thread
-	}
+	assert(mLoadedImage.get() != nullptr);
 
 	CreateTexture(bufManager, mLoadedImage.get(), w, h, pixelsize, format, pixels, numMipLevels, createMips && fb->device.get()->UploadFamilySupportsGraphics, totalSize);
 }
@@ -362,7 +380,9 @@ void VkHardwareTexture::CreateTexture(VkCommandBufferManager *bufManager, VkText
 	region.imageExtent.height = h;
 	cmdBuffer->copyBufferToImage(stagingBuffer->buffer, img->Image->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-	if (generateMipmaps && mipmap > 0) img->GenerateMipmaps(cmdBuffer);
+	if (generateMipmaps && mipmap > 0) {
+		img->GenerateMipmaps(cmdBuffer);
+	}
 
 	// If we queued more than 64 MB of data already: wait until the uploads finish before continuing
 	bufManager->TransferDeleteList->Add(std::move(stagingBuffer));
@@ -575,6 +595,7 @@ VulkanDescriptorSet* VkMaterial::GetDescriptorSet(const FMaterialState& state)
 	auto systex = static_cast<VkHardwareTexture*>(GetLayer(0, state.mTranslation, &layer));
 	auto systeximage = systex->GetImage(layer->layerTexture, state.mTranslation, layer->scaleFlags);
 	update.AddCombinedImageSampler(descriptor.get(), 0, systeximage->View.get(), sampler, systeximage->Layout);
+	assert(systeximage->Layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 	if (!(layer->scaleFlags & CTF_Indexed))
 	{
@@ -583,6 +604,7 @@ VulkanDescriptorSet* VkMaterial::GetDescriptorSet(const FMaterialState& state)
 			auto syslayer = static_cast<VkHardwareTexture*>(GetLayer(i, 0, &layer));
 			auto syslayerimage = syslayer->GetImage(layer->layerTexture, 0, layer->scaleFlags);
 			update.AddCombinedImageSampler(descriptor.get(), i, syslayerimage->View.get(), sampler, syslayerimage->Layout);
+			assert(syslayerimage->Layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 		}
 	}
 	else
@@ -592,6 +614,7 @@ VulkanDescriptorSet* VkMaterial::GetDescriptorSet(const FMaterialState& state)
 			auto syslayer = static_cast<VkHardwareTexture*>(GetLayer(i, translation, &layer));
 			auto syslayerimage = syslayer->GetImage(layer->layerTexture, 0, layer->scaleFlags);
 			update.AddCombinedImageSampler(descriptor.get(), i, syslayerimage->View.get(), sampler, syslayerimage->Layout);
+			assert(syslayerimage->Layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 		}
 		numLayers = 3;
 	}

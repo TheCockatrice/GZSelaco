@@ -94,6 +94,7 @@
 #include "gstrings.h"
 #include "s_music.h"
 #include "d_main.h"
+#include "i_time.h"
 
 static FRandom pr_skullpop ("SkullPop");
 
@@ -828,6 +829,143 @@ DEFINE_ACTION_FUNCTION(_PlayerInfo, GetStillBob)
 	ACTION_RETURN_FLOAT(self->userinfo.GetStillBob());
 }
 
+static float DEG2RAD(float deg)
+{
+	return deg * float(M_PI / 180.0);
+}
+
+static float RAD2DEG(float rad)
+{
+	return rad * float(180. / M_PI);
+}
+
+VSMatrix WorldToClip()
+{
+	float pixelRatio = level.pixelstretch;
+
+	float fovaspect;
+	float aspect = r_viewwindow.WidescreenRatio;
+	if (r_viewwindow.WidescreenRatio >= 1.3f)
+	{
+		fovaspect = 1.333333f;
+	}
+	else
+	{
+		fovaspect = aspect;
+	}
+
+	float vpX = (float)r_viewpoint.Pos.X;
+	float vpY = (float)r_viewpoint.Pos.Y;
+	float vpZ = (float)r_viewpoint.Pos.Z;
+
+	float yaw = (float)r_viewpoint.HWAngles.Yaw.Degrees();
+	float pitch = (float)r_viewpoint.HWAngles.Pitch.Degrees();
+	float roll = (float)r_viewpoint.HWAngles.Roll.Degrees();
+
+	VSMatrix vM(0);
+	vM.rotate(roll, 0.0f, 0.0f, 1.0f);
+	vM.rotate(pitch, 1.0f, 0.0f, 0.0f);
+	vM.rotate(yaw, 0.0f, 1.0f, 0.0f);
+	vM.translate(vpX, -vpZ * pixelRatio, -vpY);
+	vM.scale(-1.0, pixelRatio, 1);
+
+	VSMatrix cM(0);
+	float fovy = (float)(2 * atan(tan(r_viewpoint.FieldOfView.Radians() / 2) / fovaspect) * (180. / M_PI));
+	cM.perspective(fovy, aspect, (float)screen->GetZNear(), (float)screen->GetZFar());
+	cM.multMatrix(vM);
+
+	return cM;
+}
+
+DVector3 player_t::WorldToView(DVector3 worldPosition)
+{
+	VSMatrix cM = WorldToClip();
+
+	float wp[4] = { (float)worldPosition.X, (float)worldPosition.Z, (float)worldPosition.Y, 1 };
+	float result[4];
+
+	cM.multMatrixPoint(wp, result);
+	
+	return DVector3(double(result[0] / result[3]) * 0.5 + 0.5, double(result[1] / result[3]) * 0.5 + 0.5, double(result[2]));
+}
+
+DEFINE_ACTION_FUNCTION(_PlayerInfo, WorldToView)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(player_t);
+	PARAM_FLOAT(x);
+	PARAM_FLOAT(y);
+	PARAM_FLOAT(z);
+	ACTION_RETURN_VEC3(self->WorldToView(DVector3(x, y, z)));
+}
+
+double player_t::DepthToViewScale(double depth, double size)
+{
+	double znear = screen->GetZNear();
+	double zfar = screen->GetZFar();
+
+	if (depth < znear)
+	{
+		return 0;
+	}
+
+	float fovaspect;
+	float aspect = r_viewwindow.WidescreenRatio;
+	if (r_viewwindow.WidescreenRatio >= 1.3f)
+	{
+		fovaspect = 1.333333f;
+	}
+	else
+	{
+		fovaspect = aspect;
+	}
+
+	float fovy = (float)(2 * atan(tan(r_viewpoint.FieldOfView.Radians() / 2) / fovaspect));
+	double normalDepth = (depth - znear) / (zfar - znear);
+	
+	double scale = (size / 2) / (depth * tan(fovy / 2));
+	return scale;
+}
+
+DEFINE_ACTION_FUNCTION(_PlayerInfo, DepthToViewScale)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(player_t);
+	PARAM_FLOAT(depth);
+	PARAM_FLOAT(size);
+	ACTION_RETURN_FLOAT(self->DepthToViewScale(depth, size));
+}
+
+double player_t::GetNearPlane()
+{
+	return screen->GetZNear();
+}
+
+DEFINE_ACTION_FUNCTION(_PlayerInfo, GetNearPlane)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(player_t);
+	ACTION_RETURN_FLOAT(self->GetNearPlane());
+}
+
+double player_t::GetFarPlane()
+{
+	return screen->GetZFar();
+}
+
+DEFINE_ACTION_FUNCTION(_PlayerInfo, GetFarPlane)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(player_t);
+	ACTION_RETURN_FLOAT(self->GetFarPlane());
+}
+
+double player_t::GetFOV()
+{
+	return camera->GetFOV(I_GetTimeFrac());
+}
+
+DEFINE_ACTION_FUNCTION(_PlayerInfo, GetFOV)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(player_t);
+	ACTION_RETURN_FLOAT(self->GetFOV());
+}
 
 //===========================================================================
 //

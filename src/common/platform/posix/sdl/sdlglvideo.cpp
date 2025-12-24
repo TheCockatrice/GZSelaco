@@ -593,7 +593,7 @@ SystemGLFrameBuffer::SystemGLFrameBuffer(void *hMonitor, bool fullscreen)
 		}
 
 		// @Cockatrice - Create the aux contexts first with the expectation that they will be shared with the main context
-		if(gl_max_transfer_threads > 0) {
+		/*if(gl_max_transfer_threads > 0) {
 			Printf("R_OPENGL: Creating additional contexts...\n");
 
 			const int numAux = min((int)gl_max_transfer_threads, 4);
@@ -620,7 +620,7 @@ SystemGLFrameBuffer::SystemGLFrameBuffer(void *hMonitor, bool fullscreen)
 			else {
 				Printf("R_OPENGL: Created %d additional contexts\n", numCreated);
 			}
-		}
+		}*/
 
 		GLContext = SDL_GL_CreateContext(Priv::window);
 		if (GLContext == nullptr)
@@ -699,18 +699,64 @@ void SystemGLFrameBuffer::setNULLContext() {
 	SDL_GL_MakeCurrent(0, 0);
 }
 
-void SystemGLFrameBuffer::setMainContext() {
-	SDL_GL_MakeCurrent(Priv::window, GLContext);
+bool SystemGLFrameBuffer::setMainContext() {
+	return SDL_GL_MakeCurrent(Priv::window, GLContext) == 0;
 }
 
-void SystemGLFrameBuffer::setAuxContext(int index) {
-	SDL_GL_MakeCurrent(Priv::window, GLAuxContexts[index]);
+bool SystemGLFrameBuffer::setAuxContext(int index) {
+	return SDL_GL_MakeCurrent(Priv::window, GLAuxContexts[index]) == 0;
 }
 
 int SystemGLFrameBuffer::numAuxContexts() {
 	int num = 0;
 	for (int x = 0; x < 4; x++) if (GLAuxContexts[x] != NULL) num++;
 	return num;
+}
+
+static const char* getGLErrorStr(GLenum err) {
+	switch (err) {
+		case GL_NO_ERROR:                      return "GL_NO_ERROR";
+		case GL_INVALID_ENUM:                  return "GL_INVALID_ENUM";
+		case GL_INVALID_VALUE:                 return "GL_INVALID_VALUE";
+		case GL_INVALID_OPERATION:             return "GL_INVALID_OPERATION";
+		case GL_OUT_OF_MEMORY:                 return "GL_OUT_OF_MEMORY";
+		case GL_STACK_UNDERFLOW:               return "GL_STACK_UNDERFLOW";
+		case GL_STACK_OVERFLOW:                return "GL_STACK_OVERFLOW";
+#ifdef GL_CONTEXT_LOST
+		case GL_CONTEXT_LOST:				   return "GL_CONTEXT_LOST";
+#endif
+		default:                               return "Unknown OpenGL Error";
+	}
+}
+
+int SystemGLFrameBuffer::createAuxContext() {
+	// Find a free context
+	int index = 0;
+
+	for (; index < 10; index++) {
+		if (GLAuxContexts[index] == NULL)
+			break;
+	}
+
+	if (GLAuxContexts[index] != NULL) {
+		Printf(TEXTCOLOR_ORANGE"R_OPENGL: Warning - Ran out of space for more OpenGL contexts! (Current: %d)\n", numAuxContexts());
+		return -1;
+	}
+
+	// Set main context so we can force sharing
+	setMainContext();
+	SDL_GL_SetAttribute(SDL_GL_SHARE_WITH_CURRENT_CONTEXT, 1);
+	GLAuxContexts[index] = SDL_GL_CreateContext(Priv::window);
+	setNULLContext();
+
+				
+	if (GLAuxContexts[index] == NULL) {
+		GLenum err = glGetError();
+		Printf(TEXTCOLOR_ORANGE"R_OPENGL: Warning - Unable to create additional context [%d] (%d : %s)\n", index, err, getGLErrorStr(err));
+		return -1;
+	}
+
+	return index;
 }
 
 

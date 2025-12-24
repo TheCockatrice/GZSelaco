@@ -3,7 +3,7 @@ shift +DashMode
 M printObjectives
 F Toggle_Flashlight
 G useGadget
-H switchGadget
+H +switchGadget
 C crouch
 ctrl +crouch
 Q meleeButton
@@ -72,7 +72,7 @@ ltrigger +altattack
 lshoulder +DashMode
 rshoulder weaponWheel
 dpadleft printObjectives
-dpadright switchGadget
+dpadright +switchGadget
 dpadup togglemap
 pad_start menu_main
 pad_back codex
