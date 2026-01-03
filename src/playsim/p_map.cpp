@@ -920,11 +920,12 @@ bool PIT_CheckLine(FMultiBlockLinesIterator &mit, FMultiBlockLinesIterator::Chec
 
 	// MBF bouncers are treated as missiles here.
 	bool Projectile = (tm.thing->flags & MF_MISSILE || tm.thing->BounceFlags & BOUNCE_MBF);
+	bool blockedByLineBits = (ld->blockBits & tm.thing->lineBlockBits);			// @Cockatrice - Allow projectiles to be blocked by linebits 
 
 	uint32_t ProjectileBlocking = ML_BLOCKEVERYTHING | ML_BLOCKPROJECTILE;
 	if ( tm.thing->flags8 & MF8_BLOCKASPLAYER ) ProjectileBlocking |= ML_BLOCK_PLAYERS | ML_BLOCKING;
 
-	if (!(Projectile) || (ld->flags & ProjectileBlocking) )
+	if (!(Projectile) || (ld->flags & ProjectileBlocking) || blockedByLineBits)
 	{
 		if (ld->flags & ML_RAILING)
 		{
