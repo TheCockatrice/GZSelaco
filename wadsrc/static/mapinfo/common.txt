@@ -134,6 +134,7 @@ DoomEdNums
   9872 = SpotLightFlickerAttenuated
   9873 = SectorSpotLightAttenuated
   9874 = SpotLightFlickerRandomAttenuated
+  9875 = MapSpot	// ZDRay light probe
   9876 = MapSpot	// ZDRay static point light
   9877 = MapSpot	// ZDRay static point flicker light
   9878 = MapSpot	// ZDRay static point flicker random light
