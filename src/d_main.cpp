@@ -3524,6 +3524,10 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 	// [RH] Load sound environments
 	S_ParseReverbDef ();
 
+	// [NL] Load and initialize the AUDIOFX lump
+	S_ParseAudioFXDef ();
+	GSnd->InitAudioFX();
+
 	// [RH] Parse any SNDINFO lumps
 	if (!batchrun) Printf ("S_InitData: Load sound definitions.\n");
 	S_InitData ();

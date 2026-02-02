@@ -37,8 +37,14 @@ struct OpenALQueueItem {
 	ALuint source = 0;
 	ALuint buffer = 0;
 	ALuint envSlot = 0;
+	ALint effectID = -1;
 	bool reuseChan = false;		// Only used to signal what type of offset startTime is
 	bool inWater = false;		// Play as if in water
+};
+
+struct OpenALEffectDef
+{
+	TArray<ALuint> effectSlots;
 };
 
 struct OpenALPlayedItem {
@@ -56,6 +62,7 @@ public:
 	OpenALSoundRenderer();
 	virtual ~OpenALSoundRenderer();
 
+	virtual void InitAudioFX();
 	virtual void SetSfxVolume(float volume);
 	virtual void SetMusicVolume(float volume);
 	virtual SoundHandle LoadSound(uint8_t *sfxdata, int length, int def_loop_start, int def_loop_end);
@@ -69,8 +76,8 @@ public:
 	virtual SoundStream *CreateStream(SoundStreamCallback callback, int buffbytes, int flags, int samplerate, void *userdata);
 
 	// Starts a sound.
-	FISoundChannel *StartSound(SoundHandle sfx, float vol, float pitch, int chanflags, FISoundChannel *reuse_chan, float startTime) override;
-	FISoundChannel *StartSound3D(SoundHandle sfx, SoundListener *listener, float vol, FRolloffInfo *rolloff, float distscale, float pitch, int priority, const FVector3 &pos, const FVector3 &vel, int channum, int chanflags, FISoundChannel *reuse_chan, float startTime) override;
+	FISoundChannel *StartSound(SoundHandle sfx, float vol, float pitch, int chanflags, FISoundChannel *reuse_chan, float startTime, int effectID) override;
+	FISoundChannel *StartSound3D(SoundHandle sfx, SoundListener *listener, float vol, FRolloffInfo *rolloff, float distscale, float pitch, int priority, const FVector3 &pos, const FVector3 &vel, int channum, int chanflags, FISoundChannel *reuse_chan, float startTime, int effectID) override;
 	virtual FISoundChannel *ReserveChannel(int priority);
 
 	// Changes a channel's volume.
@@ -244,6 +251,14 @@ private:
 	// at runtime this is no longer thread safe
 	bool StartSound3D(OpenALQueueItem &playInfo);
 	bool StartSound(OpenALQueueItem &playInfo);
+
+	ALCint MaxAuxSends = 0;
+	TArray<OpenALEffectDef> EffectDefs;
+	TArray<ALuint> EffectSlots;
+	TArray<ALuint> Effects;
+
+	// So we can change the volume of 'dry' sounds, so we don't hear both the dry and wet at the same time
+	ALuint DryFilter; 
 };
 
 #endif // NO_OPENAL

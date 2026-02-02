@@ -185,6 +185,21 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_PlaySound, A_PlaySound)
 	return 0;
 }
 
+DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_PlaySoundEffect, A_PlaySoundEffect)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	PARAM_INT(soundid);
+	PARAM_INT(channel);
+	PARAM_STRING(effect);
+	PARAM_FLOAT(volume);
+	PARAM_BOOL(looping);
+	PARAM_FLOAT(attenuation);
+	PARAM_BOOL(local);
+	PARAM_FLOAT(pitch);
+	A_PlaySoundEffect(self, soundid, channel, effect, volume, looping, attenuation, local, pitch);
+	return 0;
+}
+
 DEFINE_ACTION_FUNCTION_NATIVE(AActor, StartSound, StartSound)
 {
 	PARAM_SELF_PROLOGUE(AActor);
@@ -214,6 +229,20 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_StartSound, A_StartSound)
 	return 0;
 }
 
+DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_StartSoundEffect, A_StartSoundEffect)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	PARAM_INT(soundid);
+	PARAM_INT(channel);
+	PARAM_STRING(effect);
+	PARAM_INT(flags);
+	PARAM_FLOAT(volume);
+	PARAM_FLOAT(attenuation);
+	PARAM_FLOAT(pitch);
+	PARAM_FLOAT(startTime);
+	A_StartSoundEffect(self, soundid, channel, effect, flags, volume, attenuation, pitch, startTime);
+	return 0;
+}
 
 void A_StartSoundIfNotSame(AActor *self, int soundid, int checksoundid, int channel, int flags, double volume, double attenuation, double pitch, double startTime)
 {

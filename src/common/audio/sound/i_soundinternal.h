@@ -6,6 +6,7 @@
 
 #include "vectors.h"
 #include "tflags.h"
+#include "tarray.h"
 
 enum EChanFlag
 {
@@ -143,6 +144,32 @@ struct FISoundChannel
 	float		DistanceSqr;
 	bool		ManualRolloff;
 	EChanFlags	ChanFlags;
+};
+
+struct AudioFXValueInt
+{
+	int type;
+	int value;
+};
+
+struct AudioFXValueFloat
+{
+	int type;
+	float value;
+};
+
+struct AudioFXEffectDef
+{
+	int type;
+	float gain;
+	TArray<AudioFXValueInt> intValues;
+	TArray<AudioFXValueFloat> floatValues;
+};
+
+struct AudioFXEffectChannelDef
+{
+	const char* name;
+	TArray<AudioFXEffectDef> effects;
 };
 
 void S_SetSoundPaused(int state);

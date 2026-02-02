@@ -102,6 +102,8 @@ public:
 	SoundRenderer ();
 	virtual ~SoundRenderer ();
 
+	virtual void InitAudioFX() { }
+
 	virtual bool IsNull() { return false; }
 	virtual void SetSfxVolume (float volume) = 0;
 	virtual void SetMusicVolume (float volume) = 0;
@@ -117,8 +119,8 @@ public:
 	virtual SoundStream *CreateStream (SoundStreamCallback callback, int buffbytes, int flags, int samplerate, void *userdata) = 0;
 
 	// Starts a sound.
-	virtual FISoundChannel *StartSound (SoundHandle sfx, float vol, float pitch, int chanflags, FISoundChannel *reuse_chan, float startTime = 0.f) = 0;
-	virtual FISoundChannel *StartSound3D (SoundHandle sfx, SoundListener *listener, float vol, FRolloffInfo *rolloff, float distscale, float pitch, int priority, const FVector3 &pos, const FVector3 &vel, int channum, int chanflags, FISoundChannel *reuse_chan, float startTime = 0.f) = 0;
+	virtual FISoundChannel *StartSound (SoundHandle sfx, float vol, float pitch, int chanflags, FISoundChannel *reuse_chan, float startTime = 0.f, int effectID = -1) = 0;
+	virtual FISoundChannel *StartSound3D (SoundHandle sfx, SoundListener *listener, float vol, FRolloffInfo *rolloff, float distscale, float pitch, int priority, const FVector3 &pos, const FVector3 &vel, int channum, int chanflags, FISoundChannel *reuse_chan, float startTime = 0.f, int effectID = -1) = 0;
 	virtual FISoundChannel *ReserveChannel(int priority) { return nullptr; }
 
 	// Stops a sound channel.
@@ -176,6 +178,8 @@ void I_InitSound ();
 void I_CloseSound();
 
 extern ReverbContainer *DefaultEnvironments[26];
+extern TArray<AudioFXEffectChannelDef> AudioFXChannelDefs;
+extern TMap<FString, int> AudioFXChannelNameToIndex;
 
 bool IsOpenALPresent();
 void S_SoundReset();

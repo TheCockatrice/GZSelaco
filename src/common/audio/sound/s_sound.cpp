@@ -456,7 +456,7 @@ EXTERN_CVAR(Int, audio_loader_threads);
 
 FSoundChan *SoundEngine::StartSound(int type, const void *source,
 	const FVector3 *pt, int channel, EChanFlags flags, FSoundID sound_id, float volume, float attenuation,
-	FRolloffInfo *forcedrolloff, float spitch, float startTime, FSoundHandle *handleOut)
+	FRolloffInfo *forcedrolloff, float spitch, float startTime, FSoundHandle *handleOut, int effectID)
 {
 	sfxinfo_t *sfx;
 	FSoundID org_id;
@@ -633,7 +633,7 @@ FSoundChan *SoundEngine::StartSound(int type, const void *source,
 			AudioQueuePlayInfo info = {
 				LastSoundHandle, org_id, pos, vel, channel, type,
 				pitch, volume, force2D ? 0 : attenuation, startTime,
-				flags, *rolloff, source
+				flags, *rolloff, source, effectID
 			};
 
 			AudioLoaderQueue::Instance->queue(sfx, sound_id, &info);
@@ -733,11 +733,11 @@ FSoundChan *SoundEngine::StartSound(int type, const void *source,
 		if (!(type == SOURCE_Actor && attenuation > 0 && IsSoundFromListener((AActor *)source, (AActor *)listener.ListenerObject)) 
 			&& attenuation > 0 && type != SOURCE_None)
 		{
-			chan = (FSoundChan*)GSnd->StartSound3D(sfx->data, &listener, float(volume), rolloff, float(attenuation), max(0.0001f, pitch), basepriority, pos, vel, channel, startflags, NULL, startTime);
+			chan = (FSoundChan*)GSnd->StartSound3D(sfx->data, &listener, float(volume), rolloff, float(attenuation), max(0.0001f, pitch), basepriority, pos, vel, channel, startflags, NULL, startTime, effectID);
 		}
 		else
 		{
-			chan = (FSoundChan*)GSnd->StartSound(sfx->data, float(volume), max(0.0001f, pitch), startflags, NULL, startTime);
+			chan = (FSoundChan*)GSnd->StartSound(sfx->data, float(volume), max(0.0001f, pitch), startflags, NULL, startTime, effectID);
 		}
 	}
 	if (chan == NULL && (chanflags & CHANF_LOOP))
@@ -790,7 +790,7 @@ FSoundChan *SoundEngine::StartSound(int type, const void *source,
 // Do not check links or verify that the sound is loaded. If not loaded, no sound is played.
 FSoundChan *SoundEngine::StartSoundER(sfxinfo_t *sfx, int type, const void *source,
 	FVector3 pos, FVector3 vel, int channel, EChanFlags flags, FSoundID sound_id, FSoundID org_sound_id, float volume, float attenuation,
-	FRolloffInfo *forcedrolloff, float spitch, float startTime, bool usePosVel, FSoundHandle reservedHandle)
+	FRolloffInfo *forcedrolloff, float spitch, float startTime, bool usePosVel, FSoundHandle reservedHandle, int effectID)
 {
 	// Return NULL if the sound isn't loaded
 	if (!sfx->data.isValid()) { 
@@ -943,11 +943,11 @@ FSoundChan *SoundEngine::StartSoundER(sfxinfo_t *sfx, int type, const void *sour
 
 		if (attenuation > 0 && type != SOURCE_None)
 		{
-			chan = (FSoundChan*)GSnd->StartSound3D(sfx->data, &listener, volume, rolloff, attenuation, max(0.0001f, spitch), basepriority, pos, vel, channel, startflags, chan, startTime);
+			chan = (FSoundChan*)GSnd->StartSound3D(sfx->data, &listener, volume, rolloff, attenuation, max(0.0001f, spitch), basepriority, pos, vel, channel, startflags, chan, startTime, effectID);
 		}
 		else
 		{
-			chan = (FSoundChan*)GSnd->StartSound(sfx->data, volume, max(0.0001f, spitch), startflags, chan, startTime);
+			chan = (FSoundChan*)GSnd->StartSound(sfx->data, volume, max(0.0001f, spitch), startflags, chan, startTime, effectID);
 		}
 
 		sndTimer.Unclock();

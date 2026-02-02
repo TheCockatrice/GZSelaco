@@ -211,6 +211,7 @@ extern ReverbContainer *DefaultEnvironments[26];
 
 void S_ParseReverbDef ();
 void S_UnloadReverbDef ();
+void S_ParseAudioFXDef ();
 void S_SetEnvironment (const ReverbContainer *settings);
 ReverbContainer *S_FindEnvironment (const char *name);
 ReverbContainer *S_FindEnvironment (int id);
@@ -329,11 +330,11 @@ public:
 	void UpdateSounds(int time);
 
 	FSoundChan* StartSound(int sourcetype, const void* source,
-		const FVector3* pt, int channel, EChanFlags flags, FSoundID sound_id, float volume, float attenuation, FRolloffInfo* rolloff = nullptr, float spitch = 0.0f, float startTime = 0.0f, FSoundHandle* handleOut = nullptr);
+		const FVector3* pt, int channel, EChanFlags flags, FSoundID sound_id, float volume, float attenuation, FRolloffInfo* rolloff = nullptr, float spitch = 0.0f, float startTime = 0.0f, FSoundHandle* handleOut = nullptr, int effectID = -1);
 	
 	FSoundChan* StartSoundER(sfxinfo_t *sfx, int type, const void *source,
 		FVector3 pos, FVector3 vel, int channel, EChanFlags flags, FSoundID sound_id, FSoundID org_sound_id, float volume, float attenuation,
-		FRolloffInfo *forcedrolloff, float spitch, float startTime, bool usePosVel = true, FSoundHandle reservedHandle = 0);
+		FRolloffInfo *forcedrolloff, float spitch, float startTime, bool usePosVel = true, FSoundHandle reservedHandle = 0, int effectID = -1);
 
 	// Stops an origin-less sound from playing from this channel.
 	void StopSoundID(FSoundID sound_id);

@@ -21,6 +21,7 @@ struct AudioQueuePlayInfo {
 	EChanFlags flags;
 	FRolloffInfo rolloff;
 	const void *source = NULL;
+	int effectID;
 };
 
 

@@ -42,6 +42,7 @@ inline void S_Sound(AActor* ent, int channel, EChanFlags flags, const char* sfxi
 
 // [Nash] Used by ACS and DECORATE
 void S_PlaySound(AActor *a, int chan, EChanFlags flags, FSoundID sid, float vol, float atten);
+void S_PlaySoundEffect(AActor* a, int chan, const FString& effect, EChanFlags flags, FSoundID sid, float vol, float atten);
 
 // Stops a sound emanating from one of an emitter's channels.
 bool S_StopSound (FSoundHandle& handle);
@@ -76,6 +77,9 @@ void S_SerializeSounds(FSerializer &arc);
 void A_PlaySound(AActor *self, int soundid, int channel, double volume, int looping, double attenuation, int local, double pitch);
 void A_StartSound(AActor* self, int soundid, int channel, int flags, double volume, double attenuation,  double pitch, double startTime = 0.);
 int StartSound(AActor* self, int soundid, int channel, int flags, double volume, double attenuation, double pitch, double startTime = 0.);	// @Cockatrice - Native for zscript
+void A_PlaySoundEffect(AActor* self, int soundid, int channel, const FString& effect, double volume, int looping, double attenuation, int local, double pitch);
+void A_StartSoundEffect(AActor* self, int soundid, int channel, const FString& effect, int flags, double volume, double attenuation, double pitch, double startTime = 0.);
+int StartSoundEffect(AActor* self, int soundid, int channel, const FString& effect, int flags, double volume, double attenuation, double pitch, double startTime = 0.);	// @Cockatrice - Native for zscript
 static void S_SetListener(AActor *listenactor);
 void S_SoundReset();
 void S_ResumeSound(bool state);
