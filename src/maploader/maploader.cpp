@@ -3411,7 +3411,7 @@ void MapLoader::LoadLightmap(MapData *map)
 	Level->LPMinY = 0;
 	Level->LPWidth = 0;
 	Level->LPHeight = 0;
-	Level->LPCellSize = 32;
+	Level->LPCellSize = 16;
 	Level->LMVersion = -1;
 	Level->LMNeedsRebuild = true;
 	Level->LMRenderFrame = 0;
