@@ -20,13 +20,13 @@ TMap<FString, int> AudioFXChannelNameToIndex;
 
 // Doing a weird thing where I'm using no-op ifs just so all the actual statements can just use 'else if'
 #define BEGIN_EFFECTS if(0) {
-#define BEGIN_PROCESS_EFFECT(name, oalEnum) } else if (strcmpi(sc.String, name) == 0) { effect.type = oalEnum; if (sc.CheckFloat()) { effect.gain = (float)sc.Float; if (effect.gain < 0.0f || effect.gain > 1.0f) sc.ScriptError("AudioFX: Gain for effect '%s' must be between 0 and 1, found: %g", name, effect.gain); } sc.MustGetStringName("{"); while(sc.GetString()) { if(0) { }
-#define PROCESS_INT(name, oalEnum, min, max) else if (strcmpi(sc.String, name) == 0) { sc.MustGetNumber(); effect.intValues.Push(AudioFXValueInt { oalEnum, sc.Number }); if (sc.Number < min || sc.Number > max) sc.ScriptError("AudioFX: Value '%s' must be between %d and %d, found: %d", name, min, max, sc.Number); }
-#define PROCESS_FLOAT(name, oalEnum, min, max) else if (strcmpi(sc.String, name) == 0) { sc.MustGetFloat(); effect.floatValues.Push(AudioFXValueFloat { oalEnum, (float)sc.Float }); if (sc.Float < min || sc.Float > max) sc.ScriptError("AudioFX: Value '%s' must be between %g and %g, found: %g", name, (float)min, (float)max, (float)sc.Float); }
-#define BEGIN_PROCESS_ENUM(name, oalEnum) else if (strcmpi(sc.String, name) == 0) { int enumID = oalEnum; const char* enumName = name; sc.MustGetString(); if(0) { }
-#define PROCESS_ENUM_VALUE(name, value) else if (strcmpi(sc.String, name) == 0) { effect.intValues.Push(AudioFXValueInt { enumID, value }); }
+#define BEGIN_PROCESS_EFFECT(name, oalEnum) } else if (stricmp(sc.String, name) == 0) { effect.type = oalEnum; if (sc.CheckFloat()) { effect.gain = (float)sc.Float; if (effect.gain < 0.0f || effect.gain > 1.0f) sc.ScriptError("AudioFX: Gain for effect '%s' must be between 0 and 1, found: %g", name, effect.gain); } sc.MustGetStringName("{"); while(sc.GetString()) { if(0) { }
+#define PROCESS_INT(name, oalEnum, min, max) else if (stricmp(sc.String, name) == 0) { sc.MustGetNumber(); effect.intValues.Push(AudioFXValueInt { oalEnum, sc.Number }); if (sc.Number < min || sc.Number > max) sc.ScriptError("AudioFX: Value '%s' must be between %d and %d, found: %d", name, min, max, sc.Number); }
+#define PROCESS_FLOAT(name, oalEnum, min, max) else if (stricmp(sc.String, name) == 0) { sc.MustGetFloat(); effect.floatValues.Push(AudioFXValueFloat { oalEnum, (float)sc.Float }); if (sc.Float < min || sc.Float > max) sc.ScriptError("AudioFX: Value '%s' must be between %g and %g, found: %g", name, (float)min, (float)max, (float)sc.Float); }
+#define BEGIN_PROCESS_ENUM(name, oalEnum) else if (stricmp(sc.String, name) == 0) { int enumID = oalEnum; const char* enumName = name; sc.MustGetString(); if(0) { }
+#define PROCESS_ENUM_VALUE(name, value) else if (stricmp(sc.String, name) == 0) { effect.intValues.Push(AudioFXValueInt { enumID, value }); }
 #define END_PROCESS_ENUM else { sc.ScriptError("Invalid value for property '%s': %s", enumName, sc.String); } }
-#define END_PROCESS_EFFECT else if (strcmpi(sc.String, "}") == 0) { break; } } channel.effects.Push(effect);
+#define END_PROCESS_EFFECT else if (stricmp(sc.String, "}") == 0) { break; } } channel.effects.Push(effect);
 #define END_EFFECTS } else { sc.ScriptError("Unknown AudioFX effect type: %s", sc.String); }
 
 void S_ReadAudioFXDef(FScanner& sc)
@@ -40,7 +40,7 @@ void S_ReadAudioFXDef(FScanner& sc)
 
 		if (AudioFXChannelNameToIndex.CheckKey(channel.name))
 		{
-			sc.ScriptError("Audio effect '", channel.name, "' has already been defined");
+			sc.ScriptError("Audio effect \"%s\" has already been defined.", channel.name);
 		}
 
 		Printf("AUDIOFX: Found effect definition '%s'\n", channel.name);
@@ -133,7 +133,7 @@ void S_ReadAudioFXDef(FScanner& sc)
 						PROCESS_ENUM_VALUE("triangle", 1)
 						PROCESS_ENUM_VALUE("saw", 2)
 					END_PROCESS_ENUM
-					PROCESS_INT("Rate", AL_VOCAL_MORPHER_RATE, AL_VOCAL_MORPHER_MIN_RATE, AL_VOCAL_MORPHER_MAX_RATE)
+					PROCESS_FLOAT("Rate", AL_VOCAL_MORPHER_RATE, AL_VOCAL_MORPHER_MIN_RATE, AL_VOCAL_MORPHER_MAX_RATE)
 				END_PROCESS_EFFECT
 
 				BEGIN_PROCESS_EFFECT("PitchShift", AL_EFFECT_PITCH_SHIFTER)
