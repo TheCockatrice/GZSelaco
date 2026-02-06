@@ -593,6 +593,8 @@ void OpenALSoundRenderer::InitAudioFX()
 	{
 		OpenALEffectDef effectDef;
 
+		ALint prevEffectSlot = -1;
+
 		for (auto effect : def.effects)
 		{
 			ALuint cid;
@@ -626,8 +628,13 @@ void OpenALSoundRenderer::InitAudioFX()
 			alAuxiliaryEffectSloti(cid, AL_EFFECTSLOT_EFFECT, eid);
 			alAuxiliaryEffectSlotf(cid, AL_EFFECTSLOT_GAIN, effect.gain);
 
-			// Apparently disabling this enables distance falloff?
-			alAuxiliaryEffectSloti(cid, AL_EFFECTSLOT_AUXILIARY_SEND_AUTO, AL_FALSE);
+			if (prevEffectSlot != -1)
+			{
+				alAuxiliaryEffectSloti(prevEffectSlot, AL_EFFECTSLOT_TARGET_SOFT, cid);
+			}
+
+			prevEffectSlot = cid;
+
 			getALError();
 		}
 
@@ -1815,6 +1822,7 @@ bool OpenALSoundRenderer::StartSound3D(OpenALQueueItem &playInfo)
 	{
 		const OpenALEffectDef& effectDef = EffectDefs[playInfo.effectID];
 		alSourcei(source, AL_DIRECT_FILTER, DryFilter);
+		alSourcef(source, AL_ROOM_ROLLOFF_FACTOR, 1.f);
 
 		for (int i = 0; i < MaxAuxSends - 1; i++)
 		{
