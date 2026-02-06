@@ -625,7 +625,9 @@ void OpenALSoundRenderer::InitAudioFX()
 
 			alAuxiliaryEffectSloti(cid, AL_EFFECTSLOT_EFFECT, eid);
 			alAuxiliaryEffectSlotf(cid, AL_EFFECTSLOT_GAIN, effect.gain);
-			//alAuxiliaryEffectSloti(cid, AL_EFFECTSLOT_AUXILIARY_SEND_AUTO, AL_FALSE);
+
+			// Apparently disabling this enables distance falloff?
+			alAuxiliaryEffectSloti(cid, AL_EFFECTSLOT_AUXILIARY_SEND_AUTO, AL_FALSE);
 			getALError();
 		}
 
@@ -635,6 +637,7 @@ void OpenALSoundRenderer::InitAudioFX()
 	alGenFilters(1, &DryFilter);
 	alFilteri(DryFilter, AL_FILTER_TYPE, AL_FILTER_LOWPASS);
 	alFilterf(DryFilter, AL_LOWPASS_GAIN, 0.0f);
+	alFilterf(DryFilter, AL_LOWPASS_GAINHF, 0.0f);
 }
 
 template<typename T>
@@ -1815,7 +1818,7 @@ bool OpenALSoundRenderer::StartSound3D(OpenALQueueItem &playInfo)
 
 		for (int i = 0; i < MaxAuxSends - 1; i++)
 		{
-			alSource3i(source, AL_AUXILIARY_SEND_FILTER, i < (int)effectDef.effectSlots.Size() ? effectDef.effectSlots[i] : AL_EFFECTSLOT_NULL, i + 1, envFilterAux);
+			alSource3i(source, AL_AUXILIARY_SEND_FILTER, i < (int)effectDef.effectSlots.Size() ? effectDef.effectSlots[i] : AL_EFFECTSLOT_NULL, i + 1, envFilterDirect);
 			getALError();
 		}
 	}
