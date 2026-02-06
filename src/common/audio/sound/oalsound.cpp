@@ -594,6 +594,7 @@ void OpenALSoundRenderer::InitAudioFX()
 		OpenALEffectDef effectDef;
 
 		ALint prevEffectSlot = -1;
+		ALint prevEnvEffectSlot = -1;
 
 		for (auto effect : def.effects)
 		{
@@ -628,14 +629,30 @@ void OpenALSoundRenderer::InitAudioFX()
 			alAuxiliaryEffectSloti(cid, AL_EFFECTSLOT_EFFECT, eid);
 			alAuxiliaryEffectSlotf(cid, AL_EFFECTSLOT_GAIN, effect.gain);
 
+			// Create an 'environment' version of the EffectSlot for reverb
+			ALuint cidEnv;
+			alGenAuxiliaryEffectSlots(1, &cidEnv);
+			alAuxiliaryEffectSloti(cidEnv, AL_EFFECTSLOT_EFFECT, eid);
+			alAuxiliaryEffectSlotf(cidEnv, AL_EFFECTSLOT_GAIN, effect.gain);
+
+			EffectSlots.Push(cidEnv);
+			effectDef.envEffectSlots.Push(cidEnv);
+
 			if (prevEffectSlot != -1)
 			{
 				alAuxiliaryEffectSloti(prevEffectSlot, AL_EFFECTSLOT_TARGET_SOFT, cid);
+				alAuxiliaryEffectSloti(prevEnvEffectSlot, AL_EFFECTSLOT_TARGET_SOFT, cidEnv);
 			}
 
 			prevEffectSlot = cid;
+			prevEnvEffectSlot = cidEnv;
 
 			getALError();
+		}
+
+		if (prevEnvEffectSlot != -1 && EnvSlot)
+		{
+			alAuxiliaryEffectSloti(prevEnvEffectSlot, AL_EFFECTSLOT_TARGET_SOFT, EnvSlot);
 		}
 
 		EffectDefs.Push(effectDef);
@@ -1643,20 +1660,12 @@ bool OpenALSoundRenderer::StartSound(OpenALQueueItem &playInfo)
 	{
 		const OpenALEffectDef& effectDef = EffectDefs[playInfo.effectID];
 		alSourcei(source, AL_DIRECT_FILTER, DryFilter);
-
-		for (int i = 0; i < MaxAuxSends - 1; i++)
-		{
-			alSource3i(source, AL_AUXILIARY_SEND_FILTER, i < (int)effectDef.effectSlots.Size() ? effectDef.effectSlots[i] : AL_EFFECTSLOT_NULL, i + 1, envFilterAux);
-		}
+		alSource3i(source, AL_AUXILIARY_SEND_FILTER, effectDef.effectSlots[0], 0, envFilterDirect);
+		alSource3i(source, AL_AUXILIARY_SEND_FILTER, effectDef.envEffectSlots[0], 1, envFilterAux);
 	}
 	else
 	{
-		alSourcei(source, AL_DIRECT_FILTER, envFilterDirect);
-
-		for (int i = 0; i < MaxAuxSends - 1; i++)
-		{
-			alSource3i(source, AL_AUXILIARY_SEND_FILTER, AL_EFFECTSLOT_NULL, i + 1, AL_FILTER_NULL);
-		}
+		alSource3i(source, AL_AUXILIARY_SEND_FILTER, AL_EFFECTSLOT_NULL, 1, AL_FILTER_NULL);
 	}
 
 	// Adjust pitch
@@ -1796,11 +1805,11 @@ bool OpenALSoundRenderer::StartSound3D(OpenALQueueItem &playInfo)
 
 	if (EnvSlot)
 	{
-		if (!(playInfo.chanflags&SNDF_NOREVERB))
+		if (!(playInfo.chanflags & SNDF_NOREVERB))
 		{
 			alSourcei(source, AL_DIRECT_FILTER, EnvFilters[0]);
 			alSource3i(source, AL_AUXILIARY_SEND_FILTER, EnvSlot, 0, EnvFilters[1]);
-			
+
 			envFilterDirect = EnvFilters[0];
 			envFilterAux = EnvFilters[1];
 		}
@@ -1823,21 +1832,13 @@ bool OpenALSoundRenderer::StartSound3D(OpenALQueueItem &playInfo)
 		const OpenALEffectDef& effectDef = EffectDefs[playInfo.effectID];
 		alSourcei(source, AL_DIRECT_FILTER, DryFilter);
 		alSourcef(source, AL_ROOM_ROLLOFF_FACTOR, 1.f);
-
-		for (int i = 0; i < MaxAuxSends - 1; i++)
-		{
-			alSource3i(source, AL_AUXILIARY_SEND_FILTER, i < (int)effectDef.effectSlots.Size() ? effectDef.effectSlots[i] : AL_EFFECTSLOT_NULL, i + 1, envFilterDirect);
-			getALError();
-		}
+		alSource3i(source, AL_AUXILIARY_SEND_FILTER, effectDef.effectSlots[0], 0, envFilterDirect);
+		alSource3i(source, AL_AUXILIARY_SEND_FILTER, effectDef.envEffectSlots[0], 1, envFilterAux);
+		getALError();
 	}
 	else
 	{
-		alSourcei(source, AL_DIRECT_FILTER, envFilterDirect);
-
-		for (int i = 0; i < MaxAuxSends - 1; i++)
-		{
-			alSource3i(source, AL_AUXILIARY_SEND_FILTER, AL_EFFECTSLOT_NULL, i + 1, AL_FILTER_NULL);
-		}
+		alSource3i(source, AL_AUXILIARY_SEND_FILTER, AL_EFFECTSLOT_NULL, 1, AL_FILTER_NULL);
 	}
 
 	getALError();

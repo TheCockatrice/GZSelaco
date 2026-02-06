@@ -44,7 +44,13 @@ struct OpenALQueueItem {
 
 struct OpenALEffectDef
 {
+	// EffectSlots for the main effect
 	TArray<ALuint> effectSlots;
+
+	// EffectSlots for the 'environment', that gets passed into the reverb effect.
+	// We need this because we need one version to play without reverb, and another to go
+	// through the EnvSlot EffectSlot so the reverb gets applied.
+	TArray<ALuint> envEffectSlots;
 };
 
 struct OpenALPlayedItem {
