@@ -1641,26 +1641,29 @@ void HWWall::DoMidTexture(HWWallDispatcher *di, seg_t * seg, bool drawfogboundar
 		flags |= HWF_SKYHACK;
 	}
 
-	float preclip_topleft = fch1;
-	float preclip_topright = fch2;
-	float preclip_bottomleft = ffh1;
-	float preclip_bottomright = ffh2;
+	float preclip_topleft = bch1;
+	float preclip_topright = bch2;
+	float preclip_bottomleft = bfh1;
+	float preclip_bottomright = bfh2;
 
 	float cliphl = preclip_topleft - preclip_bottomleft;
 	float cliphr = preclip_topright - preclip_bottomright;
 
 	float clipOfs[4] = { 0 };
 
-	if (cliphl != 0)
+	if (!wrap) // Don't clip wrapped midtexture lightmap coords, since they take up the full space
 	{
-		clipOfs[UPLFT] = (topleft - preclip_topleft) / cliphl;
-		clipOfs[LOLFT] = (bottomleft - preclip_bottomleft) / cliphl;
-	}
+		if (cliphl != 0)
+		{
+			clipOfs[UPLFT] = (topleft - preclip_topleft) / cliphl;
+			clipOfs[LOLFT] = (bottomleft - preclip_bottomleft) / cliphl;
+		}
 
-	if (cliphr != 0)
-	{
-		clipOfs[UPRGT] = (topright - preclip_topright) / cliphr;
-		clipOfs[LORGT] = (bottomright - preclip_bottomright) / cliphr;
+		if (cliphr != 0)
+		{
+			clipOfs[UPRGT] = (topright - preclip_topright) / cliphr;
+			clipOfs[LORGT] = (bottomright - preclip_bottomright) / cliphr;
+		}
 	}
 
 	SetWallCoordinates(seg, &tci, texturetop, topleft, topright, bottomleft, bottomright, t_ofs, skew, clipOfs);
