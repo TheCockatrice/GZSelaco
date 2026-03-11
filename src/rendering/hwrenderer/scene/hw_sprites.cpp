@@ -1906,7 +1906,7 @@ void HWSprite::ProcessDefinedParticle(HWDrawInfo* di, particledata_t* particle, 
 	Angles.Yaw = TAngle<double>::fromDeg(particle->angle + avf);
 	Angles.Pitch = TAngle<double>::fromDeg(particle->pitch + pvf);
 
-	if (particle->flags & SPF_ROLL | DPF_FLAT)
+	if (particle->flags & (SPF_ROLL | DPF_FLAT))
 	{
 		double ps = di->Level->pixelstretch;
 		double mult = 1.0 / sqrt(ps); // shrink slightly
