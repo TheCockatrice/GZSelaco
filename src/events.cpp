@@ -696,6 +696,15 @@ bool EventManager::HandleError(int errorType, FString errMsg) {
 	return false;
 }
 
+
+int32_t EventManager::GetSavegameFlags() {
+	int32_t flags = 0;
+	for (DStaticEventHandler* handler = FirstEventHandler; handler; handler = handler->next)
+		flags |= handler->GetSavegameFlags();
+	return flags;
+}
+
+
 FString EventManager::GetSavegameComments()
 {
 	struct Comment {
@@ -1984,6 +1993,23 @@ void DStaticEventHandler::WorldTick()
 		VMValue params[1] = { (DStaticEventHandler*)this };
 		VMCall(func, params, 1, nullptr, 0);
 	}
+}
+
+
+int32_t DStaticEventHandler::GetSavegameFlags()
+{
+	IFVIRTUAL(DStaticEventHandler, GetSavegameFlags)
+	{
+		if (isEmpty(func)) return 0;
+
+		int32_t flags = 0;
+		VMReturn result[1] = { &flags };
+		VMValue params[1] = { (DStaticEventHandler*)this };
+		VMCall(func, params, 1, result, 1);
+		return flags;
+	}
+
+	return 0;
 }
 
 

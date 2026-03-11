@@ -318,6 +318,7 @@ public:
 	void WorldLightning();
 	void WorldTick();
 	FString GetSavegameComment(int &order);		// @Cockatrice - Static handlers can append custom data to savegame comments, sorted by order
+	int32_t GetSavegameFlags();					// @Cockatrice - Static handlers can set flags that get saved with the savegame, which can be used to indicate various things about the save, this is not used in engine but only in script
 	bool IsSaveAllowed(bool quicksave);			// @Cockatrice - Callback to check if game saving is allowed at this moment
 	void PreSave(int saveType);					// @Cockatrice - Called immediately before a save, allowing managers to alter the world before saving
 	void PostSave(int saveType);				// @Cocaktrice - Called immediately after a save
@@ -519,6 +520,7 @@ struct EventManager
 	void WorldTick();
 	// @Cockatrice - Get a compilation of comments from all static event handlers for the savegame text
 	FString GetSavegameComments();
+	int32_t GetSavegameFlags();
 	// @Cockatrice - Check if any event handler is preventing save games from happening
 	bool IsSaveAllowed(bool quicksave);
 	// @Cockatrice - Save callbacks

@@ -241,7 +241,7 @@ DEFINE_ACTION_FUNCTION(FSavegameManager, LoadSavegame)
 //
 //=============================================================================
 
-void FSavegameManagerBase::DoSave(int Selected, const char *savegamestring)
+void FSavegameManagerBase::DoSave(int Selected, const char *savegamestring, int flags)
 {
 	// @Cockatrice - Consult the event managers to determine if we are actually allowed to save at this moment
 	if (!staticEventManager.IsSaveAllowed(false)) {
@@ -279,7 +279,8 @@ DEFINE_ACTION_FUNCTION(FSavegameManager, DoSave)
 	PARAM_SELF_STRUCT_PROLOGUE(FSavegameManagerBase);
 	PARAM_INT(sel);
 	PARAM_STRING(name);
-	self->DoSave(sel, name.GetChars());
+	PARAM_INT(flags);
+	self->DoSave(sel, name.GetChars(), flags);
 	return 0;
 }
 
@@ -537,7 +538,8 @@ DEFINE_ACTION_FUNCTION(FSavegameManager, ExtractSaveData)
 	ACTION_RETURN_INT(self->ExtractSaveData(sel));
 }
 
-
+DEFINE_FIELD(FSaveGameNode, saveDate);
+DEFINE_FIELD(FSaveGameNode, saveFlags);
 DEFINE_FIELD(FSaveGameNode, SaveTitle);
 DEFINE_FIELD(FSaveGameNode, Filename);
 DEFINE_FIELD(FSaveGameNode, bOldVersion);
