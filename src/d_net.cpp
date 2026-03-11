@@ -83,6 +83,7 @@ EXTERN_CVAR(Bool, cl_capfps)
 extern uint8_t		*demo_p;		// [RH] Special "ticcmds" get recorded in demos
 extern FString	savedescription;
 extern FString	savegamefile;
+extern int32_t	savegameflags;
 
 extern short consistancy[MAXPLAYERS][BACKUPTICS];
 
@@ -2478,6 +2479,7 @@ void Net_DoCommand (int type, uint8_t **stream, int player)
 		{
 			savegamefile = ReadStringConst(stream);
 			savedescription = ReadStringConst(stream);
+			savegameflags = ReadInt32(stream);
 			if (player != consoleplayer)
 			{
 				// Paths sent over the network will be valid for the system that sent

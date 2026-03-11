@@ -97,6 +97,9 @@ void FSavegameManager::ReadSaveStrings()
 							FString iwad = arc.GetString("Game WAD");
 							FString title = arc.GetString("Title");
 
+							int32_t flags = 0;
+							arc("Flags", flags);
+
 							int date = 0;
 							arc("Save Date", date);
 
@@ -128,6 +131,7 @@ void FSavegameManager::ReadSaveStrings()
 							node->bMissingWads = missing;
 							node->SaveTitle = title;
 							node->saveDate = date;
+							node->saveFlags = flags;
 							InsertSaveNode(node);
 						}
 					}

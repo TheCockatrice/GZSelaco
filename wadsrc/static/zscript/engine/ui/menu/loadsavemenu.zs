@@ -36,6 +36,8 @@
 
 struct SaveGameNode native
 {
+	native readonly int saveDate;
+	native int saveFlags;
 	native String SaveTitle;
 	native readonly String Filename;
 	native bool bOldVersion;
@@ -55,7 +57,7 @@ struct SavegameManager native ui
 
 	native int RemoveSaveSlot(int index);
 	native void LoadSavegame(int Selected);
-	native void DoSave(int Selected, String savegamestring);
+	native void DoSave(int Selected, String savegamestring, int flags = 0);
 	native int ExtractSaveData(int index);
 	native void ClearSaveStuff();
 	native bool DrawSavePic(int x, int y, int w, int h, bool filter = true);
