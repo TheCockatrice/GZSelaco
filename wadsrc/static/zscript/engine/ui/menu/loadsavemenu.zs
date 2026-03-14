@@ -36,7 +36,7 @@
 
 struct SaveGameNode native
 {
-	native readonly int saveDate;
+	native readonly int saveDate, elapsedTime, levelNum;
 	native int saveFlags;
 	native String SaveTitle;
 	native readonly String Filename;

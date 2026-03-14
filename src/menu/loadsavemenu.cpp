@@ -46,6 +46,7 @@
 #include "v_video.h"
 #include "fs_findfile.h"
 #include "v_draw.h"
+#include "g_level.h"
 
 // Save name length limit for old binary formats.
 #define OLDSAVESTRINGSIZE		24
@@ -103,6 +104,23 @@ void FSavegameManager::ReadSaveStrings()
 							int date = 0;
 							arc("Save Date", date);
 
+							int elapsedTime = -1;
+							arc("Elapsed Time", elapsedTime);
+
+							int levelnum = -1;
+							arc("Level Number", levelnum);
+
+							if(levelnum == -1) {
+								// Try to load the wad, and determine the level number from that
+								FString map = arc.GetString("Current Map");
+								if (!map.IsEmpty()) {
+									auto *info = FindLevelInfo(map.GetChars(), false);
+									if(info != nullptr) {
+										levelnum = info->levelnum;
+									}
+								}
+							}
+
 							if (engine.Compare(GAMESIG) != 0 || savever > SAVEVER)
 							{
 								// different engine or newer version:
@@ -132,6 +150,8 @@ void FSavegameManager::ReadSaveStrings()
 							node->SaveTitle = title;
 							node->saveDate = date;
 							node->saveFlags = flags;
+							node->elapsedTime = elapsedTime;
+							node->levelNum = levelnum;
 							InsertSaveNode(node);
 						}
 					}

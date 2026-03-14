@@ -9,7 +9,7 @@ class FSerializer;
 // The savegame manager contains too much code that is game specific. Parts are shareable but need more work first.
 struct FSaveGameNode
 {
-	int saveDate, saveFlags;
+	int saveDate, saveFlags, elapsedTime, levelNum;
 	FString SaveTitle;
 	FString Filename;
 	bool bOldVersion = false;
@@ -39,7 +39,7 @@ protected:
 	virtual FString ExtractSaveComment(FSerializer &arc) = 0;
 	virtual FString BuildSaveName(const char* prefix, int slot) = 0;
 public:
-	void NotifyNewSave(const FString &file, const FString &title, int saveDate, bool okForQuicksave, bool forceQuicksave);
+	void NotifyNewSave(const FString &file, const FString &title, int saveDate, bool okForQuicksave, bool forceQuicksave, int elapsedTime, int levelnum, int32_t flags);
 	void ClearSaveGames();
 
 	virtual void ReadSaveStrings() = 0;

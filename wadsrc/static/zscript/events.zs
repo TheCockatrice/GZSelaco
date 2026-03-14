@@ -186,7 +186,8 @@ class StaticEventHandler : Object native play version("2.4")
     virtual void WorldLightning(WorldEvent e) {} // for the sake of completeness.
     virtual void WorldTick() {}
 	virtual String, Int GetSavegameComment() { return "", 0; }	              // @Cockatrice - Supply additional information to the savegame comment field during a save
-    virtual Int GetSavegameFlags() { return 0; }                              // @Cockatrice - Supply additional flags to be saved with the savegame, which can be used to identify certain conditions when listing savegames
+    virtual String, Int GetSavegameTitle(int type) { return "", 0; }          // @Cockatrice - Apply a title to an automatic savegame (quicksave, autosave) the highest priority title will be used
+    virtual Int GetSavegameFlags(bool quicksave, bool autosave) { return 0; } // @Cockatrice - Supply additional flags to be saved with the savegame, which can be used to identify certain conditions when listing savegames
     virtual bool IsSaveAllowed(bool quicksave) { return true; }               // @Cockatrice - Returning false from any event manager will prevent a savegame
     virtual void PreSave(int type) {}                                         // @Cockatrice - Called before any type of save. Use this to alter the world before save
     virtual void PostSave(int type) {}                                        // @Cockatrice - Called after any type of save. Use this to alter the world after save (not saving the changes)
