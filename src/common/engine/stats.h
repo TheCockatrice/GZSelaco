@@ -154,7 +154,7 @@ public:
 	}
 
 private:
-	double Sec;
+	double Sec = 0;
 };
 
 #endif
