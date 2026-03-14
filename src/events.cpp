@@ -697,11 +697,27 @@ bool EventManager::HandleError(int errorType, FString errMsg) {
 }
 
 
-int32_t EventManager::GetSavegameFlags() {
+int32_t EventManager::GetSavegameFlags(bool quicksave, bool autosave) {
 	int32_t flags = 0;
 	for (DStaticEventHandler* handler = FirstEventHandler; handler; handler = handler->next)
-		flags |= handler->GetSavegameFlags();
+		flags |= handler->GetSavegameFlags(quicksave, autosave);
 	return flags;
+}
+
+
+FString EventManager::GetSavegameTitle(int type) {
+	FString title = "";
+	int highestOrder = -1;
+	for (DStaticEventHandler* handler = FirstEventHandler; handler; handler = handler->next) {
+		if (!handler->IsStatic()) continue;
+		int order = 0;
+		FString candidate = handler->GetSavegameTitle(type, order);
+		if (!candidate.IsEmpty() && order > highestOrder) {
+			title = candidate;
+			highestOrder = order;
+		}
+	}
+	return title;
 }
 
 
@@ -1996,7 +2012,7 @@ void DStaticEventHandler::WorldTick()
 }
 
 
-int32_t DStaticEventHandler::GetSavegameFlags()
+int32_t DStaticEventHandler::GetSavegameFlags(bool quicksave, bool autosave)
 {
 	IFVIRTUAL(DStaticEventHandler, GetSavegameFlags)
 	{
@@ -2004,12 +2020,31 @@ int32_t DStaticEventHandler::GetSavegameFlags()
 
 		int32_t flags = 0;
 		VMReturn result[1] = { &flags };
-		VMValue params[1] = { (DStaticEventHandler*)this };
-		VMCall(func, params, 1, result, 1);
+		VMValue params[3] = { (DStaticEventHandler*)this, quicksave, autosave };
+		VMCall(func, params, 3, result, 1);
 		return flags;
 	}
 
 	return 0;
+}
+
+
+FString DStaticEventHandler::GetSavegameTitle(int type, int &order)
+{
+	IFVIRTUAL(DStaticEventHandler, GetSavegameTitle)
+	{
+		FString retString;
+
+		// don't create excessive DObjects if not going to be processed anyway
+		if (isEmpty(func)) return "";
+		VMValue params[2] = { (DStaticEventHandler*)this, type };
+		VMReturn ret[2]; ret[0].StringAt(&retString); ret[1].IntAt(&order);
+		VMCall(func, params, 2, ret, 2);
+
+		return retString;
+	}
+
+	return "";
 }
 
 

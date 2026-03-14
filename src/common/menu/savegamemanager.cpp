@@ -156,7 +156,7 @@ int FSavegameManagerBase::InsertSaveNode(FSaveGameNode *node)
 //
 //=============================================================================
 
-void FSavegameManagerBase::NotifyNewSave(const FString &file, const FString &title, int saveDate, bool okForQuicksave, bool forceQuicksave)
+void FSavegameManagerBase::NotifyNewSave(const FString &file, const FString &title, int saveDate, bool okForQuicksave, bool forceQuicksave, int elapsedTime, int levelnum, int32_t flags)
 {
 	if (file.IsEmpty())
 		return;
@@ -177,6 +177,9 @@ void FSavegameManagerBase::NotifyNewSave(const FString &file, const FString &tit
 			node->saveDate = saveDate;
 			node->bOldVersion = false;
 			node->bMissingWads = false;
+			node->saveFlags = flags;
+			node->elapsedTime = elapsedTime;
+			node->levelNum = levelnum;
 
 			SaveGames.Delete(i);
 			i = InsertSaveNode(node);
@@ -196,6 +199,9 @@ void FSavegameManagerBase::NotifyNewSave(const FString &file, const FString &tit
 	node->bOldVersion = false;
 	node->bMissingWads = false;
 	node->saveDate = saveDate;
+	node->elapsedTime = elapsedTime;
+	node->saveFlags = flags;
+	node->levelNum = levelnum;
 	int index = InsertSaveNode(node);
 
 	if (okForQuicksave)
@@ -540,6 +546,8 @@ DEFINE_ACTION_FUNCTION(FSavegameManager, ExtractSaveData)
 
 DEFINE_FIELD(FSaveGameNode, saveDate);
 DEFINE_FIELD(FSaveGameNode, saveFlags);
+DEFINE_FIELD(FSaveGameNode, elapsedTime);
+DEFINE_FIELD(FSaveGameNode, levelNum);
 DEFINE_FIELD(FSaveGameNode, SaveTitle);
 DEFINE_FIELD(FSaveGameNode, Filename);
 DEFINE_FIELD(FSaveGameNode, bOldVersion);

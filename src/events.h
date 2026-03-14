@@ -317,8 +317,9 @@ public:
 	int WorldLineDamaged(line_t* line, AActor* source, int damage, FName damagetype, int side, DVector3 position, bool isradius);
 	void WorldLightning();
 	void WorldTick();
-	FString GetSavegameComment(int &order);		// @Cockatrice - Static handlers can append custom data to savegame comments, sorted by order
-	int32_t GetSavegameFlags();					// @Cockatrice - Static handlers can set flags that get saved with the savegame, which can be used to indicate various things about the save, this is not used in engine but only in script
+	FString GetSavegameTitle(int type, int &order); // @Cockatrice - Check for a title to apply to an automatic save (quicksave/autosave), the highest priority title will be used. Returns empty string to use default naming scheme.
+	FString GetSavegameComment(int &order);			// @Cockatrice - Static handlers can append custom data to savegame comments, sorted by order
+	int32_t GetSavegameFlags(bool quicksave, bool autosave);  // @Cockatrice - Static handlers can set flags that get saved with the savegame, which can be used to indicate various things about the save, this is not used in engine but only in script
 	bool IsSaveAllowed(bool quicksave);			// @Cockatrice - Callback to check if game saving is allowed at this moment
 	void PreSave(int saveType);					// @Cockatrice - Called immediately before a save, allowing managers to alter the world before saving
 	void PostSave(int saveType);				// @Cocaktrice - Called immediately after a save
@@ -518,9 +519,11 @@ struct EventManager
 	void WorldLightning();
 	// this executes on every tick, before everything, only when in valid level and not paused
 	void WorldTick();
+	// @Cockatrice - Check all static event handlers for an auto-generated name for an automatic save (quicksave/autosave), the highest priority title will be used. Returns empty string to use default naming scheme.
+	FString GetSavegameTitle(int type);
 	// @Cockatrice - Get a compilation of comments from all static event handlers for the savegame text
 	FString GetSavegameComments();
-	int32_t GetSavegameFlags();
+	int32_t GetSavegameFlags(bool quicksave, bool autosave);
 	// @Cockatrice - Check if any event handler is preventing save games from happening
 	bool IsSaveAllowed(bool quicksave);
 	// @Cockatrice - Save callbacks
