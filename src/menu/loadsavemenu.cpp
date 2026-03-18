@@ -73,6 +73,7 @@ void FSavegameManager::ReadSaveStrings()
 		FileSys::FileList list;
 
 		for (int searchPathIndex = 0; searchPathIndex < (int)searchPaths.Size(); searchPathIndex++) {
+			list.clear();
 			if (FileSys::ScanDirectory(list, searchPaths[searchPathIndex].GetChars(), "*." SAVEGAME_EXT, true))
 			{
 				for (auto& entry : list)
@@ -157,6 +158,10 @@ void FSavegameManager::ReadSaveStrings()
 					}
 				}
 			}
+		}
+
+		for (auto *i : SaveGames) {
+			Printf("Save game: %s : %s\n", i->SaveTitle.GetChars(), i->Filename.GetChars());
 		}
 	}
 }
