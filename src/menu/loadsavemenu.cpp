@@ -159,10 +159,6 @@ void FSavegameManager::ReadSaveStrings()
 				}
 			}
 		}
-
-		for (auto *i : SaveGames) {
-			Printf("Save game: %s : %s\n", i->SaveTitle.GetChars(), i->Filename.GetChars());
-		}
 	}
 }
 
