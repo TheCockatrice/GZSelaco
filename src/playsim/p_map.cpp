@@ -7528,7 +7528,7 @@ bool P_ChangeSector(sector_t *sector, int crunch, double amt, int floorOrCeil, b
 				}
 
 				n->visited = true; 							// mark thing as processed
-				if (!(n->m_thing->flags & MF_NOBLOCKMAP) ||	//jff 4/7/98 don't do these
+				if (!(n->m_thing->flags5 & MF5_NOINTERACTION) ||	//jff 4/7/98 don't do these
 					(n->m_thing->flags5 & MF5_MOVEWITHSECTOR))
 				{
 					iterator(n->m_thing, &cpos);		 			// process it
