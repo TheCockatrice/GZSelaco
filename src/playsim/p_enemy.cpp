@@ -1631,8 +1631,8 @@ AActor *LookForEnemiesInBlock (AActor *lookee, int index, void *extparam)
 		}
 
 		// [KS] Hey, shouldn't there be a check for MF3_NOSIGHTCHECK here?
-
-		if (other == NULL || !P_IsVisible (lookee, other, true, params))
+		
+		if (other == NULL || !P_IsVisible (lookee, other, params == nullptr || params->Fov == nullAngle, params))
 			continue;			// out of sight
 
 
