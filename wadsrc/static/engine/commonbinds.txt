@@ -71,7 +71,7 @@ rtrigger +attack
 ltrigger +altattack
 lshoulder +DashMode
 rshoulder weaponWheel
-dpadleft printObjectives
+dpadleft +switchWeaponkit
 dpadright +switchGadget
 dpadup togglemap
 pad_start menu_main
