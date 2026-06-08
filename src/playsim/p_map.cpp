@@ -5016,7 +5016,7 @@ AActor *P_LineAttack(AActor *t1, DAngle angle, double distance,
 			}
 
 			if (!(puffDefaults != NULL && puffDefaults->flags3&MF3_BLOODLESSIMPACT)) {
-				IFVIRTUALPTR(trace.Actor, AActor, SpawnLineAttackBlood)
+				IFVIRTUALPTR(hitActor, AActor, SpawnLineAttackBlood)
 				{
 					VMValue params[] = { hitActor, t1, bleedpos.X, bleedpos.Y, bleedpos.Z, TData.ActorHits[x].HitAngle.Degrees(), damage, newdam};
 					VMCall(func, params, countof(params), nullptr, 0);
