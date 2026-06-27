@@ -891,13 +891,6 @@ void FFunctionBuildList::Build()
 					item.Code->ScriptPosition.Message(MSG_ERROR, "Missing return statement in %s", item.PrintableName.GetChars());
 					continue;
 				}
-
-				if (item.Code == nullptr)
-				{
-					oldCode->ScriptPosition.Message(MSG_ERROR, "Couldn't resolve return statement for %s ", item.PrintableName.GetChars());
-					continue;
-				}
-
 			}
 
 			item.Proto = ctx.ReturnProto;
