@@ -257,9 +257,9 @@ public:
 	FBaseCVar* cvarParticleLifespan;
 	FBaseCVar* cvarBloodQuality;
 
-	FRandom randomEmit;
-	FRandom randomLife;
-	FRandom randomBounce;
+	FRandom randomEmit = FRandom(true);
+	FRandom randomLife = FRandom(true);
+	FRandom randomBounce = FRandom(true);
 };
 
 struct particlelevelpool_t
