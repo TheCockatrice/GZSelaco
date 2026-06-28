@@ -310,7 +310,7 @@ void hw_PrecacheTexture(uint8_t *texhitlist, TMap<PClassActor*, bool> &actorhitl
 				}
 
 				// If these are model frames we still want to cache them
-				FSpriteModelFrame * smf = FindModelFrameRaw(cls, precacheState->sprite, precacheState->Frame, false);
+				FSpriteModelFrame * smf = FindModelFrame(cls, precacheState->sprite, precacheState->Frame, false);
 					//FindModelFrame(cls, precacheState->sprite, precacheState->Frame, false);
 				if (smf != NULL)
 				{
