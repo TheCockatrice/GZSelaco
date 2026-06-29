@@ -46,6 +46,8 @@
 #include <string.h>
 #include <algorithm>
 
+#include "common/utility/basics.h"
+
 // this is needed to properly normalize angles. We cannot do that with compiler provided conversions because they differ too much
 #include "xs_Float.h"
 
@@ -710,6 +712,11 @@ struct TVector3
 		*this = *this ^ other;
 		return *this;
 	}
+
+	constexpr TVector3 ScaleXYZ (const TVector3 &scaling)
+	{
+		return TVector3(X * scaling.X, Y * scaling.Y, Z * scaling.Z);
+	}
 };
 
 template<class vec_t>
@@ -1306,6 +1313,21 @@ public:
 		return TAngle(double(rad * (180.0 / pi::pi())));
 	}
 
+	static constexpr TAngle fromCos(double cos)
+	{
+		return fromRad(g_acos(cos));
+	}
+
+	static constexpr TAngle fromSin(double sin)
+	{
+		return fromRad(g_asin(sin));
+	}
+
+	static constexpr TAngle fromTan(double tan)
+	{
+		return fromRad(g_atan(tan));
+	}
+
 	static constexpr TAngle fromBam(int f)
 	{
 		return TAngle(f * (90. / 0x40000000));
@@ -1583,7 +1605,7 @@ constexpr inline TVector2<T> clamp(const TVector2<T> &vec, const TVector2<T> &mi
 template<class T>
 constexpr inline TVector3<T> clamp(const TVector3<T> &vec, const TVector3<T> &min, const TVector3<T> &max)
 {
-	return TVector3<T>(std::clamp<T>(vec.X, min.X, max.X), std::clamp<T>(vec.Y, min.Y, max.Y), std::clamp<T>(vec.Z, min.Z, max.Z));
+	return TVector3<T>(clamp<T>(vec.X, min.X, max.X), clamp<T>(vec.Y, min.Y, max.Y), clamp<T>(vec.Z, min.Z, max.Z));
 }
 
 template<class T>

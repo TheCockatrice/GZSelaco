@@ -535,6 +535,302 @@ inline int VMCallAction(VMFunction *func, VMValue *params, int numparams, VMRetu
 	return VMCall(func, params, numparams, results, numresults);
 }
 
+template<typename T> struct VMArgTypeTrait { typedef T type; static const int ArgCount = 1; };
+template<> struct VMArgTypeTrait<DVector2> { typedef double type; static const int ArgCount = 2; };
+template<> struct VMArgTypeTrait<DVector3> { typedef double type; static const int ArgCount = 3; };
+template<> struct VMArgTypeTrait<DVector4> { typedef double type; static const int ArgCount = 4; };
+template<> struct VMArgTypeTrait<DQuaternion> { typedef double type; static const int ArgCount = 4; };
+
+template<typename T> struct VMReturnTypeTrait { typedef T type; static const int ReturnCount = 1; };
+template<> struct VMReturnTypeTrait<void> { typedef void type; static const int ReturnCount = 0; };
+
+template<typename T, typename... Vals>
+struct FirstTemplateValue
+{
+	using type = T;
+};
+
+
+
+void VMCheckParamCount(VMFunction* func, int retcount, int argcount);
+
+template<typename... Rets>
+void VMCheckParamCount(VMFunction* func, int argcount)
+{
+	if constexpr (sizeof...(Rets) == 1)
+	{
+		return VMCheckParamCount(func, VMReturnTypeTrait<typename FirstTemplateValue<Rets...>::type>::ReturnCount, argcount);
+	}
+	else
+	{
+		return VMCheckParamCount(func, sizeof...(Rets), argcount);
+	}
+}
+
+// The type can't be mapped to ZScript automatically:
+
+template<typename NativeType> void VMCheckParam(VMFunction* func, int index) = delete;
+template<typename NativeType> void VMCheckReturn(VMFunction* func, int index) = delete;
+
+// Native types we support converting to/from:
+
+template<> void VMCheckParam<int>(VMFunction* func, int index);
+template<> void VMCheckParam<double>(VMFunction* func, int index);
+template<> void VMCheckParam<DVector2>(VMFunction* func, int index);
+template<> void VMCheckParam<DVector3>(VMFunction* func, int index);
+template<> void VMCheckParam<DVector4>(VMFunction* func, int index);
+template<> void VMCheckParam<DQuaternion>(VMFunction* func, int index);
+template<> void VMCheckParam<FString>(VMFunction* func, int index);
+template<> void VMCheckParam<DObject*>(VMFunction* func, int index);
+
+template<> void VMCheckReturn<void>(VMFunction* func, int index);
+template<> void VMCheckReturn<int>(VMFunction* func, int index);
+template<> void VMCheckReturn<double>(VMFunction* func, int index);
+template<> void VMCheckReturn<DVector2>(VMFunction* func, int index);
+template<> void VMCheckReturn<DVector3>(VMFunction* func, int index);
+template<> void VMCheckReturn<DVector4>(VMFunction* func, int index);
+template<> void VMCheckReturn<DQuaternion>(VMFunction* func, int index);
+template<> void VMCheckReturn<FString>(VMFunction* func, int index);
+template<> void VMCheckReturn<DObject*>(VMFunction* func, int index);
+template<> void VMCheckReturn<void*>(VMFunction* func, int index);
+
+template<typename T>
+struct vm_decay_pointer_object
+{ // convert any pointer to a type derived from DObject into a pointer to DObject, and any other to a pointer to void
+	using decayed = typename std::conditional<std::is_base_of_v<DObject, typename std::pointer_traits<T>::element_type>,
+		typename std::pointer_traits<T>::template rebind<DObject>,
+		typename std::pointer_traits<T>::template rebind<void>>::type;
+};
+
+template<typename T>
+struct vm_decay_pointer_void
+{ // convert any pointer to a pointer to void
+	using decayed = typename std::pointer_traits<T>::template rebind<void>;
+};
+
+template<typename T>
+struct vm_decay_none
+{
+	using decayed = T;
+};
+
+template<typename T>
+using vm_pointer_decay = typename std::conditional<std::is_pointer_v<T>, vm_decay_pointer_object<T>, vm_decay_none<T>>::type::decayed;
+
+template<typename T>
+using vm_pointer_decay_void = typename std::conditional<std::is_pointer_v<T>, vm_decay_pointer_void<T>, vm_decay_none<T>>::type::decayed;
+
+template<typename RetVal, typename... Args, size_t... I>
+void VMValidateSignatureSingle(VMFunction* func, std::index_sequence<I...>)
+{
+	VMCheckParamCount<RetVal>(func, sizeof...(Args));
+	VMCheckReturn<vm_pointer_decay<RetVal>>(func, 0);
+	(VMCheckParam<vm_pointer_decay<Args>>(func, I), ...);
+}
+
+template<typename... Rets, typename... Args, size_t... IRets, size_t... IArgs>
+void VMValidateSignatureMulti(VMFunction* func, std::index_sequence<IRets...>, std::index_sequence<IArgs...>, Args... args)
+{
+	VMCheckParamCount<Rets...>(func, sizeof...(Args));
+	(VMCheckReturn<vm_pointer_decay<Rets>>(func, IRets), ...);
+	(VMCheckParam<vm_pointer_decay<Args>>(func, IArgs), ...);
+}
+
+void VMCallCheckResult(VMFunction* func, VMValue* params, int numparams, VMReturn* results, int numresults);
+
+
+struct VMValueMulti
+{
+	VMValue vals[4];
+	int count;
+
+	template<typename T>
+	VMValueMulti(T val)
+	{
+		vals[0] = val;
+		count = 1;
+	}
+
+	VMValueMulti(DVector2 val)
+	{
+		vals[0] = val.X;
+		vals[1] = val.Y;
+		count = 2;
+	}
+
+	VMValueMulti(DVector3 val)
+	{
+		vals[0] = val.X;
+		vals[1] = val.Y;
+		vals[2] = val.Z;
+		count = 3;
+	}
+
+	VMValueMulti(DVector4 val)
+	{
+		vals[0] = val.X;
+		vals[1] = val.Y;
+		vals[2] = val.Z;
+		vals[3] = val.W;
+		count = 4;
+	}
+
+	VMValueMulti(DQuaternion val)
+	{
+		vals[0] = val.X;
+		vals[1] = val.Y;
+		vals[2] = val.Z;
+		vals[3] = val.W;
+		count = 4;
+	}
+};
+
+template<typename... Args>
+constexpr int numArgs()
+{
+	return (VMArgTypeTrait<Args>::ArgCount + ...);
+}
+
+template<typename... Args>
+constexpr bool hasVector()
+{
+	return (VMArgTypeTrait<Args>::ArgCount + ...) != sizeof...(Args);
+}
+
+
+template<typename... Args>
+typename VMReturnTypeTrait<void>::type VMCallVoid(VMFunction* func, Args... args)
+{
+	VMValidateSignatureSingle<void, Args...>(func, std::make_index_sequence<sizeof...(Args)>{});
+	if constexpr(hasVector<Args...>())
+	{
+		VMValueMulti arglist[] = { args... };
+
+		constexpr int argCount = numArgs<Args...>();
+
+		VMValue params[argCount];
+
+		for(int i = 0, j = 0; i < sizeof...(Args); i++)
+		{
+			for(int k = 0; k < arglist[i].count; k++, j++)
+			{
+				params[j] = arglist[i].vals[k];
+			}
+		}
+
+		VMCallCheckResult(func, params, argCount, nullptr, 0);
+	}
+	else
+	{
+		VMValue params[] = { args... };
+		VMCallCheckResult(func, params, sizeof...(Args), nullptr, 0);
+	}
+}
+
+template<typename RetVal, typename... Args>
+typename VMReturnTypeTrait<RetVal>::type VMCallSingle(VMFunction* func, Args... args)
+{
+	VMValidateSignatureSingle<RetVal, Args...>(func, std::make_index_sequence<sizeof...(Args)>{});
+	if constexpr(hasVector<Args...>())
+	{
+		VMValueMulti arglist[] = { args... };
+
+		constexpr int argCount = numArgs<Args...>();
+
+		VMValue params[argCount];
+
+		for(int i = 0, j = 0; i < sizeof...(Args); i++)
+		{
+			for(int k = 0; k < arglist[i].count; k++, j++)
+			{
+				params[j] = arglist[i].vals[k];
+			}
+		}
+
+		vm_pointer_decay_void<RetVal> resultval; // convert any pointer to void
+		VMReturn results(&resultval);
+		VMCallCheckResult(func, params, argCount, &results, 1);
+		return (RetVal)resultval;
+	}
+	else
+	{
+		VMValue params[] = { args... };
+
+		vm_pointer_decay_void<RetVal> resultval; // convert any pointer to void
+		VMReturn results(&resultval);
+		VMCallCheckResult(func, params, sizeof...(Args), &results, 1);
+		return (RetVal)resultval;
+	}
+}
+
+template<typename... Rets, typename... Args, size_t... IRets>
+std::tuple<typename VMReturnTypeTrait<Rets>::type...> VMCallMultiImpl(VMFunction* func,  std::index_sequence<IRets...> retsSeq, Args... args)
+{
+	VMValidateSignatureMulti<Rets...>(func, retsSeq, std::make_index_sequence<sizeof...(Args)>{}, std::forward<Args>(args)...);
+	if constexpr(hasVector<Args...>())
+	{
+		VMValueMulti arglist[] = { args... };
+
+		constexpr int argCount = numArgs<Args...>();
+
+		VMValue params[argCount];
+
+		for(int i = 0, j = 0; i < sizeof...(Args); i++)
+		{
+			for(int k = 0; k < arglist[i].count; k++, j++)
+			{
+				params[j] = arglist[i].vals[k];
+			}
+		}
+
+		std::tuple<typename VMReturnTypeTrait<vm_pointer_decay_void<Rets>>::type...> resultval; // convert any pointer to void
+		VMReturn results[sizeof...(Rets)] { &std::get<IRets>(resultval)... };
+		VMCallCheckResult(func, params, argCount, results, sizeof...(Rets));
+		return (std::tuple<typename VMReturnTypeTrait<Rets>::type...>)resultval;
+	}
+	else
+	{
+		VMValue params[] = { args... };
+
+		std::tuple<typename VMReturnTypeTrait<vm_pointer_decay_void<Rets>>::type...> resultval; // convert any pointer to void
+		VMReturn results[sizeof...(Rets)] { &std::get<IRets>(resultval)... };
+		VMCallCheckResult(func, params, sizeof...(Args), results, sizeof...(Rets));
+		return (std::tuple<typename VMReturnTypeTrait<Rets>::type...>)resultval;
+	}
+}
+
+template<typename... Rets, typename... Args>
+std::tuple<typename VMReturnTypeTrait<Rets>::type...> VMCallMulti(VMFunction* func, Args... args)
+{
+	return VMCallMultiImpl<Rets...>(func, std::make_index_sequence<sizeof...(Rets)>{}, std::forward<Args>(args)...);
+}
+
+template<typename... Rets>
+using MultiVMReturn = std::conditional<
+							(sizeof...(Rets) > 1),
+							std::tuple<typename VMReturnTypeTrait<Rets>::type...>,
+							typename VMReturnTypeTrait<typename FirstTemplateValue<Rets...>::type>::type
+					  >;
+
+template<typename... Rets, typename... Args>
+typename MultiVMReturn<Rets...>::type CallVM(VMFunction* func, Args... args)
+{
+	static_assert(sizeof...(Rets) > 0, "missing return type in VMCall");
+	if constexpr(sizeof...(Rets) == 1 && std::is_same_v<typename FirstTemplateValue<Rets...>::type, void>)
+	{
+		return VMCallVoid(func, std::forward<Args>(args)...);
+	}
+	else if constexpr(sizeof...(Rets) == 1)
+	{
+		return VMCallSingle<Rets...>(func, std::forward<Args>(args)...);
+	}
+	else
+	{
+		return VMCallMulti<Rets...>(func, std::forward<Args>(args)...);
+	}
+}
+
+
 // Use these to collect the parameters in a native function.
 // variable name <x> at position <p>
 [[noreturn]]

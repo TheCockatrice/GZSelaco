@@ -1517,3 +1517,17 @@ enum EModelFlags
 	MDL_CORRECTPIXELSTRETCH			= 1<<13,	// ensure model does not distort with pixel stretch when pitch/roll is applied
 	MDL_FORCECULLBACKFACES			= 1<<14,
 };
+
+enum ESetBoneMode
+{
+	SB_CLEAR = 0,
+	SB_ADD = 1,
+	SB_REPLACE = 2,
+};
+
+enum EIQMFlags
+{
+	IQM_GET_BONE_INFO  =		1 << 2,
+	IQM_GET_BONE_INFO_RECALC  =	1 << 3, // RECALCULATE BONE INFO INSTANTLY WHEN STATE/ANIMATION CHANGES, MIGHT GET EXPENSIVE
+};
+

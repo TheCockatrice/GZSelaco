@@ -96,7 +96,7 @@
 #include "d_main.h"
 #include "i_time.h"
 
-static FRandom pr_skullpop ("SkullPop");
+static FRandom pr_skullpop ("SkullPop", false);
 
 // [SP] Allows respawn in single player
 CVAR(Bool, sv_singleplayerrespawn, false, CVAR_SERVERINFO | CVAR_CHEAT)

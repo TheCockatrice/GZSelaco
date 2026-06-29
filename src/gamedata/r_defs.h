@@ -1028,6 +1028,16 @@ public:
 		return pos == floor? floorplane:ceilingplane;
 	}
 
+	void SetPlaneReflectivity(int pos, double val)
+	{
+		reflect[pos] = float(val);
+	}
+
+	double GetPlaneReflectivity(int pos)
+	{
+		return reflect[pos];
+	}
+
 	bool isSecret() const
 	{
 		return !!(Flags & SECF_SECRET);

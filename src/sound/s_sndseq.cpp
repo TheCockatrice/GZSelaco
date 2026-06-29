@@ -292,7 +292,7 @@ static const hexenseq_t HexenSequences[] = {
 
 static int SeqTrans[MAX_SNDSEQS*3];
 
-static FRandom pr_sndseq ("SndSeq");
+static FRandom pr_sndseq ("SndSeq", true);
 
 // CODE --------------------------------------------------------------------
 

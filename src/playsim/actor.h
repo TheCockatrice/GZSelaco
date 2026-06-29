@@ -450,6 +450,7 @@ enum ActorFlag9
 	MF9_ONLYSLAMSOLID		= 0x40000000,		// [B] Things with skullfly will ignore non-solid Actors.	(@Cockatrice - Moved from MF8 during merge to prevent conflicts)
 	MF9_BLOCKLOS			= 0x80000000,	// @Cockatrice - Block LOF when calling CHECKLOF if 
 	MF9_MASTERLIGHTPROBES   = 0x01000000,	// @Cockatrice - When calculating lightprobes, use the master's position instead of the actor position
+	MF9_ISPUFF					= 0x00000020,	// [AA] Set on actors by P_SpawnPuff
 };
 
 // --- mobj.renderflags ---
@@ -510,7 +511,9 @@ enum ActorRenderFlag2
 	RF2_CAMFOLLOWSPLAYER		= 0x0040,	// Matches the cam's base position and angles to the main viewpoint.
 	RF2_NOMIPMAP				= 0x0080,	// [Nash] forces no mipmapping on sprites. Useful for tiny sprites that need to remain visually crisp
 	RF2_ISOMETRICSPRITES		= 0x0100,
-	RF2_SQUAREPIXELS		= 0x0200,	// apply +ROLLSPRITE scaling math so that non rolling sprites get the same scaling
+	RF2_SQUAREPIXELS			= 0x0200,	// apply +ROLLSPRITE scaling math so that non rolling sprites get the same scaling
+	RF2_INTERPOLATESCALE		= 0x1000,
+	RF2_INTERPOLATEALPHA		= 0x2000,
 };
 
 // This translucency value produces the closest match to Heretic's TINTTAB.
@@ -709,24 +712,6 @@ enum EViewPosFlags // [MC] Flags for SetViewPos.
 	VPSF_ORTHOGRAPHIC =		1 << 4,			// Use orthographic projection (hardware renderer only).
 };
 
-enum EAnimOverrideFlags
-{
-	ANIMOVERRIDE_NONE	= 1 << 0, // no animation
-	ANIMOVERRIDE_LOOP	= 1 << 1, // animation loops, otherwise it stays on the last frame once it ends
-};
-
-struct AnimOverride
-{
-	int firstFrame;
-	int lastFrame;
-	int loopFrame;
-	double startFrame;
-	int flags = ANIMOVERRIDE_NONE;
-	float framerate;
-	double startTic; // when the current animation started (changing framerates counts as restarting) (or when animation starts if interpolating from previous animation)
-	double switchOffset; // when the animation was changed -- where to interpolate the switch from
-};
-
 struct ModelOverride
 {
 	int modelID;
@@ -745,25 +730,37 @@ struct AnimModelOverride
 
 enum EModelDataFlags
 {
-	MODELDATA_HADMODEL =		1 << 0,
-	MODELDATA_OVERRIDE_FLAGS =	1 << 1,
+	MODELDATA_HADMODEL =				1 << 0,
+	MODELDATA_OVERRIDE_FLAGS =			1 << 1,
+	MODELDATA_GET_BONE_INFO  =			1 << 2,
+	MODELDATA_GET_BONE_INFO_RECALC  =	1 << 3, // RECALCULATE BONE INFO INSTANTLY WHEN STATE/ANIMATION CHANGES, MIGHT GET EXPENSIVE
+
+
+
+
+
+
+
+
+	MODELDATA_IQMFLAGS = MODELDATA_GET_BONE_INFO | MODELDATA_GET_BONE_INFO_RECALC,
 };
 
 class DActorModelData : public DObject
 {
 	DECLARE_CLASS(DActorModelData, DObject);
 public:
-	PClass *					modelDef;
-	TArray<ModelOverride>		models;
-	TArray<FTextureID>			skinIDs;
-	TArray<AnimModelOverride>	animationIDs;
-	TArray<int>					modelFrameGenerators;
-	int							flags;
-	int							overrideFlagsSet;
-	int							overrideFlagsClear;
+	PClass *					 modelDef;
+	TArray<ModelOverride>		 models;
+	TArray<FTextureID>			 skinIDs;
+	TArray<AnimModelOverride>	 animationIDs;
+	TArray<int>					 modelFrameGenerators;
+	TArray<TArray<BoneOverride>> modelBoneOverrides;
+	TArray<BoneInfo>			 modelBoneInfo;
+	int							 flags;
+	int							 overrideFlagsSet;
+	int							 overrideFlagsClear;
 
-	AnimOverride curAnim;
-	AnimOverride prevAnim; // used for interpolation when switching anims
+	AnimInfo anims;
 
 	DActorModelData() = default;
 	virtual void Serialize(FSerializer& arc) override;
@@ -822,6 +819,16 @@ public:
 	virtual void PostBeginPlay() override;		// Called immediately before the actor's first tick
 	virtual void Tick() override;
 	void EnableNetworking(const bool enable) override;
+
+	void CalcBones(bool recalc);
+	TRS GetBoneTRS(int model_index, int bone_index, bool with_override);
+
+	//outmat must be double[16]
+	void GetBoneMatrix(int model_index, int bone_index, bool with_override, double *outMat);
+
+	DVector3 GetBoneEulerAngles(int model_index, int bone_index, bool with_override);
+	void GetBonePosition(int model_index, int bone_index, bool with_override, DVector3 &pos, DVector3 &fwd, DVector3 &up);
+	void GetObjectToWorldMatrix(double *outMat);
 
 	static AActor *StaticSpawn (FLevelLocals *Level, PClassActor *type, const DVector3 &pos, replace_t allowreplacement, bool SpawningMapThing = false);
 
@@ -1189,7 +1196,6 @@ public:
 	double			Speed;
 	double			FloatSpeed;
 	TObjPtr<DActorModelData*>		modelData;
-	TObjPtr<DBoneComponents*>		boneComponentData;
 
 // interaction info
 	FBlockNode		*BlockNode;			// links in blocks (if needed)
@@ -1265,6 +1271,7 @@ public:
 	TObjPtr<AActor*>	alternative;	// (Un)Morphed actors stored here. Those with the MF_UNMORPHED flag are the originals.
 	TObjPtr<AActor*>	tracer;			// Thing being chased/attacked for tracers
 	TObjPtr<AActor*>	master;			// Thing which spawned this one (prevents mutual attacks)
+	TObjPtr<AActor*>	damagesource;	// [AA] Thing that fired a hitscan using this actor as a puff
 
 	int				tid;			// thing identifier
 	int				special;		// special
@@ -1338,6 +1345,7 @@ public:
 	uint8_t FloatBobPhase;
 	uint8_t FriendPlayer;				// [RH] Player # + 1 this friendly monster works for (so 0 is no player, 1 is player 0, etc)
 	double FloatBobStrength;
+	double FloatBobFactor;
 	PalEntry BloodColor;
 	FTranslationID BloodTranslation;
 
@@ -1387,6 +1395,8 @@ public:
 	// [RH] Used to interpolate the view to get >35 FPS
 	DVector3 Prev;
 	DRotator PrevAngles;
+	DVector2 PrevScale;
+	double PrevAlpha;
 	DAngle   PrevFOV;
 	TArray<FDynamicLight *> AttachedLights;
 	TDeletingArray<FLightDefaults *> UserLights;
@@ -1518,7 +1528,7 @@ public:
 	DVector3 InterpolatedPosition(double ticFrac) const
 	{
 		if (renderflags & RF_DONTINTERPOLATE) return Pos();
-		else return Prev + (ticFrac * (Pos() - Prev));
+		else return Prev * (1.0 - ticFrac) + Pos() * ticFrac;
 	}
 	DRotator InterpolatedAngles(double ticFrac) const
 	{
@@ -1527,6 +1537,14 @@ public:
 		result.Pitch = PrevAngles.Pitch + deltaangle(PrevAngles.Pitch, Angles.Pitch) * ticFrac;
 		result.Roll = PrevAngles.Roll + deltaangle(PrevAngles.Roll, Angles.Roll) * ticFrac;
 		return result;
+	}
+	DVector2 InterpolatedScale(double ticFrac) const
+	{
+		return (renderflags2 & RF2_INTERPOLATESCALE) ? PrevScale * (1.0 - ticFrac) + Scale * ticFrac : Scale;
+	}
+	double InterpolatedAlpha(double ticFrac) const
+	{
+		return (renderflags2 & RF2_INTERPOLATEALPHA) ? PrevAlpha * (1.0 - ticFrac) + Alpha * ticFrac : Alpha;
 	}
 	float GetSpriteOffset(bool y) const
 	{

@@ -74,6 +74,57 @@ class ViewPosition native
 }
 
 
+struct TRS
+{
+	FVector3 translation;
+	FQuat rotation;
+	FVector3 scaling;
+}
+
+class AnimationFrame native abstract sealed(PrecalculatedAnimationFrame, InterpolatedFrame) {}
+
+class PrecalculatedAnimationFrame : AnimationFrame native final
+{
+	native Array<TRS> frameData; //hacky but required
+}
+
+class InterpolatedFrame : AnimationFrame native final
+{
+	native float inter;	// = -1.0f;
+	native int frame1;		// = -1;
+	native int frame2;		// = -1;
+}
+
+enum EModelAnimFlags
+{
+	MODELANIM_NONE			= 1 << 0, // no animation
+	MODELANIM_LOOP			= 1 << 1, // animation loops, otherwise it stays on the last frame once it ends
+};
+
+class AnimationSequence native final
+{
+	native int firstFrame;			// = 0;
+	native int lastFrame;			// = 0;
+	native int loopFrame;			// = 0;
+	native float framerate;			// = 0;
+	native double startFrame;		// = 0;
+	native int flags;				// = MODELANIM_NONE;
+	native double startTic;			// = 0; // when the current animation started (changing framerates counts as restarting) (or when animation starts if interpolating from previous animation)
+	native double switchOffset;		// = 0; // when the animation was changed -- where to interpolate the switch from
+
+	AnimationSequence Init()
+	{
+		flags = MODELANIM_NONE;
+		return self;
+	}
+}
+
+class AnimationLayer native final
+{
+	native AnimationSequence curAnim;
+	native AnimationFrame prevAnim;
+}
+
 class Actor : Thinker native
 {
 	const DEFAULT_HEALTH = 1000;
@@ -150,6 +201,7 @@ class Actor : Thinker native
 	native Actor Target;
 	native Actor Master;
 	native Actor Tracer;
+	native readonly Actor DamageSource;
 	native Actor LastHeard;
 	native Actor LastEnemy;
 	native Actor LastLookActor;
@@ -180,6 +232,7 @@ class Actor : Thinker native
 	native name DamageTypeReceived;
 	native uint8 FloatBobPhase;
 	native double FloatBobStrength;
+	native double FloatBobFactor;
 	native int RipperLevel;
 	native int RipLevelMin;
 	native int RipLevelMax;
@@ -417,6 +470,7 @@ class Actor : Thinker native
 		FloatSpeed 4;
 		FloatBobPhase -1;	// randomly initialize by default
 		FloatBobStrength 1.0;
+		FloatBobFactor 1.0;
 		Gravity 1;
 		Friction 1;
 		DamageFactor 1.0;		// damage multiplier as target of damage.
@@ -735,6 +789,7 @@ class Actor : Thinker native
 	native void ClearFOVInterpolation();
 	native clearscope Vector3 PosRelative(sector sec) const;
 	native void RailAttack(FRailParams p);
+	native clearscope Name GetDecalName() const;
 		
 	native void HandleSpawnFlags();
 	native void ExplodeMissile(line lin = null, Actor target = null, bool onsky = false);
@@ -1373,15 +1428,225 @@ class Actor : Thinker native
 	
 	native bool A_RemoveLight(Name lightid);
 
+	//================================================
+	// 
+	// Bone Offset Setters
+	// 
+	//================================================
+
+	native version("4.15.1") void SetBoneRotation(int boneIndex, Quat rotation, int mode = SB_ADD, double interpolation_duration = 1.0);
+	native version("4.15.1") void SetNamedBoneRotation(Name boneName, Quat rotation, int mode = SB_ADD, double interpolation_duration = 1.0);
+
+	version("4.15.1") void SetBoneRotationAngles(int boneIndex, double yaw, double pitch, double roll, int mode = SB_ADD, double interpolation_duration = 1.0)
+	{
+		SetBoneRotation(boneIndex, Quat.FromAngles(yaw, pitch, roll), mode, interpolation_duration);
+	}
+
+	version("4.15.1") void SetNamedBoneRotationAngles(Name boneName, double yaw, double pitch, double roll, int mode = SB_ADD, double interpolation_duration = 1.0)
+	{
+		SetNamedBoneRotation(boneName, Quat.FromAngles(yaw, pitch, roll), mode, interpolation_duration);
+	}
+
+	version("4.15.1") void ClearBoneRotation(int boneIndex, double interpolation_duration = 1.0)
+	{
+		SetBoneRotation(boneIndex, Quat(0, 0, 0, 1), 0, interpolation_duration);
+	}
+
+	version("4.15.1") void ClearNamedBoneRotation(Name boneName, double interpolation_duration = 1.0)
+	{
+		SetNamedBoneRotation(boneName, Quat(0, 0, 0, 1), 0, interpolation_duration);
+	}
+
+	native version("4.15.1") void SetBoneTranslation(int boneIndex, Vector3 translation, int mode = SB_ADD, double interpolation_duration = 1.0);
+	native version("4.15.1") void SetNamedBoneTranslation(Name boneName, Vector3 translation, int mode = SB_ADD, double interpolation_duration = 1.0);
+
+	version("4.15.1") void ClearBoneTranslation(int boneIndex, double interpolation_duration = 1.0)
+	{
+		SetBoneTranslation(boneIndex, (0, 0, 0), 0, interpolation_duration);
+	}
+
+	version("4.15.1") void ClearNamedBoneTranslation(Name boneName, double interpolation_duration = 1.0)
+	{
+		SetNamedBoneTranslation(boneName, (0, 0, 0), 0, interpolation_duration);
+	}
+
+	native version("4.15.1") void SetBoneScaling(int boneIndex, Vector3 scaling, int mode = SB_ADD, double interpolation_duration = 1.0);
+	native version("4.15.1") void SetNamedBoneScaling(Name boneName, Vector3 scaling, int mode = SB_ADD, double interpolation_duration = 1.0);
+
+	version("4.15.1") void ClearBoneScaling(int boneIndex, double interpolation_duration = 1.0)
+	{
+		SetBoneScaling(boneIndex, (0, 0, 0), 0, interpolation_duration);
+	}
+
+	version("4.15.1") void ClearNamedBoneScaling(Name boneName, double interpolation_duration = 1.0)
+	{
+		SetNamedBoneScaling(boneName, (0, 0, 0), 0, interpolation_duration);
+	}
+
+	native version("4.15.1") void ClearBoneOffsets();
+
+	//================================================
+	// 
+	// Bone Offset Getters
+	// 
+	//================================================
+
+	/* rotation, translation, scaling */
+	native version("4.15.1") Quat, Vector3, Vector3 GetBoneOffset(int boneIndex);
+	native version("4.15.1") Quat, Vector3, Vector3 GetNamedBoneOffset(Name boneName);
+
+	//================================================
+	// 
+	// Bone Info Getters
+	// 
+	//================================================
+	
+	native version("4.15.1") void GetRootBones(out Array<int> rootBones);
+	
+	native version("4.15.1") Name GetBoneName(int boneIndex);
+	native version("4.15.1") int GetBoneIndex(Name boneName);
+	
+	native version("4.15.1") int GetBoneParent(int boneIndex);
+	native version("4.15.1") int GetNamedBoneParent(Name boneName); // return value lower than 0 means it's a root bone, and as such has no parent
+	
+	native version("4.15.1") void GetBoneChildren(int boneIndex, out Array<int> children);
+	native version("4.15.1") void GetNamedBoneChildren(Name boneName, out Array<int> children);
+	
+	/* rotation, translation, scaling */
+	native version("4.15.1") Quat, Vector3, Vector3 GetBoneBaseTRS(int boneIndex);
+	native version("4.15.1") Quat, Vector3, Vector3 GetNamedBoneBaseTRS(Name boneName);
+	
+	native version("4.15.1") Vector3 GetBoneBasePosition(int boneIndex);
+	native version("4.15.1") Vector3 GetNamedBoneBasePosition(Name boneName);
+	
+	native version("4.15.1") Quat GetBoneBaseRotation(int boneIndex);
+	native version("4.15.1") Quat GetNamedBoneBaseRotation(Name boneName);
+
+	native version("4.15.1") int GetBoneCount();
+
+	//================================================
+	// 
+	// Bone Pose Getters
+	// 
+	//================================================
+
+	native version("4.15.1") int GetAnimStartFrame(Name animName);
+	native version("4.15.1") int GetAnimEndFrame(Name animName);
+	native version("4.15.1") double GetAnimFramerate(Name animName);
+	
+	/* rotation, translation, scaling */
+	native version("4.15.1") Quat, Vector3, Vector3 GetBoneFramePose(int boneIndex, int frame);
+	native version("4.15.1") Quat, Vector3, Vector3 GetNamedBoneFramePose(Name boneName, int frame);
+
+	//================================================
+	// 
+	// Bone TRS Getters
+	// 
+	//================================================
+	
+	/* rotation, translation, scaling, doesn't include parent bones */
+	native version("4.15.1") Quat, Vector3, Vector3 GetBoneTRS(int boneIndex, bool include_offsets = true);
+	native version("4.15.1") Quat, Vector3, Vector3 GetNamedBoneTRS(Name boneName, bool include_offsets = true);
+	
+	/* angle, pitch, roll, includes parent bones */
+	native version("4.15.1") Vector3 GetBoneEulerAngles(int boneIndex, bool include_offsets = true);
+	native version("4.15.1") Vector3 GetNamedBoneEulerAngles(Name boneName, bool include_offsets = true);
+
+	//input position/direction vectors are in xzy, model space
+	native version("4.15.1") Vector3, Vector3, Vector3 TransformByBone(int boneIndex, Vector3 position, Vector3 forward = (1,0,0), Vector3 up = (0,0,1), bool include_offsets = true);
+	native version("4.15.1") Vector3, Vector3, Vector3 TransformByNamedBone(Name boneName, Vector3 position, Vector3 forward = (1,0,0), Vector3 up = (0,0,1), bool include_offsets = true);
+	
+	version("4.15.1") Vector3, Vector3, Vector3 GetBonePosition(int boneIndex, bool include_offsets = true)
+	{
+		let [a, b, c] = TransformByBone(boneIndex, GetBoneBasePosition(boneIndex), include_offsets:include_offsets);
+		return a, b, c;
+	}
+	
+	version("4.15.1") Vector3, Vector3, Vector3 GetNamedBonePosition(name boneName, bool include_offsets = true)
+	{
+		let [a, b, c] = GetBonePosition(GetBoneIndex(boneName), include_offsets);
+		return a, b, c;
+	}
+
+	//================================================
+	// 
+	// Bone Matrix Getters
+	// 
+	//================================================
+	
+	//outMatrix will be a 16-length array containing the raw matrix data
+	native version("4.15.1") void GetBoneMatrixRaw(int boneIndex, out Array<double> outMatrix, bool include_offsets = true);
+	native version("4.15.1") void GetNamedBoneMatrixRaw(Name boneName, out Array<double> outMatrix, bool include_offsets = true);
+
+	native version("4.15.1") void GetObjectToWorldMatrixRaw(out Array<double> outMatrix);
+
+
+
+	//================================================
+	// 
+	// Animation Sequence
+	// 
+	//================================================
+	
+	native version("4.15.1") AnimationLayer SetAnimationLayerAnimation(AnimationLayer layer, Name animName, double framerate = -1, int startFrame = -1, int loopFrame = -1, int endFrame = -1, int interpolateTics = -1, int flags = 0);
+	native version("4.15.1") ui AnimationLayer SetAnimationLayerAnimationUI(AnimationLayer layer, Name animName, double framerate = -1, int startFrame = -1, int loopFrame = -1, int endFrame = -1, int interpolateTics = -1, int flags = 0);
+	
+	native version("4.15.1") AnimationLayer SetAnimationLayerFrameRate(AnimationLayer layer, double framerate);
+	native version("4.15.1") ui AnimationLayer SetAnimationLayerFrameRateUI(AnimationLayer layer, double framerate);
+
+	native version("4.15.1") PrecalculatedAnimationFrame CalculateAnimation(readonly<AnimationLayer> layer);
+	native version("4.15.1") ui PrecalculatedAnimationFrame CalculateAnimationUI(readonly<AnimationLayer> layer);
+
+	native version("4.15.1") static clearscope PrecalculatedAnimationFrame BlendAnimationFrames(PrecalculatedAnimationFrame a, PrecalculatedAnimationFrame b, double t);
+	native version("4.15.1") static clearscope PrecalculatedAnimationFrame OffsetAnimationFrame(PrecalculatedAnimationFrame frame, PrecalculatedAnimationFrame offset);
+	
+	native version("4.15.1") clearscope PrecalculatedAnimationFrame CalculateAnimationFrame(readonly<InterpolatedFrame> frame);
+
+	// tic should be Level.totaltime + fractic
+	//
+	// returns AnimationFrame frame1, InterpolatedFrame frame2, double inter
+	// frame1 is the frame to interpolate from, it may be either a PrecalculatedAnimationFrame or a InterpolatedFrame, if inter is -1, frame1 will be null, and frame2 should be used in full instead
+	// frame2 is the frame to interpolate to, always an InterpolatedFrame
+	// inter is the ratio between frame1 and frame2, if the animation isn't interpolating, it will be 1 and frame 1 will be null
+	// frame1/2 will both be null if an invalid tic or layer are passed
+	// 
+	// NOTE: while interpolating, an animation may need to perform up to 4-way blending if both frame1 and frame2 are InterpolatedFrame
+	//
+	native version("4.15.1") static clearscope AnimationFrame, InterpolatedFrame, double FindAnimationFrameAt(readonly<AnimationLayer> layer, double tic);
+	
+	native version("4.15.1") clearscope AnimationFrame, InterpolatedFrame, double FindAnimationFrame(readonly<AnimationLayer> layer);
+	native version("4.15.1") clearscope AnimationFrame, InterpolatedFrame, double FindAnimationFrameUI(readonly<AnimationLayer> layer);
+
+	native version("4.15.1") void SetBones(PrecalculatedAnimationFrame bones, int mode = SB_ADD, double interpolation_duration = 1.0);
+	native version("4.15.1") ui void SetBonesUI(PrecalculatedAnimationFrame bones, int mode = SB_ADD, double interpolation_duration = 1.0);
+	native version("4.15.1") ui void OverwriteBones(PrecalculatedAnimationFrame bones, int mode = SB_ADD); // no interpolation, faster
+	
+	native version("4.15.1") void SetBonesRange(PrecalculatedAnimationFrame bones, int start, int length, int mode = SB_ADD, double interpolation_duration = 1.0);
+	native version("4.15.1") ui void SetBonesRangeUI(PrecalculatedAnimationFrame bones, int start, int length, int mode = SB_ADD, double interpolation_duration = 1.0);
+	native version("4.15.1") ui void OverwriteBonesRange(PrecalculatedAnimationFrame bones, int start, int length, int mode = SB_ADD); // no interpolation, faster
+	
+	native version("4.15.1") void SetBonesMask(PrecalculatedAnimationFrame bones, Array<bool> mask, int mode = SB_ADD, double interpolation_duration = 1.0);
+	native version("4.15.1") ui void SetBonesMaskUI(PrecalculatedAnimationFrame bones, Array<bool> mask, int mode = SB_ADD, double interpolation_duration = 1.0);
+	native version("4.15.1") ui void OverwriteBonesMask(PrecalculatedAnimationFrame bones, Array<bool> mask, int mode = SB_ADD); // no interpolation, faster
+
+	native version("4.15.1") void ForceRecalculateBones(); // slow if called often, try and keep it to at most once per tick
+
+	version("4.15.1") ui virtual void AnimateBones(double ticfrac){}
+	//================================================
+	// 
+	// 
+	// 
+	//================================================
+
 	native version("4.12") void SetAnimation(Name animName, double framerate = -1, int startFrame = -1, int loopFrame = -1, int endFrame = -1, int interpolateTics = -1, int flags = 0);
 	native version("4.12") ui void SetAnimationUI(Name animName, double framerate = -1, int startFrame = -1, int loopFrame = -1, int endFrame = -1, int interpolateTics = -1, int flags = 0);
 
 	native version("4.12") void SetAnimationFrameRate(double framerate);
 	native version("4.12") ui void SetAnimationFrameRateUI(double framerate);
 
-	native version("4.12") void SetModelFlag(int flag);
-	native version("4.12") void ClearModelFlag(int flag);
-	native version("4.12") void ResetModelFlags();
+	native version("4.12") void SetModelFlag(int flag, int iqmFlags = 0);
+	native version("4.12") void ClearModelFlag(int flag, int iqmFlags = 0);
+	native version("4.12") void ResetModelFlags(bool resetModel = true, bool resetIqm = false);
     
     
 	action version("4.12") void A_SetAnimation(Name animName, double framerate = -1, int startFrame = -1, int loopFrame = -1, int endFrame = -1, int interpolateTics = -1, int flags = 0)

@@ -178,6 +178,7 @@ std2:
 		'abstract'					{ RET(TK_Abstract); }
 		'singleunit'				{ RET(TK_Unit); }
 		'foreach'					{ RET(ParseVersion >= MakeVersion(4, 10, 0)? TK_ForEach : TK_Identifier); }
+		'unsafe'					{ RET(ParseVersion >= MakeVersion(4, 15, 0)? TK_Unsafe : TK_Identifier); }
 		'true'						{ RET(TK_True); }
 		'false'						{ RET(TK_False); }
 		'none'						{ RET(TK_None); }

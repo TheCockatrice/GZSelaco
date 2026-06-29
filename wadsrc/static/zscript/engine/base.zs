@@ -143,6 +143,15 @@ enum EPrintLevel
 	PRINT_NOLOG = 2048,		// Flag - do not print to log file
 };
 
+enum EDebugLevel
+{
+	DMSG_OFF,		// no developer messages.
+	DMSG_ERROR,		// general notification messages
+	DMSG_WARNING,	// warnings
+	DMSG_NOTIFY,	// general notification messages
+	DMSG_SPAMMY,	// for those who want to see everything, regardless of its usefulness.
+};
+
 enum EConsoleState
 {
 	c_up = 0,
@@ -178,12 +187,13 @@ struct Vector3
 }
 */
 
-struct _ native	// These are the global variables, the struct is only here to avoid extending the parser for this.
+struct _ native unsafe(internal)	// These are the global variables, the struct is only here to avoid extending the parser for this.
 {
 	native readonly Array<class> AllClasses;
     native internal readonly Map<Name , Service> AllServices;
 	native readonly bool multiplayer;
 	native @KeyBindings Bindings;
+	native @KeyBindings DoubleBindings;
 	native @KeyBindings AutomapBindings;
 	native readonly @GameInfoStruct gameinfo;
 	native readonly ui bool netgame;
@@ -696,6 +706,7 @@ struct Font native
 	native BrokenLines BreakLines(String text, int maxlen);
 	native int GetGlyphHeight(int code);
 	native int GetDefaultKerning();
+	native TextureID, int GetChar(int c);
 }
 
 struct Console native
@@ -703,6 +714,7 @@ struct Console native
 	native static void HideConsole();
 	native static vararg void Printf(string fmt, ...);
 	native static vararg void PrintfEx(int printlevel, string fmt, ...);
+	native static vararg void DebugPrintf(int debuglevel, string fmt, ...);
 }
 
 struct CVar native
@@ -721,6 +733,10 @@ struct CVar native
 	native int GetInt();
 	native double GetFloat();
 	native String GetString();
+	bool GetDefaultBool() { return GetDefaultInt(); }
+	native int GetDefaultInt();
+	native double GetDefaultFloat();
+	native String GetDefaultString();
 	void SetBool(bool b) { SetInt(b); }
 	native void SetInt(int v);
 	native void SetFloat(double v);
@@ -789,6 +805,9 @@ class Object native
 	private native static Object BuiltinClassCast(Object inptr, Class<Object> test);
 	private native static Function<void> BuiltinFunctionPtrCast(Function<void> inptr, voidptr newtype);
 	
+	native static Name ValidateNameIndex(int index);
+	static class<Object> FindClass(Name cls, class<Object> baseType = null) { return BuiltinNameToClass(cls, baseType); }
+
 	native static uint MSTime();
 	native static double MSTimeF();
 	native vararg static void ThrowAbortException(String fmt, ...);
@@ -811,7 +830,9 @@ class Object native
 	//
 	// Intrinsic random number generation functions. Note that the square
 	// bracket syntax for specifying an RNG ID is only available for these
-	// functions.
+	// functions. If the function is prefixed with a C, this is a client-side RNG
+	// call that isn't backed up while predicting and has a unique name space from
+	// regular RNG calls. This should be used for things like HUD elements.
 	// clearscope void SetRandomSeed[Name rngId = 'None'](int seed); // Set the seed for the given RNG.
 	// clearscope int Random[Name rngId = 'None'](int min, int max); // Use the given RNG to generate a random integer number in the range (min, max) inclusive.
 	// clearscope int Random2[Name rngId = 'None'](int mask); // Use the given RNG to generate a random integer number, and do a "union" (bitwise AND, AKA &) operation with the bits in the mask integer.
@@ -922,7 +943,7 @@ enum EmptyTokenType
 
 // Although String is a builtin type, this is a convenient way to attach methods to it.
 // All of these methods are available on strings
-struct StringStruct native
+struct StringStruct native unsafe(internal)
 {
 	native static vararg String Format(String fmt, ...);
 	native vararg void AppendFormat(String fmt, ...);
@@ -973,17 +994,17 @@ struct Translation version("2.4")
 }
 
 // Convenient way to attach functions to Quat
-struct QuatStruct native
+struct QuatStruct native unsafe(internal)
 {
 	native static Quat SLerp(Quat from, Quat to, double t);
 	native static Quat NLerp(Quat from, Quat to, double t);
 	native static Quat FromAngles(double yaw, double pitch, double roll);
 	native static Quat AxisAngle(Vector3 xyz, double angle);
-	native Quat Conjugate();
-	native Quat Inverse();
 	// native double Length();
 	// native double LengthSquared();
 	// native Quat Unit();
+	// native Quat Conjugate();
+	// native Quat Inverse();
 }
 
 struct ScriptSavedPos

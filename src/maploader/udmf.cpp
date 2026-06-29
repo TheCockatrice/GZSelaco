@@ -1008,6 +1008,10 @@ public:
 			// This switch contains all keys of the UDMF base spec which only apply to Hexen format specials
 			if (!isTranslated) switch (key.GetIndex())
 			{
+			case NAME_Walking:
+				Flag(ld->activation, SPAC_Walking, key);
+				continue;
+
 			case NAME_Playercross:
 				Flag(ld->activation, SPAC_Cross, key); 
 				continue;

@@ -100,7 +100,7 @@
 #include "c_console.h"
 #include "p_spec_thinkers.h"
 
-static FRandom pr_playerinspecialsector ("PlayerInSpecialSector");
+static FRandom pr_playerinspecialsector ("PlayerInSpecialSector", false);
 
 EXTERN_CVAR(Bool, cl_predict_specials)
 EXTERN_CVAR(Bool, forcewater)
@@ -252,6 +252,13 @@ bool P_TestActivateLine (line_t *line, AActor *mo, int side, int activationType,
 	if ((line->flags & ML_FIRSTSIDEONLY && side == 1) || line->special == 0)
 	{
 		return false;
+	}
+
+	if ((activationType & (SPAC_Cross|SPAC_MCross)) && (lineActivation & SPAC_Walking))
+	{
+		// not on floor
+		if ((mo->Pos().Z > mo->floorz) && !(mo->flags2 & MF2_ONMOBJ))
+			return false;
 	}
 
 	if (lineActivation & SPAC_UseThrough)

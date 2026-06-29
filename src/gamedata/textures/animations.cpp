@@ -56,7 +56,7 @@ FTextureAnimator TexAnim;
 
 // PRIVATE DATA DEFINITIONS ------------------------------------------------
 
-static FRandom pr_animatepictures ("AnimatePics");
+static FRandom pr_animatepictures ("AnimatePics", true);
 
 // CODE --------------------------------------------------------------------
 
@@ -205,7 +205,7 @@ void FTextureAnimator::InitAnimated (void)
 	if (lumpnum != -1)
 	{
 		auto animatedlump = fileSystem.ReadFile (lumpnum);
-		int animatedlen = fileSystem.FileLength(lumpnum);
+		ptrdiff_t animatedlen = fileSystem.FileLength(lumpnum);
 		auto animdefs = animatedlump.bytes();
 		const uint8_t *anim_p;
 		FTextureID pic1, pic2;

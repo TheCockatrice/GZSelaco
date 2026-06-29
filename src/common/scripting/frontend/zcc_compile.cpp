@@ -597,8 +597,13 @@ ZCCCompiler::~ZCCCompiler()
 	{
 		delete c;
 	}
+	for (auto m : Mixins)
+	{
+		delete m;
+	}
 	Structs.Clear();
 	Classes.Clear();
+	Mixins.Clear();
 }
 
 //==========================================================================
@@ -729,6 +734,8 @@ void ZCCCompiler::CreateStructTypes()
 			syms = &OutNamespace->Symbols;
 		}
 
+
+
 		if (s->NodeName() == NAME__ && fileSystem.GetFileContainer(Lump) == 0)
 		{
 			// This is just a container for syntactic purposes.
@@ -743,9 +750,29 @@ void ZCCCompiler::CreateStructTypes()
 		{
 			s->strct->Type = NewStruct(s->NodeName(), outer, false, AST.FileNo);
 		}
+
 		if (s->strct->Flags & ZCC_Version)
 		{
 			s->strct->Type->mVersion = s->strct->Version;
+		}
+
+		if (s->strct->Flags & ZCC_Deprecated)
+		{
+			s->strct->Type->mVersion = s->strct->Version;
+			s->strct->Type->TypeDeprecated = true;
+			s->strct->Type->mDeprecationMessage = s->strct->DeprecationMessage ? *s->strct->DeprecationMessage : "";
+		}
+
+		if (s->strct->Flags & ZCC_VMInternalStruct)
+		{
+			if(fileSystem.GetFileContainer(Lump) == 0)
+			{
+				s->strct->Type->VMInternalStruct = true;
+			}
+			else
+			{
+				Error(s->strct, "Internal structs are only allowed in the root pk3");
+			}
 		}
 
 		auto &sf = s->Type()->ScopeFlags;
@@ -811,6 +838,12 @@ void ZCCCompiler::CreateClassTypes()
 			PClass *parent;
 			auto ParentName = c->cls->ParentName;
 
+			if (c->cls->Flags & ZCC_Internal)
+			{
+				Error(c->cls, "'Internal' not allowed for classes");
+			}
+
+			// The parent exists, we may create a type for this class
 			if (ParentName != nullptr && ParentName->SiblingNext == ParentName)
 			{
 				parent = PClass::FindClass(ParentName->Id);
@@ -847,7 +880,6 @@ void ZCCCompiler::CreateClassTypes()
 					Error(c->cls, "Class '%s' cannot extend sealed class '%s'", FName(c->NodeName()).GetChars(), parent->TypeName.GetChars());
 				}
 
-				// The parent exists, we may create a type for this class
 				if (c->cls->Flags & ZCC_Native)
 				{
 					// If this is a native class, its own type must also already exist and not be a runtime class.
@@ -913,6 +945,13 @@ void ZCCCompiler::CreateClassTypes()
 				if (c->cls->Flags & ZCC_Version)
 				{
 					c->Type()->mVersion = c->cls->Version;
+				}
+
+				if (c->cls->Flags & ZCC_Deprecated)
+				{
+					c->Type()->mVersion = c->cls->Version;
+					c->Type()->TypeDeprecated = true;
+					c->Type()->mDeprecationMessage = c->cls->DeprecationMessage ? *c->cls->DeprecationMessage : "";
 				}
 				
 
@@ -1483,8 +1522,8 @@ bool ZCCCompiler::CompileFields(PContainerType *type, TArray<ZCC_VarDeclarator *
 
 		// For structs only allow 'deprecated', for classes exclude function qualifiers.
 		int notallowed = forstruct? 
-			ZCC_Latent | ZCC_Final | ZCC_Action | ZCC_Static | ZCC_FuncConst | ZCC_Abstract | ZCC_Virtual | ZCC_Override | ZCC_Meta | ZCC_Extension | ZCC_VirtualScope | ZCC_ClearScope :
-			ZCC_Latent | ZCC_Final | ZCC_Action | ZCC_Static | ZCC_FuncConst | ZCC_Abstract | ZCC_Virtual | ZCC_Override | ZCC_Extension | ZCC_VirtualScope | ZCC_ClearScope;
+			ZCC_Latent | ZCC_Final | ZCC_Action | ZCC_Static | ZCC_FuncConst | ZCC_FuncConstUnsafe | ZCC_Abstract | ZCC_Virtual | ZCC_Override | ZCC_Meta | ZCC_Extension | ZCC_VirtualScope | ZCC_ClearScope :
+			ZCC_Latent | ZCC_Final | ZCC_Action | ZCC_Static | ZCC_FuncConst | ZCC_FuncConstUnsafe | ZCC_Abstract | ZCC_Virtual | ZCC_Override | ZCC_Extension | ZCC_VirtualScope | ZCC_ClearScope;
 
 		// Some internal fields need to be set to clearscope.
 		if (fileSystem.GetFileContainer(Lump) == 0) notallowed &= ~ZCC_ClearScope;
@@ -1516,7 +1555,7 @@ bool ZCCCompiler::CompileFields(PContainerType *type, TArray<ZCC_VarDeclarator *
 				varflags = FScopeBarrier::ChangeSideInFlags(varflags, FScopeBarrier::Side_UI);
 			if (field->Flags & ZCC_Play)
 				varflags = FScopeBarrier::ChangeSideInFlags(varflags, FScopeBarrier::Side_Play);
-			if (field->Flags & ZCC_ClearScope)
+			if (field->Flags & (ZCC_ClearScope | ZCC_UnsafeClearScope))
 				varflags = FScopeBarrier::ChangeSideInFlags(varflags, FScopeBarrier::Side_PlainData);
 		}
 		else
@@ -1876,7 +1915,7 @@ PType *ZCCCompiler::DetermineType(PType *outertype, ZCC_TreeNode *field, FName n
 			{
 				Error(field, "%s: @ not allowed for user scripts", name.GetChars());
 			}
-			retval = ResolveUserType(btype, btype->UserType, outertype? &outertype->Symbols : nullptr, true);
+			retval = ResolveUserType(outertype, btype, btype->UserType, outertype? &outertype->Symbols : nullptr, true);
 			break;
 
 		case ZCC_UserType:
@@ -1910,7 +1949,7 @@ PType *ZCCCompiler::DetermineType(PType *outertype, ZCC_TreeNode *field, FName n
 
 
 			default:
-				retval = ResolveUserType(btype, btype->UserType, outertype ? &outertype->Symbols : nullptr, false);
+				retval = ResolveUserType(outertype, btype, btype->UserType, outertype ? &outertype->Symbols : nullptr, false);
 				break;
 			}
 			break;
@@ -2026,9 +2065,14 @@ PType *ZCCCompiler::DetermineType(PType *outertype, ZCC_TreeNode *field, FName n
 	{
 		auto atype = static_cast<ZCC_DynArrayType *>(ztype);
 		auto ftype = DetermineType(outertype, field, name, atype->ElementType, false, true);
+
 		if (ftype->GetRegType() == REGT_NIL || ftype->GetRegCount() > 1)
 		{
-			if (field->NodeType == AST_VarDeclarator && (static_cast<ZCC_VarDeclarator*>(field)->Flags & ZCC_Native) && fileSystem.GetFileContainer(Lump) == 0)
+			if(ftype->isStruct() && static_cast<PStruct*>(ftype)->TypeName == "TRS")
+			{
+				retval = NewDynArray(ftype);
+			}
+			else if (field->NodeType == AST_VarDeclarator && (static_cast<ZCC_VarDeclarator*>(field)->Flags & ZCC_Native) && fileSystem.GetFileContainer(Lump) == 0)
 			{
 				// the internal definitions may declare native arrays to complex types.
 				// As long as they can be mapped to a static array type the VM can handle them, in a limited but sufficient fashion.
@@ -2165,7 +2209,7 @@ PType *ZCCCompiler::DetermineType(PType *outertype, ZCC_TreeNode *field, FName n
 * @param nativetype Distinguishes between searching for a native type or a user type.
 * @returns the PType found for this user type
 */
-PType *ZCCCompiler::ResolveUserType(ZCC_BasicType *type, ZCC_Identifier *id, PSymbolTable *symt, bool nativetype)
+PType *ZCCCompiler::ResolveUserType(PType *outertype, ZCC_BasicType *type, ZCC_Identifier *id, PSymbolTable *symt, bool nativetype)
 {
 	// Check the symbol table for the identifier.
 	PSymbol *sym = nullptr;
@@ -2176,9 +2220,25 @@ PType *ZCCCompiler::ResolveUserType(ZCC_BasicType *type, ZCC_Identifier *id, PSy
 	if (sym != nullptr && sym->IsKindOf(RUNTIME_CLASS(PSymbolType)))
 	{
 		auto ptype = static_cast<PSymbolType *>(sym)->Type;
-		if (ptype->mVersion > mVersion)
+
+		if (ptype->TypeDeprecated)
+		{
+			if(ptype->mVersion <= mVersion && !outertype->TypeDeprecated && fileSystem.GetFileContainer(Lump) > 0)
+			{
+				Warn(type, "Type %s is deprecated since ZScript version %d.%d.%d%s%s",
+					FName(type->UserType->Id).GetChars(), mVersion.major, mVersion.minor, mVersion.revision, ptype->mDeprecationMessage.IsEmpty() ? "" : ": ", ptype->mDeprecationMessage.GetChars());
+			}
+		}
+		else if (ptype->mVersion > mVersion)
 		{
 			Error(type, "Type %s not accessible to ZScript version %d.%d.%d", FName(type->UserType->Id).GetChars(), mVersion.major, mVersion.minor, mVersion.revision);
+			return TypeError;
+		}
+
+		//only allow references to internal types inside internal types
+		if (ptype->VMInternalStruct && !outertype->VMInternalStruct)
+		{
+			Error(type, "Type %s not accessible", FName(type->UserType->Id).GetChars());
 			return TypeError;
 		}
 
@@ -2186,6 +2246,7 @@ PType *ZCCCompiler::ResolveUserType(ZCC_BasicType *type, ZCC_Identifier *id, PSy
 		{
 			assert(id->SiblingNext->NodeType == AST_Identifier);
 			ptype = ResolveUserType(
+				outertype,
 				type,
 				static_cast<ZCC_Identifier *>(id->SiblingNext),
 				&ptype->Symbols,
@@ -2298,6 +2359,11 @@ PType *ZCCCompiler::ResolveArraySize(PType *baseType, ZCC_Expression *arraysize,
 			Error(arraysize, "Array size must be positive");
 			return TypeError;
 		}
+		if (uint64_t(size) * baseType->Size > 0x7fffffff)
+		{
+			Error(arraysize, "Array size overflow. Total size must be less than 2GB");
+			return TypeError;
+		}
 		baseType = NewArray(baseType, size);
 	}
 
@@ -2322,7 +2388,7 @@ void ZCCCompiler::SetImplicitArgs(TArray<PType*>* args, TArray<uint32_t>* argfla
 	if (funcflags & VARF_Method)
 	{
 		// implied self pointer
-		if (args != nullptr)		args->Push(NewPointer(cls, !!(funcflags & VARF_ReadOnly)));
+		if (args != nullptr)		args->Push(NewPointer(cls, (funcflags & VARF_SafeConst)));
 		if (argflags != nullptr)	argflags->Push(VARF_Implicit | VARF_ReadOnly);
 		if (argnames != nullptr)	argnames->Push(NAME_self);
 	}
@@ -2454,7 +2520,9 @@ void ZCCCompiler::CompileFunction(ZCC_StructWork *c, ZCC_FuncDeclarator *f, bool
 		if (f->Flags & ZCC_Abstract) varflags |= VARF_Abstract;
 		if (f->Flags & ZCC_Unit) varflags |= VARF_Unit;
 		if (f->Flags & ZCC_VarArg) varflags |= VARF_VarArg;
-		if (f->Flags & ZCC_FuncConst) varflags |= VARF_ReadOnly; // FuncConst method is internally marked as VARF_ReadOnly
+		if (f->Flags & ZCC_FuncConst) varflags |= (mVersion >= MakeVersion(4, 15, 1) ? VARF_ReadOnly | VARF_SafeConst : VARF_ReadOnly); // FuncConst method is internally marked as VARF_ReadOnly
+		if (f->Flags & ZCC_FuncConstUnsafe) varflags |= VARF_ReadOnly;
+
 
 		// @Cockatrice: This is truly some bullshit and if you came looking for this and found it, feel free to hate me
 		if (c->NodeName() == NAME_StatDatabase &&

@@ -49,12 +49,13 @@
 #endif
 #include "m_png.h"
 #include "basics.h"
+#include "printf.h"
 
 
 // MACROS ------------------------------------------------------------------
 
 // The maximum size of an IDAT chunk ZDoom will write. This is also the
-// size of the compression buffer it allocates on the stack.
+// size of the compression buffer it allocates on the heap.
 #define PNG_WRITE_SIZE	32768
 
 // Set this to 1 to use a simple heuristic to select the filter to apply
@@ -926,8 +927,7 @@ bool M_SaveBitmap(const uint8_t *from, ESSType color_type, int width, int height
 		temprow[i] = &temprow_storage[temprow_size * i];
 	}
 
-	TArray<Byte> array(PNG_WRITE_SIZE, true);
-	auto buffer = array.data();
+	TArray<Byte> buffer(PNG_WRITE_SIZE, true);
 	z_stream stream;
 	int err;
 	int y;
@@ -944,8 +944,14 @@ bool M_SaveBitmap(const uint8_t *from, ESSType color_type, int width, int height
 	}
 
 	y = height;
-	stream.next_out = buffer;
-	stream.avail_out = sizeof(buffer);
+	stream.next_out = buffer.data();
+
+	if(buffer.size() > UINT_MAX)
+	{
+		I_Error("save png buffer too large");
+	}
+
+	stream.avail_out = (unsigned int) buffer.size();
 
 	temprow[0][0] = 0;
 #if USE_FILTER_HEURISTIC
@@ -1007,12 +1013,24 @@ bool M_SaveBitmap(const uint8_t *from, ESSType color_type, int width, int height
 		}
 		while (stream.avail_out == 0)
 		{
-			if (!WriteIDAT (file, buffer, sizeof(buffer)))
+
+			if(buffer.size() > INT_MAX)
+			{
+				I_Error("save png buffer too large");
+			}
+			int sz = (int) buffer.size();
+			if (!WriteIDAT (file, buffer.data(), sz))
 			{
 				return false;
 			}
-			stream.next_out = buffer;
-			stream.avail_out = sizeof(buffer);
+			stream.next_out = buffer.data();
+
+			if(buffer.size() > UINT_MAX)
+			{
+				I_Error("save png buffer too large");
+			}
+
+			stream.avail_out = (unsigned int) buffer.size();
 			if (stream.avail_in != 0)
 			{
 				err = deflate (&stream, (y == 0) ? Z_FINISH : 0);
@@ -1033,12 +1051,23 @@ bool M_SaveBitmap(const uint8_t *from, ESSType color_type, int width, int height
 		}
 		if (stream.avail_out == 0)
 		{
-			if (!WriteIDAT (file, buffer, sizeof(buffer)))
+			if(buffer.size() > INT_MAX)
+			{
+				I_Error("save png buffer too large");
+			}
+			int sz = (int) buffer.size();
+			if (!WriteIDAT (file, buffer.data(), sz))
 			{
 				return false;
 			}
-			stream.next_out = buffer;
-			stream.avail_out = sizeof(buffer);
+			stream.next_out = buffer.data();
+
+			if(buffer.size() > UINT_MAX)
+			{
+				I_Error("save png buffer too large");
+			}
+			
+			stream.avail_out = (unsigned int) buffer.size();
 		}
 	}
 
@@ -1048,7 +1077,15 @@ bool M_SaveBitmap(const uint8_t *from, ESSType color_type, int width, int height
 	{
 		return false;
 	}
-	return WriteIDAT (file, buffer, sizeof(buffer)-stream.avail_out);
+
+
+	if((buffer.size() - stream.avail_out) > INT_MAX)
+	{
+		I_Error("save png buffer too large");
+	}
+	int sz = (int) (buffer.size() - stream.avail_out);
+
+	return WriteIDAT (file, buffer.data(), sz);
 }
 
 //==========================================================================

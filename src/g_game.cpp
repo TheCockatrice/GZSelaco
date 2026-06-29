@@ -93,8 +93,10 @@
 #include "fs_findfile.h"
 
 
-static FRandom pr_dmspawn ("DMSpawn");
-static FRandom pr_pspawn ("PlayerSpawn");
+static FRandom pr_dmspawn ("DMSpawn", false);
+static FRandom pr_pspawn ("PlayerSpawn", false);
+
+extern int startpos, laststartpos;
 
 bool WriteZip(const char* filename, const FileSys::FCompressedBuffer* content, size_t contentcount);
 bool	G_CheckDemoStatus (void);
@@ -317,9 +319,7 @@ CCMD (slot)
 			// Needs to be redone
 			IFVIRTUALPTRNAME(mo, NAME_PlayerPawn, PickWeapon)
 			{
-				VMValue param[] = { mo, slot, !(dmflags2 & DF2_DONTCHECKAMMO) };
-				VMReturn ret((void**)&SendItemUse);
-				VMCall(func, param, 3, &ret, 1);
+				SendItemUse = CallVM<AActor *>(func, mo, slot, (int)!(dmflags2 & DF2_DONTCHECKAMMO));
 			}
 		}
 
@@ -369,9 +369,7 @@ CCMD (weapnext)
 		// Needs to be redone
 		IFVIRTUALPTRNAME(mo, NAME_PlayerPawn, PickNextWeapon)
 		{
-			VMValue param[] = { mo };
-			VMReturn ret((void**)&SendItemUse);
-			VMCall(func, param, 1, &ret, 1);
+			SendItemUse = CallVM<AActor *>(func, mo);
 		}
 	}
 
@@ -396,9 +394,7 @@ CCMD (weapprev)
 		// Needs to be redone
 		IFVIRTUALPTRNAME(mo, NAME_PlayerPawn, PickPrevWeapon)
 		{
-			VMValue param[] = { mo };
-			VMReturn ret((void**)&SendItemUse);
-			VMCall(func, param, 1, &ret, 1);
+			SendItemUse = CallVM<AActor *>(func, mo);
 		}
 	}
 
@@ -437,8 +433,7 @@ CCMD (invnext)
 	{
 		IFVM(PlayerPawn, InvNext)
 		{
-			VMValue param = players[consoleplayer].mo;
-			VMCall(func, &param, 1, nullptr, 0);
+			CallVM<void>(func, players[consoleplayer].mo);
 		}
 	}
 }
@@ -449,8 +444,7 @@ CCMD(invprev)
 	{
 		IFVM(PlayerPawn, InvPrev)
 		{
-			VMValue param = players[consoleplayer].mo;
-			VMCall(func, &param, 1, nullptr, 0);
+			CallVM<void>(func, players[consoleplayer].mo);
 		}
 	}
 }
@@ -520,19 +514,6 @@ CCMD (drop)
 	}
 }
 
-CCMD (useflechette)
-{ 
-	if (players[consoleplayer].mo == nullptr) return;
-	IFVIRTUALPTRNAME(players[consoleplayer].mo, NAME_PlayerPawn, GetFlechetteItem)
-	{
-		VMValue params[] = { players[consoleplayer].mo };
-		AActor *cls;
-		VMReturn ret((void**)&cls);
-		VMCall(func, params, 1, &ret, 1);
-
-		if (cls != nullptr) SendItemUse = cls;
-	}
-}
 
 CCMD (select)
 {
@@ -1242,6 +1223,7 @@ void G_Ticker ()
 		case ga_intro:
 			gamestate = GS_INTRO;
 			gameaction = ga_nothing;
+			C_HideConsole(); // On some systems, console is open during intro
 			break;
 
 
@@ -1380,8 +1362,7 @@ void G_PlayerFinishLevel (int player, EFinishLevelType mode, int flags)
 {
 	IFVM(PlayerPawn, PlayerFinishLevel)
 	{
-		VMValue params[] = { players[player].mo, mode, flags };
-		VMCall(func, params, 3, nullptr, 0);
+		CallVM<void>(func, players[player].mo, (int)mode, flags);
 	}
 }
 
@@ -1453,8 +1434,7 @@ void FLevelLocals::PlayerReborn (int player)
 
 		IFVIRTUALPTRNAME(actor, NAME_PlayerPawn, GiveDefaultInventory)
 		{
-			VMValue params[1] = { actor };
-			VMCall(func, params, 1, nullptr, 0);
+			CallVM<void>(func, actor);
 		}
 		p->ReadyWeapon = p->PendingWeapon;
 	}
@@ -2183,7 +2163,9 @@ void G_DoLoadGame ()
 
 	arc("ticrate", time[0])
 		("leveltime", time[1])
-		("globalfreeze", globalfreeze);
+		("globalfreeze", globalfreeze)
+		("startpos", startpos)
+		("laststartpos", laststartpos);
 	// dearchive all the modifications
 	level.time = Scale(time[1], TICRATE, time[0]);
 
@@ -2659,6 +2641,10 @@ void G_DoSaveGame (bool okForQuicksave, bool forceQuicksave, FString filename, c
 		savegameglobals("ticrate", tic);
 		savegameglobals("leveltime", level.time);
 	}
+
+	savegameglobals("globalfreeze", globalfreeze)
+					("startpos", startpos)
+					("laststartpos", laststartpos);
 
 	STAT_Serialize(savegameglobals);
 	FRandom::StaticWriteRNGState(savegameglobals);
