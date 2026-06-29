@@ -683,7 +683,7 @@ void DBaseStatusBar::Tick ()
 {
 	if (!WorldPaused())
 	{
-		PrevCrosshairSize = CrosshairSize;
+		//PrevCrosshairSize = CrosshairSize;
 
 		for (size_t i = 0; i < countof(Messages); ++i)
 		{
