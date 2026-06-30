@@ -1366,7 +1366,7 @@ void DParticleDefinition::HandleScaling(particledata_t* particle)
 		std::clamp(finalScale.Y, min(MaxFadeScale.Y, MinFadeScale.Y), max(MaxFadeScale.Y, MinFadeScale.Y))
 		);
 
-	if (particle->life > 0)
+	if (particle->life >= 0)
 	{
 		particle->fadeScaleStep = newFadeScale - oldFadeScale;
 	}
@@ -1509,7 +1509,7 @@ void DParticleDefinition::SleepParticle(particledata_t* particle, int sleepTime)
 // Clean up this particle as quickly as possible, triggered by the particle limiter
 void DParticleDefinition::CullParticle(particledata_t* particle)
 {
-	if (HasFlag(PDF_LIFEFADE) && particle->life > 0)
+	if (HasFlag(PDF_LIFEFADE) && particle->life >= 0)
 	{
 		if (particle->life > MaxFadeLife || particle->life > TICRATE)
 		{
@@ -1914,12 +1914,12 @@ void P_ThinkDefinedParticles(FLevelLocals* Level)
 
 		definition->CallThinkParticle(particle);
 
-		if (particle->life > 0)
+		if (particle->life >= 0)
 		{
 			particle->life--;
 		}
 
-		if ((particle->life == 0) || particle->HasFlag(DPF_DESTROYED))
+		if ((particle->life < 0) || particle->HasFlag(DPF_DESTROYED))
 		{ // The particle has expired, so free it
 			if (P_DestroyDefinedParticle(Level, particleIndex))
 			{
@@ -1971,13 +1971,6 @@ void P_ThinkDefinedParticles(FLevelLocals* Level)
 			}
 		}
 
-		if (definition->DriftVelocityAdjustment > 0) 
-		{
-			particle->UpdateDrift();
-		}
-
-		particle->vel *= 1.0f - definition->Drag;
-
 		particle->alpha += particle->alphaStep;
 		particle->scale = FVector2(particle->scale.X * particle->scaleStep.X, particle->scale.Y * particle->scaleStep.Y);
 		particle->angle += particle->angleStep;
@@ -2007,6 +2000,13 @@ void P_ThinkDefinedParticles(FLevelLocals* Level)
 		{
 			particle->pos.Z += particle->vel.Z;
 		}
+
+		if (definition->DriftVelocityAdjustment > 0)
+		{
+			particle->UpdateDrift();
+		}
+
+		particle->vel *= 1.0f - definition->Drag;
 
 		if (particle->gravity != 0)
 		{
