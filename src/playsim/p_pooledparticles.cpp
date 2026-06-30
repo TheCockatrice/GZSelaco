@@ -785,6 +785,7 @@ void particledata_t::Init(FLevelLocals* Level, DVector3 initialPos)
 	scaleStep = FVector2(1, 1);
 	startScale = scale;
 	fadeScale = FVector2(1, 1);
+	fadeScaleStep = FVector2(0, 0);
 	angle = 0;
 	angleStep = 0;
 	pitch = 0;
@@ -1356,11 +1357,23 @@ void DParticleDefinition::HandleScaling(particledata_t* particle)
 	float lifeScale = /*bLifeScale ? */float(life - MinScaleLife) / (MaxScaleLife - MinScaleLife)/* : 1.0*/;
 	FVector2 mScale = MaxFadeScale;
 	FVector2 finalScale = mScale + lifeScale * (MinFadeScale - mScale);
+	FVector2 oldFadeScale = particle->fadeScale;
 
-	particle->fadeScale = FVector2(
+	particle->fadeScale += particle->fadeScaleStep;
+
+	FVector2 newFadeScale = FVector2(
 		std::clamp(finalScale.X, min(MaxFadeScale.X, MinFadeScale.X), max(MaxFadeScale.X, MinFadeScale.X)),
 		std::clamp(finalScale.Y, min(MaxFadeScale.Y, MinFadeScale.Y), max(MaxFadeScale.Y, MinFadeScale.Y))
 		);
+
+	if (particle->life > 0)
+	{
+		particle->fadeScaleStep = newFadeScale - oldFadeScale;
+	}
+	else
+	{
+		particle->fadeScaleStep = FVector2(0, 0);
+	}
 }
 
 void DParticleDefinition::OnParticleBounce(particledata_t* particle)
@@ -1981,6 +1994,20 @@ void P_ThinkDefinedParticles(FLevelLocals* Level)
 		particle->subsector = Level->PointInRenderSubsector(particle->pos);
 		sector_t* s = particle->subsector->sector;
 
+		particle->floorz = particle->GetFloorHeight();
+		particle->ceilingz = (float)s->ceilingplane.ZatPoint(particle->pos);
+
+		if (particle->HasFlag(DPF_ATREST))
+		{
+			// We're setting the vel rather than the pos so that we get proper interpolation for moving floors
+			particle->pos.Z += particle->vel.Z;
+			particle->vel.Z = (particle->floorz - prevFloorZ);
+		}
+		else
+		{
+			particle->pos.Z += particle->vel.Z;
+		}
+
 		if (particle->gravity != 0)
 		{
 			if (!particle->HasFlag(DPF_ATREST))
@@ -2018,20 +2045,6 @@ void P_ThinkDefinedParticles(FLevelLocals* Level)
 					particle->vel.Z -= gravity;
 				}
 			}
-		}
-
-		particle->floorz = particle->GetFloorHeight();
-		particle->ceilingz = (float)s->ceilingplane.ZatPoint(particle->pos);
-
-		if (particle->HasFlag(DPF_ATREST))
-		{
-			// We're setting the vel rather than the pos so that we get proper interpolation for moving floors
-			particle->pos.Z += particle->vel.Z;
-			particle->vel.Z = (particle->floorz - prevFloorZ);
-		}
-		else
-		{
-			particle->pos.Z += particle->vel.Z;
 		}
 
 		// Handle crossing a sector portal.

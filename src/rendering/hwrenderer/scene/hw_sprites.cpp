@@ -1907,7 +1907,7 @@ void HWSprite::ProcessDefinedParticle(HWDrawInfo* di, particledata_t* particle, 
 
 	FVector2 svf = (FVector2(particle->scale.X * particle->scaleStep.X, particle->scale.Y * particle->scaleStep.Y) - particle->scale) * timefrac;
 	FVector2 scale = FVector2(particle->scale.X + svf.X, particle->scale.Y + svf.Y);
-	r.Scale(scale.X * particle->fadeScale.X, scale.Y * particle->fadeScale.Y);
+	r.Scale(scale.X * (particle->fadeScale.X + particle->fadeScaleStep.X * timefrac), scale.Y * (particle->fadeScale.Y + particle->fadeScaleStep.Y * timefrac));
 
 	float avf = particle->angleStep * timefrac;
 	float pvf = particle->pitchStep * timefrac;

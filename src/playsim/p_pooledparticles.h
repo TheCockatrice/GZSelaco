@@ -97,7 +97,7 @@ struct particledata_t
 	float alpha, alphaStep;						// +8 
 	float fadeAlpha;							// +4
 	FVector2 scale, scaleStep, startScale;		// +24
-	FVector2 fadeScale;							// +8
+	FVector2 fadeScale, fadeScaleStep;			// +16
 	float angle, angleStep;						// +8
 	float pitch, pitchStep;						// +8
 	float roll, rollStep;						// +8 
