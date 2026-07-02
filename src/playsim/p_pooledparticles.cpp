@@ -1353,22 +1353,23 @@ void DParticleDefinition::HandleFading(particledata_t* particle)
 
 void DParticleDefinition::HandleScaling(particledata_t* particle)
 {
-	float life = particle->startLife > 0 ? (particle->life - 1) / float(particle->startLife) : 1.0f;
-	float lifeScale = /*bLifeScale ? */float(life - MinScaleLife) / (MaxScaleLife - MinScaleLife)/* : 1.0*/;
-	FVector2 mScale = MaxFadeScale;
-	FVector2 finalScale = mScale + lifeScale * (MinFadeScale - mScale);
-	FVector2 oldFadeScale = particle->fadeScale;
-
 	particle->fadeScale += particle->fadeScaleStep;
-
-	FVector2 newFadeScale = FVector2(
-		std::clamp(finalScale.X, min(MaxFadeScale.X, MinFadeScale.X), max(MaxFadeScale.X, MinFadeScale.X)),
-		std::clamp(finalScale.Y, min(MaxFadeScale.Y, MinFadeScale.Y), max(MaxFadeScale.Y, MinFadeScale.Y))
-		);
 
 	if (particle->life > 0)
 	{
-		particle->fadeScaleStep = newFadeScale - oldFadeScale;
+		// We do -2 to the life since we want to make sure particles can fade out to zero.
+		// -1 because particles of life 0 are immediately destroyed, so we want to be faded out before we hit that
+		// And another -1 because we're calculating for the *next* tic rather than the current one, so we can interpolate to the value
+
+		float life = particle->startLife > 0 ? (particle->life - 2) / float(particle->startLife) : 1.0f;
+		float lifeScale = float(life - MinScaleLife) / (MaxScaleLife - MinScaleLife);
+		FVector2 mScale = MaxFadeScale;
+
+		FVector2 nextScale = mScale + lifeScale * (MinFadeScale - mScale);
+		nextScale.X = std::clamp(nextScale.X, min(MaxFadeScale.X, MinFadeScale.X), max(MaxFadeScale.X, MinFadeScale.X));
+		nextScale.Y = std::clamp(nextScale.X, min(MaxFadeScale.X, MinFadeScale.X), max(MaxFadeScale.X, MinFadeScale.X));
+
+		particle->fadeScaleStep = nextScale - particle->fadeScale;
 	}
 	else
 	{
