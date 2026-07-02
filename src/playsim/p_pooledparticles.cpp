@@ -1334,7 +1334,7 @@ void DParticleDefinition::CallOnParticleExitWater(particledata_t* particle, doub
 void DParticleDefinition::HandleFading(particledata_t* particle)
 {
 	float velocityFade = HasFlag(PDF_VELOCITYFADE) ? ((float)particle->vel.Length() - MinFadeVel) / (MaxFadeVel - MinFadeVel) : 1.0f;
-	float lifeFade = HasFlag(PDF_LIFEFADE) ? float(particle->life - MinFadeLife) / float(MaxFadeLife - MinFadeLife) : 1.0f;
+	float lifeFade = HasFlag(PDF_LIFEFADE) ? float(particle->life - 1 - MinFadeLife) / float(MaxFadeLife - MinFadeLife) : 1.0f;
 	particle->fadeAlpha = std::clamp(velocityFade * lifeFade, 0.0f, 1.0f);
 
 	if (particle->fadeAlpha < 0.999 && particle->renderStyle != STYLE_Translucent) 
@@ -1353,7 +1353,7 @@ void DParticleDefinition::HandleFading(particledata_t* particle)
 
 void DParticleDefinition::HandleScaling(particledata_t* particle)
 {
-	float life = particle->startLife > 0 ? particle->life / float(particle->startLife) : 1.0f;
+	float life = particle->startLife > 0 ? (particle->life - 1) / float(particle->startLife) : 1.0f;
 	float lifeScale = /*bLifeScale ? */float(life - MinScaleLife) / (MaxScaleLife - MinScaleLife)/* : 1.0*/;
 	FVector2 mScale = MaxFadeScale;
 	FVector2 finalScale = mScale + lifeScale * (MinFadeScale - mScale);
@@ -1366,7 +1366,7 @@ void DParticleDefinition::HandleScaling(particledata_t* particle)
 		std::clamp(finalScale.Y, min(MaxFadeScale.Y, MinFadeScale.Y), max(MaxFadeScale.Y, MinFadeScale.Y))
 		);
 
-	if (particle->life >= 0)
+	if (particle->life > 0)
 	{
 		particle->fadeScaleStep = newFadeScale - oldFadeScale;
 	}
@@ -1509,7 +1509,7 @@ void DParticleDefinition::SleepParticle(particledata_t* particle, int sleepTime)
 // Clean up this particle as quickly as possible, triggered by the particle limiter
 void DParticleDefinition::CullParticle(particledata_t* particle)
 {
-	if (HasFlag(PDF_LIFEFADE) && particle->life >= 0)
+	if (HasFlag(PDF_LIFEFADE) && particle->life > 0)
 	{
 		if (particle->life > MaxFadeLife || particle->life > TICRATE)
 		{
@@ -1914,12 +1914,12 @@ void P_ThinkDefinedParticles(FLevelLocals* Level)
 
 		definition->CallThinkParticle(particle);
 
-		if (particle->life >= 0)
+		if (particle->life > 0)
 		{
 			particle->life--;
 		}
 
-		if ((particle->life < 0) || particle->HasFlag(DPF_DESTROYED))
+		if ((particle->life == 0) || particle->HasFlag(DPF_DESTROYED))
 		{ // The particle has expired, so free it
 			if (P_DestroyDefinedParticle(Level, particleIndex))
 			{
