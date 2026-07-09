@@ -334,18 +334,18 @@ struct TexMan
 // Maybe I'll add something for UI only. OK I did
 struct SoundHandleStruct native
 {
-	native void SetVolume(float volume);
-	native void SetPitch(float pitch);
-	native void StopSound();
+	native clearscope void SetVolume(float volume);
+	native clearscope void SetPitch(float pitch);
+	native clearscope void StopSound();
 
 	// Technically this works, but the first time you play a sound IsPlaying() may not return true
 	// because it has to be loaded in the background first. Only once the sound finishes loading and
 	// starts actually playing will IsPlaying() return true. Eventually I will fix this.
-	native ui bool IsPlaying();
+	native clearscope bool IsPlaying();
 
 	// Built in functions
-	//native bool IsValid();
-	//native bool SetInvalid();
+	//native clearscope bool IsValid();
+	//native clearscope bool SetInvalid();
 }
 
 
