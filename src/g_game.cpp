@@ -1124,6 +1124,11 @@ void G_Ticker ()
 	int i;
 	gamestate_t	oldgamestate;
 
+	// @Cockatrice - Restore background texture loading if paused
+	if (screen->BackgroundCachePaused()) {
+		screen->ResumeBackgroundCache();
+	}
+
 	// do player reborns if needed
 	for (i = 0; i < MAXPLAYERS; i++)
 	{

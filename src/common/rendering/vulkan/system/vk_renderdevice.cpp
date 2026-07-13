@@ -1291,7 +1291,8 @@ void VulkanRenderDevice::CancelBackgroundCache(FGameTexture* tex) {
 	// Finalize any matching textures in the loaded queue
 	UpdateBackgroundCache();
 
-	if (iPaused) ResumeBackgroundCache();
+	// Don't resume background cache, it will resume next tick anyways!
+	//if (iPaused) ResumeBackgroundCache();
 }
 
 
