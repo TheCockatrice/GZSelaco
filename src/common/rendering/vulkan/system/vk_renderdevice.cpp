@@ -122,6 +122,22 @@ CCMD(vk_listdevices)
 	}
 }
 
+CCMD(vk_debug_pause_loader)
+{
+	auto sc = dynamic_cast<VulkanRenderDevice*>(screen);
+	if (sc) {
+		sc->PauseBackgroundCache(true);
+	}
+}
+
+CCMD(vk_debug_resume_loader)
+{
+	auto sc = dynamic_cast<VulkanRenderDevice*>(screen);
+	if (sc) {
+		sc->ResumeBackgroundCache();
+	}
+}
+
 
 DEFINE_ACTION_FUNCTION(_Screen, GetDeviceList)
 {
@@ -557,6 +573,8 @@ bool VkModelLoadThread::loadResource(VkModelLoadIn& input, VkModelLoadOut& outpu
 // END Background Loader Stuff =====================================================
 
 void VulkanRenderDevice::FlushBackground() {
+	ResumeBackgroundCache();	// Force resume background cache, since it has to finish up!
+
 	int nq = primaryTexQueue.size() + secondaryTexQueue.size();
 	bool active = nq;
 
@@ -598,6 +616,7 @@ void VulkanRenderDevice::FlushBackground() {
 	check.Unclock();
 	Printf(TEXTCOLOR_GOLD"\tVulkanFrameBuffer::FlushBackground() took %f ms\n", check.TimeMS());
 }
+
 
 void VulkanRenderDevice::UpdateBackgroundCache(bool flush) {
 	// Check for completed cache items and link textures to the data
@@ -1208,6 +1227,71 @@ bool VulkanRenderDevice::BackgroundLoadModel(FModel* model) {
 	modelInQueue.queue(modelLoad);
 
 	return true;
+}
+
+
+// @Cockatrice - This will cancel any current queued instance of the specified texture
+// This will cancel ALL instances of the texture being loaded if there are more than one
+// This will cancel all layers of a material if it exists, but will not unload anything
+// Will potentially block until the current threads have completed loading, so use this with care!
+void VulkanRenderDevice::CancelBackgroundCache(FGameTexture* tex) {
+	if (!tex || !tex->isValid()) return;
+
+	bool iPaused = !BackgroundCachePaused();
+	if (iPaused) PauseBackgroundCache(true);
+	else {
+		// Wait on the tex threads
+		for (auto& t : bgTransferThreads) {
+			t->waitForRun();
+		}
+	}
+
+	// Remove the texture from primary and secondary queues
+	// This probably needs a faster method than repeatedly dequeing
+	VkTexLoadIn in;
+	while( secondaryTexQueue.dequeueSearch(in, tex,
+		[](void* a, VkTexLoadIn& b)
+		{ return (FGameTexture*)a == b.gtex; })) {
+
+		if (in.tex != nullptr) {
+			in.tex->SetHardwareState(IHardwareTexture::HardwareState::NONE, 0);
+		}
+	}
+
+	while( primaryTexQueue.dequeueSearch(in, tex,
+		[](void* a, VkTexLoadIn& b)
+		{ return (FGameTexture*)a == b.gtex; })) {
+
+		if (in.tex != nullptr) {
+			in.tex->SetHardwareState(IHardwareTexture::HardwareState::NONE, 0);
+		}
+	}
+
+	// Search queued patches
+	QueuedPatch qp;
+	while( patchQueue.dequeueSearch(qp, tex,
+		[](void* a, QueuedPatch& b)
+		{ return (FGameTexture*)a == b.tex; })) {
+
+		// Check for a hardware texture and set state correctly
+		// There probably ISN'T a material or hardware textures yet, which is why this tex was in the queued patches to begin with!
+		FMaterial* mat = FMaterial::ValidateTexture(tex, qp.scaleFlags, false);
+		if (mat != nullptr) {
+			const int numLayers = mat->NumLayers();
+			for (int i = 0; i < numLayers; i++) {
+				MaterialLayerInfo* layer;
+				auto hwtex = static_cast<VkHardwareTexture*>(mat->GetLayer(0, qp.translation, &layer));
+				if (hwtex->GetState() != IHardwareTexture::HardwareState::READY) {
+					hwtex->SetHardwareState(IHardwareTexture::HardwareState::NONE, 0);
+				}
+			}
+		}
+	}
+
+	// Finalize any matching textures in the loaded queue
+	UpdateBackgroundCache();
+
+	if (iPaused) ResumeBackgroundCache();
 }
 
 

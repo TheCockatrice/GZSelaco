@@ -229,6 +229,11 @@ public:
 	virtual void PrecacheMaterial(FMaterial *mat, int translation) {}
 	virtual void PrequeueMaterial(FMaterial *mat, int translation) {}
 
+	virtual void PauseBackgroundCache(bool block = false) {};
+	virtual void ResumeBackgroundCache() {};
+	virtual bool BackgroundCachePaused() { return false; }
+
+	virtual void CancelBackgroundCache(FGameTexture* tex) {};
 	virtual bool BackgroundCacheMaterial(FMaterial *mat, FTranslationID translation, bool makeSPI = false, bool secondary = false) { PrecacheMaterial(mat, translation.index()); return true; }	// @Cockatrice - Default implementation for now. DOES NOT BG CACHE 
 	virtual bool BackgroundCacheTextureMaterial(FGameTexture *tex, FTranslationID translation, int scaleFlags, bool makeSPI = false) { return false; }
 	virtual bool BackgroundLoadModel(FModel* model) { return false; }

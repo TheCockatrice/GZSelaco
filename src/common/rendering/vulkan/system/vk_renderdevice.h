@@ -185,6 +185,24 @@ public:
 	bool CompileNextShader() override;
 	void PrecacheMaterial(FMaterial *mat, int translation) override;
 	void PrequeueMaterial(FMaterial *mat, int translation) override;
+
+	void PauseBackgroundCache(bool block) override {
+		for (auto &t : bgTransferThreads) {
+			t->pause(block);
+		}
+		mBGPaused = true;
+	};
+	
+	void ResumeBackgroundCache() override {
+		for (auto& t : bgTransferThreads) {
+			t->resume();
+		}
+		mBGPaused = false;
+	};
+	
+	bool BackgroundCachePaused() { return mBGPaused; }
+
+	void CancelBackgroundCache(FGameTexture* tex) override;
 	bool BackgroundCacheMaterial(FMaterial *mat, FTranslationID translation, bool makeSPI = false, bool secondary = false) override;
 	bool BackgroundCacheTextureMaterial(FGameTexture *tex, FTranslationID translation, int scaleFlags, bool makeSPI = false) override;
 	bool BackgroundLoadModel(FModel* model) override;
@@ -295,6 +313,7 @@ private:
 	VkRenderBuffers *mActiveRenderBuffers = nullptr;
 
 	bool mVSync = false;
+	bool mBGPaused = false;
 };
 
 class CVulkanError : public CEngineError

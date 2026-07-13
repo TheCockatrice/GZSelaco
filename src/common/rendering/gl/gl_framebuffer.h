@@ -179,6 +179,25 @@ public:
 	IHardwareTexture *CreateHardwareTexture(int numchannels) override;
 	void PrecacheMaterial(FMaterial *mat, int translation) override;
 	void PrequeueMaterial(FMaterial* mat, int translation) override;
+	
+	void PauseBackgroundCache(bool block) override {
+		for (auto& t : bgTransferThreads) {
+			t->pause(block);
+		}
+		mBGPaused = true;
+	};
+
+	void ResumeBackgroundCache() override {
+		for (auto& t : bgTransferThreads) {
+			t->resume();
+		}
+		mBGPaused = false;
+	};
+
+	bool BackgroundCachePaused() { return mBGPaused; }
+
+	void CancelBackgroundCache(FGameTexture* tex) override;
+
 	bool BackgroundLoadModel(FModel* model) override;
 	bool BackgroundCacheMaterial(FMaterial* mat, FTranslationID translation, bool makeSPI = false, bool secondary = false) override;
 	bool BackgroundCacheTextureMaterial(FGameTexture* tex, FTranslationID translation, int scaleFlags, bool makeSPI = false) override;
@@ -248,7 +267,8 @@ private:
 
 	double fgTotalTime = 0, fgTotalCount = 0, fgMin = 0, fgMax = 0;		// Foreground integration time stats
 
-	bool isArc;															// @Cockatrice: Do some special fixes for ARC
+	bool isArc = false;													// @Cockatrice: Do some special fixes for ARC
+	bool mBGPaused = false;
 };
 
 }
