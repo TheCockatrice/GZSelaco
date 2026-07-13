@@ -187,6 +187,8 @@ public:
 	void PrequeueMaterial(FMaterial *mat, int translation) override;
 
 	void PauseBackgroundCache(bool block) override {
+		if (mBGPaused && !block) return;
+
 		for (auto &t : bgTransferThreads) {
 			t->pause(block);
 		}
@@ -194,6 +196,8 @@ public:
 	};
 	
 	void ResumeBackgroundCache() override {
+		if (!mBGPaused) return;
+
 		for (auto& t : bgTransferThreads) {
 			t->resume();
 		}
