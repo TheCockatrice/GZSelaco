@@ -59,6 +59,8 @@
 #include "types.h"
 
 #include "version.h"
+#include "info.h"
+#include "sprites.h"
 
 static ZSMap<FName, DObject*> AllServices;
 
@@ -474,6 +476,33 @@ DEFINE_ACTION_FUNCTION(_TexMan, UnloadTexture)
 	
 	auto tex = TexMan.GameByIndex(texid, false);
 	hw_unloadTexture(tex);
+	ACTION_RETURN_INT(1);
+}
+
+void UnloadTexture(const FString& textureName)
+{
+	if (FGameTexture* tex = TexMan.GetGameTextureByName(textureName.GetChars(), true))
+	{
+		hw_unloadTexture(tex);
+	}
+}
+
+void UnloadSpriteFrames(const FString& spriteName, const FString& frames)
+{
+	for (size_t i = 0; i < frames.Len(); i++)
+	{
+		std::string textureName = std::string(spriteName.GetChars()) + frames[i] + "0";
+		UnloadTexture(textureName);
+	}
+}
+
+DEFINE_ACTION_FUNCTION(_TexMan, UnloadSpriteFrames)
+{
+	PARAM_PROLOGUE;
+	PARAM_STRING(spriteName);
+	PARAM_STRING(frames);
+
+	UnloadSpriteFrames(spriteName, frames);
 	ACTION_RETURN_INT(1);
 }
 

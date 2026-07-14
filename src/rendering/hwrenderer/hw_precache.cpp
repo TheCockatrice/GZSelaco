@@ -139,6 +139,12 @@ void hw_unloadQualitySprites() {
 
 void hw_unloadTexture(FGameTexture* tex) {
 	if (tex && tex->isValid()) {
+
+		if (tex->IsHardwareCacheQueued(0))
+		{
+			screen->CancelBackgroundCache(tex);
+		}
+
 		TArray<FTexture*> layers;
 		tex->GetLayers(layers);
 
