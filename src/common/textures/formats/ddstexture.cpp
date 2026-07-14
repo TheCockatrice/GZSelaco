@@ -557,14 +557,31 @@ FDDSTexture::FDDSTexture (FileReader &lump, int lumpnum, void *vsurfdesc, void* 
 	// And BC7 with alpha is the most robust format for sprites
 	// Also throwing in BC3 with alpha support as a fallback for GPUs that don't support BC7
 	switch (dx10->dxgiFormat) {
+		case DXGI_FORMAT_BC1_TYPELESS:
 		case DXGI_FORMAT_BC1_UNORM:
 			vkFormat = 131;		// VK_FORMAT_BC1_RGB_UNORM_BLOCK
 			glFormat = 0x83F0;	// GL_COMPRESSED_RGB_S3TC_DXT1_EXT
 			BlockSize = 8;
 			break;
+		case DXGI_FORMAT_BC1_UNORM_SRGB:
+			vkFormat = 132;		// VK_FORMAT_BC1_RGB_SRGB_BLOCK
+			glFormat = 0x8C4C;	// GL_COMPRESSED_SRGB_S3TC_DXT1_EXT
+			BlockSize = 8;
+			break;
+		case DXGI_FORMAT_BC3_TYPELESS:
 		case DXGI_FORMAT_BC3_UNORM:
 			vkFormat = 137;		// VK_FORMAT_BC3_UNORM_BLOCK
 			glFormat = 0x83F2;  // GL_COMPRESSED_RGBA_S3TC_DXT3_EXT
+			BlockSize = 16;
+			break;
+		case DXGI_FORMAT_BC3_UNORM_SRGB:
+			vkFormat = 138;		// VK_FORMAT_BC3_SRGB_BLOCK
+			glFormat = 0x8C4E;  // GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT
+			BlockSize = 16;
+			break;
+		case DXGI_FORMAT_BC7_UNORM_SRGB:
+			vkFormat = 146;		// VK_FORMAT_BC7_SRGB_BLOCK
+			glFormat = 0x8E8D;  // GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM
 			BlockSize = 16;
 			break;
 		case DXGI_FORMAT_BC7_UNORM:
