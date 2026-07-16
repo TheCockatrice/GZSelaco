@@ -489,10 +489,19 @@ void UnloadTexture(const FString& textureName)
 
 void UnloadSpriteFrames(const FString& spriteName, const FString& frames)
 {
+	std::string textureName = std::string(spriteName.GetChars()) + "fx";
+	int frameLoc = spriteName.Len();
+	int angleLoc = frameLoc + 1;
+
 	for (size_t i = 0; i < frames.Len(); i++)
 	{
-		std::string textureName = std::string(spriteName.GetChars()) + frames[i] + "0";
-		UnloadTexture(textureName);
+		for (char x = '0'; x <= '8'; x++)
+		{
+			textureName[frameLoc] = frames[i];
+			textureName[angleLoc] = x;
+
+			UnloadTexture(textureName);
+		}
 	}
 }
 
