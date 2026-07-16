@@ -326,7 +326,7 @@ struct TexMan
 	native static ui bool MakeReady(TextureID tex, int translation = 0);
 	native static ui bool UnloadTexture(TextureID tex);		// @Cockatrice - Experimental, but we need to be able to unload things when they are no longer needed especially in the UI
 
-	native static bool UnloadSpriteFrames(String spriteName, String frames);
+	native static bool UnloadSpriteFrames(String spriteName, String frames, bool unloadAngles = false);
 }
 
 

@@ -487,7 +487,7 @@ void UnloadTexture(const FString& textureName)
 	}
 }
 
-void UnloadSpriteFrames(const FString& spriteName, const FString& frames)
+void UnloadSpriteFrames(const FString& spriteName, const FString& frames, bool unloadAngles)
 {
 	std::string textureName = std::string(spriteName.GetChars()) + "fx";
 	int frameLoc = spriteName.Len();
@@ -495,11 +495,19 @@ void UnloadSpriteFrames(const FString& spriteName, const FString& frames)
 
 	for (size_t i = 0; i < frames.Len(); i++)
 	{
-		for (char x = '0'; x <= '8'; x++)
-		{
-			textureName[frameLoc] = frames[i];
-			textureName[angleLoc] = x;
+		textureName[frameLoc] = frames[i];
 
+		if (unloadAngles)
+		{
+			for (char x = '0'; x <= '8'; x++)
+			{
+				textureName[angleLoc] = x;
+				UnloadTexture(textureName);
+			}
+		}
+		else
+		{
+			textureName[angleLoc] = '0';
 			UnloadTexture(textureName);
 		}
 	}
@@ -510,8 +518,9 @@ DEFINE_ACTION_FUNCTION(_TexMan, UnloadSpriteFrames)
 	PARAM_PROLOGUE;
 	PARAM_STRING(spriteName);
 	PARAM_STRING(frames);
+	PARAM_BOOL(unloadAngles)
 
-	UnloadSpriteFrames(spriteName, frames);
+	UnloadSpriteFrames(spriteName, frames, unloadAngles);
 	ACTION_RETURN_INT(1);
 }
 
