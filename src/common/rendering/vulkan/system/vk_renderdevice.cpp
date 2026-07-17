@@ -1619,11 +1619,11 @@ void VulkanRenderDevice::BeginFrame()
 	UploadLoadedTextures();
 }
 
-void VulkanRenderDevice::InitLightmap(IVector2 LMTextureSize, int LMTextureCount, TArray<uint8_t>& LMTextureData)
+void VulkanRenderDevice::InitLightmap(IVector2 LMTextureSize, int LMTextureCount, TArray<uint8_t>& LMTextureData, bool LMCompressed)
 {
 	if (LMTextureData.Size() > 0)
 	{
-		GetTextureManager()->SetLightmap(LMTextureSize, LMTextureCount, LMTextureData);
+		GetTextureManager()->SetLightmap(LMTextureSize, LMTextureCount, LMTextureData, LMCompressed);
 		LMTextureData.Reset(); // We no longer need this, release the memory
 
 		// Update the lightmap bindings

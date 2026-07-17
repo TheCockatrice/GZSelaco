@@ -225,7 +225,7 @@ public:
 	void SetTextureFilterMode() override;
 	void StartPrecaching() override;
 	void BeginFrame() override;
-	void InitLightmap(IVector2 LMTextureSize, int LMTextureCount, TArray<uint8_t>& LMTextureData) override;
+	void InitLightmap(IVector2 LMTextureSize, int LMTextureCount, TArray<uint8_t>& LMTextureData, bool LMCompressed) override;
 	void BlitLightmap(IHardwareTexture* lightmap, int lightmapIndex) override;
 	//void BlurScene(float amount) override;
 	void BlurScene(float amount, bool force = false) override;

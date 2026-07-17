@@ -72,6 +72,7 @@ public:
 	uint8_t* MapBuffer();
 
 	unsigned int CreateTexture(unsigned char* buffer, int w, int h, int texunit, bool mipmap, const char* name, bool noGLSwizzle = false);
+	unsigned int CreateCompressedTexture(unsigned char* buffer, int w, int h, int texunit, bool mipmap, CompressionFormat format, const char* name);
 	void Finalize() { }
 	unsigned int GetTextureHandle()
 	{

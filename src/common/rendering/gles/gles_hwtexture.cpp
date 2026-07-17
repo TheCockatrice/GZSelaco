@@ -186,6 +186,12 @@ unsigned int FHardwareTexture::CreateTexture(unsigned char * buffer, int w, int 
 }
 
 
+unsigned int FHardwareTexture::CreateCompressedTexture(unsigned char* buffer, int w, int h, int texunit, bool mipmap, CompressionFormat format, const char* name)
+{
+	I_FatalError("FHardwareTexture::CreateCompressedTexture is not currently supported in OpenGLES!");
+	return 0;
+}
+
 void FHardwareTexture::AllocateBuffer(int w, int h, int texelsize) 
 {	
 	if (texelsize < 1 || texelsize > 4) texelsize = 4;

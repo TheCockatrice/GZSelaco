@@ -23,7 +23,7 @@ public:
 
 	void BeginFrame();
 
-	void SetLightmap(IVector2 LMTextureSize, int LMTextureCount, const TArray<uint8_t>& LMTextureData);
+	void SetLightmap(IVector2 LMTextureSize, int LMTextureCount, const TArray<uint8_t>& LMTextureData, bool LMCompressed);
 	void BlitLightmap(VkHardwareTexture* lightmap, int lightmapIndex);
 
 	VkTextureImage* GetTexture(const PPTextureType& type, PPTexture* tex);

@@ -186,10 +186,10 @@ void VkTextureManager::CreateLightmap()
 	data.Push(0);
 	data.Push(0);
 	data.Push(0xFF);
-	SetLightmap(IVector2(1, 1), 1, data);
+	SetLightmap(IVector2(1, 1), 1, data, false);
 }
 
-void VkTextureManager::SetLightmap(IVector2 LMTextureSize, int LMTextureCount, const TArray<uint8_t>& LMTextureData)
+void VkTextureManager::SetLightmap(IVector2 LMTextureSize, int LMTextureCount, const TArray<uint8_t>& LMTextureData, bool LMCompressed)
 {
 	int w = LMTextureSize.X;
 	int h = LMTextureSize.Y;
@@ -218,7 +218,7 @@ void VkTextureManager::SetLightmap(IVector2 LMTextureSize, int LMTextureCount, c
 		VkTextureImageView slice;
 		slice.View = ImageViewBuilder()
 			.Type(VK_IMAGE_VIEW_TYPE_2D)
-			.Image(Lightmap.Image.get(), VK_FORMAT_B8G8R8A8_UNORM, 1, 0, i, 0, 1)
+			.Image(Lightmap.Image.get(), LMCompressed ? VK_FORMAT_R8G8B8A8_UNORM : VK_FORMAT_B8G8R8A8_UNORM, 1, 0, i, 0, 1) // Uncompressed lightmaps seem to want BGRA for some reason?
 			.DebugName("VkRenderBuffers.LightmapSlice")
 			.Create(fb->device.get());
 
@@ -227,43 +227,9 @@ void VkTextureManager::SetLightmap(IVector2 LMTextureSize, int LMTextureCount, c
 
 	auto cmdbuffer = fb->GetCommands()->GetTransferCommands();
 
-	int totalSize = w * h * count * pixelsize;
-
-	auto stagingBuffer = BufferBuilder()
-		.Size(totalSize)
-		.Usage(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY)
-		.DebugName("VkHardwareTexture.mStagingBuffer")
-		.Create(fb->device.get());
-
-	uint8_t one = 0xFF;
-	const uint8_t* src = LMTextureData.Data();
-	uint8_t* data = (uint8_t*)stagingBuffer->Map(0, totalSize);
-	for (int i = w * h * count; i > 0; i--)
-	{
-		*(data++) = *(src++);
-		*(data++) = *(src++);
-		*(data++) = *(src++);
-		*(data++) = *(src++);
-	}
-	stagingBuffer->Unmap();
-
-	VkImageTransition()
-		.AddImage(&Lightmap, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, true, 0, 1, 0, count)
-		.Execute(cmdbuffer);
-
-	VkBufferImageCopy region = {};
-	region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	region.imageSubresource.layerCount = count;
-	region.imageExtent.depth = 1;
-	region.imageExtent.width = w;
-	region.imageExtent.height = h;
-	cmdbuffer->copyBufferToImage(stagingBuffer->buffer, Lightmap.Image->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-
 	VkImageTransition()
 		.AddImage(&Lightmap, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, false, 0, 1, 0, count)
 		.Execute(cmdbuffer);
-
-	fb->GetCommands()->TransferDeleteList->Add(std::move(stagingBuffer));
 }
 
 void VkTextureManager::BlitLightmap(VkHardwareTexture* lightmap, int lightmapIndex)

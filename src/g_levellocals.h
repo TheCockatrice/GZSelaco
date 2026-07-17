@@ -473,6 +473,7 @@ public:
 	TArray<LightmapSurface> LMSurfaces;
 	TArray<float> LMTexCoords;
 	int LMTextureCount = 0;
+	bool LMCompressed = false;
 	IVector2 LMMasterTextureSize;
 	TArray<uint8_t> LMMasterTextureData;
 	TArray<IVector2> LMMasterTextureActualSizes;

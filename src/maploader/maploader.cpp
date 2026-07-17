@@ -2507,12 +2507,12 @@ void MapLoader::ProcessZDRayInfo(int index, FMapThing* mthing)
 	if (sunenabled)
 	{
 		// Code reused from ZDRay sun direction
-		float sdx = g_cosdeg(mthing->angle) * g_cosdeg(mthing->pitch);
-		float sdy = g_sindeg(mthing->angle) * g_cosdeg(mthing->pitch);
-		float sdz = -g_sindeg(mthing->pitch);
-		Level->SunDirection.X = -sdx;
-		Level->SunDirection.Y = -sdy;
-		Level->SunDirection.Z = -sdz;
+		double sdx = g_cosdeg(mthing->angle) * g_cosdeg(mthing->pitch);
+		double sdy = g_sindeg(mthing->angle) * g_cosdeg(mthing->pitch);
+		double sdz = -g_sindeg(mthing->pitch);
+		Level->SunDirection.X = (float)-sdx;
+		Level->SunDirection.Y = (float)-sdy;
+		Level->SunDirection.Z = (float)-sdz;
 	}
 }
 
@@ -3295,7 +3295,7 @@ void MapLoader::LoadLevel(MapData *map, const char *lumpname, int position)
 	}
 
 	CreateVBO(screen->mVertexData, Level->sectors);
-	screen->InitLightmap(Level->LMMasterTextureSize, Level->LMTextureCount, Level->LMMasterTextureData);
+	screen->InitLightmap(Level->LMMasterTextureSize, Level->LMTextureCount, Level->LMMasterTextureData, Level->LMCompressed);
 
 	SWRenderer->SetColormap(Level);	//The SW renderer needs to do some special setup for the level's default colormap.
 	InitPortalGroups(Level);
@@ -3444,7 +3444,7 @@ void MapLoader::LoadLightmap(MapData *map)
 	// The *actual* version number, minus the 'Selaco' identifier
 	version = version & 0x000000FF;
 
-	if (version > 5)
+	if (version > 6)
 	{
 		Printf(PRINT_HIGH, "LoadLightmap: Unsupported lightmap lump version\n");
 		return;
@@ -3510,7 +3510,17 @@ void MapLoader::LoadLightmap(MapData *map)
 	uint32_t numSectorInfos = version >= 3 ? fr.ReadUInt32() : 0;
 	uint32_t numSubsectors = fr.ReadUInt32();
 	Level->LPCellSize = fr.ReadInt32();
-	uint32_t numMasterTexBytes = numMasterTextures * textureSize.X * textureSize.Y * 4;
+	Level->LMCompressed = version >= 6 ? fr.ReadInt8() : false;
+	
+	uint32_t numMasterTexBytes;
+	if (Level->LMCompressed)
+	{
+		numMasterTexBytes = numMasterTextures * (textureSize.X / 4) * (textureSize.Y / 4) * sizeof(uint64_t) * 2;
+	}
+	else
+	{
+		numMasterTexBytes = numMasterTextures * textureSize.X * textureSize.Y * 4;
+	}
 
 	if (numSurfaces == 0 || numTexCoords == 0 || numMasterTexBytes == 0)
 		return;
@@ -3780,7 +3790,15 @@ void MapLoader::LoadLightmap(MapData *map)
 		// Create the lightmap texture
 		FWrapperTexture* wrapper = new FWrapperTexture(textureSize.X, textureSize.Y);
 		IHardwareTexture* texture = wrapper->GetHardwareTexture(0, 0);
-		texture->CreateTexture(data + i * (textureSize.X * textureSize.Y) * sizeof(int32_t), textureSize.X, textureSize.Y, -1, false, "MasterLightmap", true);
+		if (Level->LMCompressed)
+		{
+			int compressedTextureSize = (textureSize.X / 4) * (textureSize.Y / 4) * sizeof(uint64_t) * 2;
+			texture->CreateCompressedTexture(data + i * compressedTextureSize, textureSize.X, textureSize.Y, -1, false, IHardwareTexture::COMPRESSION_BC7_UNORM, "MasterLightmap");
+		}
+		else
+		{
+			texture->CreateTexture(data + i * (textureSize.X * textureSize.Y) * sizeof(int32_t), textureSize.X, textureSize.Y, -1, false, "MasterLightmap", true);
+		}
 		texture->Finalize();
 		FGameTexture* lightmap = Level->Lightmaps[i] = new FGameTexture(wrapper, "MasterLightmap");
 
@@ -3824,7 +3842,16 @@ void MapLoader::LoadLightmap(MapData *map)
 
 		assert(width != 0 && height != 0);
 
-		int dataSize = width * height * 4;
+		int dataSize;
+		
+		if (Level->LMCompressed)
+		{
+			dataSize = (width / 4) * (height / 4) * sizeof(uint64_t) * 2;
+		}
+		else
+		{
+			dataSize = width * height * 4;
+		}
 
 		TArray<uint8_t> groupData(dataSize, true);
 		uint8_t* data = (uint8_t*)&groupData[0];
@@ -3833,7 +3860,15 @@ void MapLoader::LoadLightmap(MapData *map)
 		// Create the lightmap texture
 		FWrapperTexture* wrapper = new FWrapperTexture(width, height);
 		IHardwareTexture* texture = wrapper->GetHardwareTexture(0, 0);
-		texture->CreateTexture(data, width, height, -1, false, "GroupLightmap", true);
+		if (Level->LMCompressed)
+		{
+			texture->CreateCompressedTexture(data, width, height, -1, false, IHardwareTexture::COMPRESSION_BC7_UNORM, "MasterLightmap");
+		}
+		else
+		{
+			texture->CreateTexture(data, width, height, -1, false, "GroupLightmap", true);
+		}
+
 		texture->Finalize();
 		FGameTexture* lightmap = Level->Lightmaps[i + numMasterTextures] = new FGameTexture(wrapper, "GroupLightmap");
 	}

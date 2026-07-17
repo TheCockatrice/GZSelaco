@@ -255,7 +255,7 @@ public:
 	virtual int GetClientHeight() = 0;
 	virtual void BlurScene(float amount, bool force = false) {}
 
-	virtual void InitLightmap(IVector2 LMTextureSize, int LMTextureCount, TArray<uint8_t>& LMTextureData) {}
+	virtual void InitLightmap(IVector2 LMTextureSize, int LMTextureCount, TArray<uint8_t>& LMTextureData, bool LMCompressed) {}
 	virtual void BlitLightmap(IHardwareTexture* lightmap, int lightmapIndex) {}
 
     // Interface to hardware rendering resources
