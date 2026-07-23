@@ -331,7 +331,10 @@ class LightGroup : Actor
 			user_animationInterval = NormalizeAngle(spawnAngle);
 		}
 
-		activeTics = user_animationOffset % user_animationInterval;
+		if (user_animationInterval > 0)
+		{
+			activeTics = user_animationOffset % user_animationInterval;
+		}
 
 		// For non-pulse types, make sure the secondary intensity is the largest one, mimicking FLightDefaults::OrderIntensities()
 		if (user_animationType != LGAT_Pulse && user_primaryIntensity > user_secondaryIntensity)
@@ -344,7 +347,15 @@ class LightGroup : Actor
 
 	override void Activate(Actor activator)
 	{
-		activeTics = user_animationOffset % user_animationInterval;
+		if (user_animationInterval > 0)
+		{
+			activeTics = user_animationOffset % user_animationInterval;
+		}
+		else
+		{
+			activeTics = 0;
+		}
+
 		enabled = true;
 		ActivateLightGroup();
 	}
