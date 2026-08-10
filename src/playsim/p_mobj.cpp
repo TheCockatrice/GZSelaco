@@ -6749,13 +6749,17 @@ void P_SpawnBlood (const DVector3 &pos1, DAngle dir, int damage, AActor *origina
 		th->Angles.Yaw = dir;
 		// [NG] Applying PUFFGETSOWNER to the blood will make it target the owner
 		if (th->flags5 & MF5_PUFFGETSOWNER) th->target = originator;
-		if (gameinfo.gametype & GAME_DoomChex)
+		// @Cockatrice - Removed blood randomization and damage frame changes
+		// Instead we just set the damage value on the blood so it knows how much damage was done
+		th->SetDamage(damage);
+
+		/*if (gameinfo.gametype & GAME_DoomChex)
 		{
 			th->tics -= pr_spawnblood() & 3;
 
 			if (th->tics < 1)
 				th->tics = 1;
-		}
+		}*/
 		// colorize the blood
 		if (!(th->flags2 & MF2_DONTTRANSLATE))
 		{
@@ -6763,7 +6767,7 @@ void P_SpawnBlood (const DVector3 &pos1, DAngle dir, int damage, AActor *origina
 		}
 		
 		// Moved out of the blood actor so that replacing blood is easier
-		if (gameinfo.gametype & GAME_DoomStrifeChex)
+		/*if (gameinfo.gametype & GAME_DoomStrifeChex)
 		{
 			if (gameinfo.gametype == GAME_Strife)
 			{
@@ -6809,7 +6813,7 @@ void P_SpawnBlood (const DVector3 &pos1, DAngle dir, int damage, AActor *origina
 				// since we stop when we see the Actor base class.
 				cls = static_cast<PClassActor *>(cls->ParentClass);
 			}
-		}
+		}*/
 
 	statedone:
 		if (!(bloodtype <= 1)) th->renderflags |= RF_INVISIBLE;
