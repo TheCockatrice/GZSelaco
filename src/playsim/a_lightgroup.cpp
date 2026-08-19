@@ -109,7 +109,7 @@ void UpdateTintColor(AActor* self)
 		uint8_t ri = (uint8_t)(r * lightgroup.Intensity * 255);
 		uint8_t gi = (uint8_t)(g * lightgroup.Intensity * 255);
 		uint8_t bi = (uint8_t)(b * lightgroup.Intensity * 255);
-		lightgroup.RenderColor = ri | (gi << 8) | (bi << 16) | 0xff000000;
+		lightgroup.RenderColor = 0xff000000 | (ri << 16) | (gi << 8) | bi;
 
 		lightgroup.LastUpdateFrame = self->Level->LMRenderFrame;
 	}
@@ -138,7 +138,7 @@ void SetIntensity(AActor* self, double intensity)
 		uint8_t ri = (uint8_t)(lightgroup.TintColor.r * newIntensity * 255);
 		uint8_t gi = (uint8_t)(lightgroup.TintColor.g * newIntensity * 255);
 		uint8_t bi = (uint8_t)(lightgroup.TintColor.b * newIntensity * 255);
-		lightgroup.RenderColor = ri | (gi << 8) | (bi << 16) | 0xff000000;
+		lightgroup.RenderColor = 0xff000000 | (ri << 16) | (gi << 8) | bi;
 		lightgroup.LastUpdateFrame = self->Level->LMRenderFrame;
 	}
 }
