@@ -9,6 +9,7 @@ ctrl +crouch
 Q meleeButton
 R +reload
 Z useMeds
+J +switchWeaponkit
 Alt weaponWheel
 Mouse2 +altattack
 Mouse3 useability
