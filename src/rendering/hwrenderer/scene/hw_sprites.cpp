@@ -785,6 +785,29 @@ void HWSprite::PerformSpriteClipAdjustment(AActor *thing, const DVector2 &thingp
 	}
 }
 
+
+static inline double GetDistanceFadeAlpha(HWDrawInfo* di, AActor* thing) {
+	const auto& vp = di->Viewpoint;
+	FIntCVar* cvar = thing->GetInfo()->distancecheck;
+	if (cvar != nullptr && *cvar >= 0) {
+		DVector3 delta = (thing->Pos() - vp.Pos);
+		double dist = delta.LengthSquared();
+		const double check = ((double)**cvar) - 128.0;
+
+		// If we are out of the fade range, always return 1.0
+		if (dist <= check * check) {
+			return 1.0;
+		}
+
+		dist = delta.Length() - check;
+
+		// Lerp between check and maxcheck
+		return std::max(0.0, 1.0 - (dist / 128.0));
+	}
+
+	return 1.0;
+}
+
 //==========================================================================
 //
 // 
@@ -819,7 +842,10 @@ void HWSprite::Process(HWDrawInfo *di, AActor* thing, sector_t * sector, area_t 
 	const auto &vp = di->Viewpoint;
 	AActor *camera = vp.camera;
 
-	const double alpha = thing->InterpolatedAlpha(vp.TicFrac);
+	const double distanceAlpha = GetDistanceFadeAlpha(di, thing);
+	const double alpha = thing->InterpolatedAlpha(vp.TicFrac) * distanceAlpha;
+	const bool isAlphaCulled = distanceAlpha < 1.0;
+
 	if (thing->renderflags & RF_INVISIBLE || !thing->RenderStyle.IsVisible(alpha))
 	{
 		if (!(thing->flags & MF_STEALTH) || !di->isStealthVision() || thing == camera)
@@ -1317,7 +1343,8 @@ void HWSprite::Process(HWDrawInfo *di, AActor* thing, sector_t * sector, area_t 
 
 	ThingColor = (thing->RenderStyle.Flags & STYLEF_ColorIsFixed) ? thing->fillcolor : 0xffffff;
 	ThingColor.a = 255;
-	RenderStyle = thing->RenderStyle;
+	// @Cockatrice - Force render style to translucent if we are reducing alpha for distance fade
+	RenderStyle = isAlphaCulled && (thing->RenderStyle == LegacyRenderStyles[STYLE_Normal]) ? LegacyRenderStyles[STYLE_Translucent] : thing->RenderStyle;
 
 	// colormap stuff is a little more complicated here...
 	if (di->isFullbrightScene())
