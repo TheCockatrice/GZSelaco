@@ -33,6 +33,9 @@ enum ESoundFlags
 	CHANF_OVERLAP = 8192,
 	CHANF_LOCAL = 16384,
 
+	CHANF_SINGULAR = 0x40000,	// Only start if no sound of this name is already playing.
+	CHANF_NOREVERB = 0x80000,	// No reverb, passes on SNDF_NOREVERB
+
 
 	CHANF_LOOPING = CHANF_LOOP | CHANF_NOSTOP, // convenience value for replicating the old 'looping' boolean.
 

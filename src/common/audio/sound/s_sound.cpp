@@ -718,7 +718,7 @@ FSoundChan *SoundEngine::StartSound(int type, const void *source,
 		if (chanflags & CHANF_LOOP) startflags |= SNDF_LOOP;
 		if (chanflags & CHANF_AREA) startflags |= SNDF_AREA;
 		if (chanflags & (CHANF_UI | CHANF_NOPAUSE)) startflags |= SNDF_NOPAUSE;
-		if (chanflags & CHANF_UI) startflags |= SNDF_NOREVERB;
+		if (chanflags & (CHANF_UI | CHANF_NOREVERB)) startflags |= SNDF_NOREVERB;
 
 		// Don't get length when not necessary
 		if (abs(startTime) > 0.00001f) {
@@ -917,7 +917,7 @@ FSoundChan *SoundEngine::StartSoundER(sfxinfo_t *sfx, int type, const void *sour
 		if (chanflags & CHANF_LOOP) startflags |= SNDF_LOOP;
 		if (chanflags & CHANF_AREA) startflags |= SNDF_AREA;
 		if (chanflags & (CHANF_UI | CHANF_NOPAUSE)) startflags |= SNDF_NOPAUSE;
-		if (chanflags & CHANF_UI) startflags |= SNDF_NOREVERB;
+		if (chanflags & (CHANF_UI | CHANF_NOREVERB)) startflags |= SNDF_NOREVERB;
 
 
 		// Don't adjust start time unless it's > 0. Getting the sample length can be costly

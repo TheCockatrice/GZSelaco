@@ -34,6 +34,7 @@ enum EChanFlag
 	CHANF_FORCE = 65536,		// Start, even if sound is paused.
 	CHANF_RESERVED = 0x20000,	// @Cockatrice - internal: Channel is reserved for a queued sound and is not yet playing
 	CHANF_SINGULAR = 0x40000,	// Only start if no sound of this name is already playing.
+	CHANF_NOREVERB = 0x80000,	// No reverb, passes on SNDF_NOREVERB to the sound
 };
 
 typedef TFlags<EChanFlag> EChanFlags;
