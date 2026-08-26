@@ -1661,7 +1661,12 @@ bool OpenALSoundRenderer::StartSound(OpenALQueueItem &playInfo)
 		const OpenALEffectDef& effectDef = EffectDefs[playInfo.effectID];
 		alSourcei(source, AL_DIRECT_FILTER, DryFilter);
 		alSource3i(source, AL_AUXILIARY_SEND_FILTER, effectDef.effectSlots[0], 0, envFilterDirect);
-		alSource3i(source, AL_AUXILIARY_SEND_FILTER, effectDef.envEffectSlots[0], 1, envFilterAux);
+
+		// @Cockatrice - Only route to the env effect slot (which is the reverb slot) if reverb isn't cancelled
+		if (!(playInfo.chanflags&SNDF_NOREVERB))
+			alSource3i(source, AL_AUXILIARY_SEND_FILTER, effectDef.envEffectSlots[0], 1, envFilterAux);
+		else
+			alSource3i(source, AL_AUXILIARY_SEND_FILTER, AL_EFFECTSLOT_NULL, 1, AL_FILTER_NULL);
 	}
 	else
 	{
@@ -1833,7 +1838,13 @@ bool OpenALSoundRenderer::StartSound3D(OpenALQueueItem &playInfo)
 		alSourcei(source, AL_DIRECT_FILTER, DryFilter);
 		alSourcef(source, AL_ROOM_ROLLOFF_FACTOR, 1.f);
 		alSource3i(source, AL_AUXILIARY_SEND_FILTER, effectDef.effectSlots[0], 0, envFilterDirect);
-		alSource3i(source, AL_AUXILIARY_SEND_FILTER, effectDef.envEffectSlots[0], 1, envFilterAux);
+		
+		// @Cockatrice - Only route to the env effect slot (which is the reverb slot) if reverb isn't cancelled
+		if (!(playInfo.chanflags&SNDF_NOREVERB))
+			alSource3i(source, AL_AUXILIARY_SEND_FILTER, effectDef.envEffectSlots[0], 1, envFilterAux);
+		else
+			alSource3i(source, AL_AUXILIARY_SEND_FILTER, AL_EFFECTSLOT_NULL, 1, AL_FILTER_NULL);
+
 		getALError();
 	}
 	else
