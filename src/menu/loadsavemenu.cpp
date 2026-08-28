@@ -46,6 +46,7 @@
 #include "v_video.h"
 #include "fs_findfile.h"
 #include "v_draw.h"
+#include "g_level.h"
 
 // Save name length limit for old binary formats.
 #define OLDSAVESTRINGSIZE		24
@@ -72,6 +73,7 @@ void FSavegameManager::ReadSaveStrings()
 		FileSys::FileList list;
 
 		for (int searchPathIndex = 0; searchPathIndex < (int)searchPaths.Size(); searchPathIndex++) {
+			list.clear();
 			if (FileSys::ScanDirectory(list, searchPaths[searchPathIndex].GetChars(), "*." SAVEGAME_EXT, true))
 			{
 				for (auto& entry : list)
@@ -97,8 +99,28 @@ void FSavegameManager::ReadSaveStrings()
 							FString iwad = arc.GetString("Game WAD");
 							FString title = arc.GetString("Title");
 
+							int32_t flags = 0;
+							arc("Flags", flags);
+
 							int date = 0;
 							arc("Save Date", date);
+
+							int elapsedTime = -1;
+							arc("Elapsed Time", elapsedTime);
+
+							int levelnum = -1;
+							arc("Level Number", levelnum);
+
+							if(levelnum == -1) {
+								// Try to load the wad, and determine the level number from that
+								FString map = arc.GetString("Current Map");
+								if (!map.IsEmpty()) {
+									auto *info = FindLevelInfo(map.GetChars(), false);
+									if(info != nullptr) {
+										levelnum = info->levelnum;
+									}
+								}
+							}
 
 							if (engine.Compare(GAMESIG) != 0 || savever > SAVEVER)
 							{
@@ -128,6 +150,9 @@ void FSavegameManager::ReadSaveStrings()
 							node->bMissingWads = missing;
 							node->SaveTitle = title;
 							node->saveDate = date;
+							node->saveFlags = flags;
+							node->elapsedTime = elapsedTime;
+							node->levelNum = levelnum;
 							InsertSaveNode(node);
 						}
 					}

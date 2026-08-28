@@ -156,7 +156,7 @@ int FSavegameManagerBase::InsertSaveNode(FSaveGameNode *node)
 //
 //=============================================================================
 
-void FSavegameManagerBase::NotifyNewSave(const FString &file, const FString &title, int saveDate, bool okForQuicksave, bool forceQuicksave)
+void FSavegameManagerBase::NotifyNewSave(const FString &file, const FString &title, int saveDate, bool okForQuicksave, bool forceQuicksave, int elapsedTime, int levelnum, int32_t flags)
 {
 	if (file.IsEmpty())
 		return;
@@ -177,6 +177,9 @@ void FSavegameManagerBase::NotifyNewSave(const FString &file, const FString &tit
 			node->saveDate = saveDate;
 			node->bOldVersion = false;
 			node->bMissingWads = false;
+			node->saveFlags = flags;
+			node->elapsedTime = elapsedTime;
+			node->levelNum = levelnum;
 
 			SaveGames.Delete(i);
 			i = InsertSaveNode(node);
@@ -196,6 +199,9 @@ void FSavegameManagerBase::NotifyNewSave(const FString &file, const FString &tit
 	node->bOldVersion = false;
 	node->bMissingWads = false;
 	node->saveDate = saveDate;
+	node->elapsedTime = elapsedTime;
+	node->saveFlags = flags;
+	node->levelNum = levelnum;
 	int index = InsertSaveNode(node);
 
 	if (okForQuicksave)
@@ -241,7 +247,7 @@ DEFINE_ACTION_FUNCTION(FSavegameManager, LoadSavegame)
 //
 //=============================================================================
 
-void FSavegameManagerBase::DoSave(int Selected, const char *savegamestring)
+void FSavegameManagerBase::DoSave(int Selected, const char *savegamestring, int flags)
 {
 	// @Cockatrice - Consult the event managers to determine if we are actually allowed to save at this moment
 	if (!staticEventManager.IsSaveAllowed(false)) {
@@ -279,7 +285,8 @@ DEFINE_ACTION_FUNCTION(FSavegameManager, DoSave)
 	PARAM_SELF_STRUCT_PROLOGUE(FSavegameManagerBase);
 	PARAM_INT(sel);
 	PARAM_STRING(name);
-	self->DoSave(sel, name.GetChars());
+	PARAM_INT(flags);
+	self->DoSave(sel, name.GetChars(), flags);
 	return 0;
 }
 
@@ -537,7 +544,10 @@ DEFINE_ACTION_FUNCTION(FSavegameManager, ExtractSaveData)
 	ACTION_RETURN_INT(self->ExtractSaveData(sel));
 }
 
-
+DEFINE_FIELD(FSaveGameNode, saveDate);
+DEFINE_FIELD(FSaveGameNode, saveFlags);
+DEFINE_FIELD(FSaveGameNode, elapsedTime);
+DEFINE_FIELD(FSaveGameNode, levelNum);
 DEFINE_FIELD(FSaveGameNode, SaveTitle);
 DEFINE_FIELD(FSaveGameNode, Filename);
 DEFINE_FIELD(FSaveGameNode, bOldVersion);

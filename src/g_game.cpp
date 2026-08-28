@@ -108,7 +108,7 @@ void	G_DoPlayDemo (void);
 void	G_DoCompleted (void);
 void	G_DoVictory (void);
 void	G_DoWorldDone (void);
-void	G_DoSaveGame (bool okForQuicksave, bool forceQuicksave, FString filename, const char *description);
+void	G_DoSaveGame (bool okForQuicksave, bool forceQuicksave, FString filename, const char *description, int32_t flags = 0);
 void	G_DoAutoSave ();
 void	G_DoQuickSave ();
 
@@ -221,6 +221,7 @@ float 			mousey;
 
 FString			savegamefile;
 FString			savedescription;
+int32_t			savegameflags;
 
 // [RH] Name of screenshot file to generate (usually NULL)
 FString			shotfile;
@@ -792,6 +793,7 @@ void G_BuildTiccmd (ticcmd_t *cmd)
 		Net_WriteInt8 (DEM_SAVEGAME);
 		Net_WriteString (savegamefile.GetChars());
 		Net_WriteString (savedescription.GetChars());
+		Net_WriteInt32 (savegameflags);
 		savegamefile = "";
 	}
 	if (SendItemUse == (const AActor *)1)
@@ -1190,11 +1192,12 @@ void G_Ticker ()
 			break;
 		case ga_savegame:
 			staticEventManager.PreSave(0);
-			G_DoSaveGame (true, false, savegamefile, savedescription.GetChars());
+			G_DoSaveGame (true, false, savegamefile, savedescription.GetChars(), savegameflags);
 			staticEventManager.PostSave(0);
 			gameaction = ga_nothing;
 			savegamefile = "";
 			savedescription = "";
+			savegameflags = 0;
 			break;
 		case ga_autosave:
 			G_DoAutoSave ();
@@ -2134,11 +2137,11 @@ void G_DoLoadGame ()
 		FString fullError;
 
 		if (mapVersion > 0)
-			fullError.Format("Could not find map: %s Version: %d", map.GetChars(), mapVersion, ERR_MISSINGMAP);
+			fullError.Format("Could not find map: %s Version: %d", map.GetChars(), mapVersion);
 		else
-			fullError.Format("Could not find map: %s", map.GetChars(), "", ERR_MISSINGMAP);
+			fullError.Format("Could not find map: %s", map.GetChars());
 
-		LoadGameError(fullError.GetChars());
+		LoadGameError(fullError.GetChars(), "", ERR_MISSINGMAP);
 		return;
 	}
 
@@ -2220,7 +2223,7 @@ void G_DoLoadGame ()
 // Called by the menu task.
 // Description is a 24 byte text string
 //
-void G_SaveGame (const char *filename, const char *description)
+void G_SaveGame (const char *filename, const char *description, int flags)
 {
 	if (sendsave || gameaction == ga_savegame)
 	{
@@ -2242,6 +2245,7 @@ void G_SaveGame (const char *filename, const char *description)
 	{
 		savegamefile = filename;
 		savedescription = description;
+		savegameflags = (int32_t)flags;
 		sendsave = true;
 	}
 }
@@ -2433,7 +2437,6 @@ void G_DoAutoSave ()
 		// This flag can only be used once per level
 		primaryLevel->flags2 &= ~LEVEL2_NOAUTOSAVEHINT;
 	}*/
-	// TODO: Figure out autosave hinting for this system
 	FString file = G_FindSaveFilename("autosave", count);
 
 	//readableTime = myasctime ();
@@ -2443,6 +2446,12 @@ void G_DoAutoSave ()
 	struct tm* nowInfo = localtime(&now);
 	strftime(readableTime, 64, "%H:%M:%S - %d/%m/%Y", nowInfo);
 	description.Format("Autosave: %s", readableTime);
+
+	// @Cockatrice - Consult the event managers to find a more appropriate description
+	FString autoDescription = staticEventManager.GetSavegameTitle(0);
+	if(!autoDescription.IsEmpty()) {
+		description = autoDescription;
+	}
 
 	staticEventManager.PreSave(2);
 	G_DoSaveGame (false, false, file, description.GetChars());
@@ -2472,6 +2481,12 @@ void G_DoQuickSave ()
 	struct tm* nowInfo = localtime(&now);
 	strftime(readableTime, 64, "%H:%M:%S - %d/%m/%Y", nowInfo);
 	description.Format("Quicksave: %s", readableTime);
+
+	// @Cockatrice - Consult the event managers to find a more appropriate description
+	FString autoDescription = staticEventManager.GetSavegameTitle(1);
+	if(!autoDescription.IsEmpty()) {
+		description = autoDescription;
+	}
 
 	staticEventManager.PreSave(1);
 	G_DoSaveGame (true, true, file, description.GetChars());
@@ -2507,7 +2522,7 @@ static void PutSaveWads (FSerializer &arc)
 	arc("Map Version", primaryLevel->mapVersion);
 }
 
-static void PutSaveComment (FSerializer &arc)
+static void PutSaveComment (FSerializer &arc, int32_t &flags, bool quicksave, bool autosave)
 {
 	int levelTime;
 
@@ -2516,6 +2531,7 @@ static void PutSaveComment (FSerializer &arc)
 	arc.AddString("Creation Time", myasctime());
 
 	comment = staticEventManager.GetSavegameComments();
+	flags |= staticEventManager.GetSavegameFlags(quicksave, autosave);
 
 	if (comment.IsEmpty()) {
 		// Get level name
@@ -2529,6 +2545,8 @@ static void PutSaveComment (FSerializer &arc)
 
 	// Write out the comment
 	arc.AddString("Comment", comment.GetChars());
+
+	arc("Flags", flags);
 }
 
 static void PutSavePic (FileWriter *file, int width, int height)
@@ -2546,7 +2564,7 @@ static void PutSavePic (FileWriter *file, int width, int height)
 	}
 }
 
-void G_DoSaveGame (bool okForQuicksave, bool forceQuicksave, FString filename, const char *description)
+void G_DoSaveGame (bool okForQuicksave, bool forceQuicksave, FString filename, const char *description, int32_t flags)
 {
 	TArray<FCompressedBuffer> savegame_content;
 	TArray<FString> savegame_filenames;
@@ -2618,13 +2636,15 @@ void G_DoSaveGame (bool okForQuicksave, bool forceQuicksave, FString filename, c
 
 
 	PutSaveWads (savegameinfo);
-	PutSaveComment (savegameinfo);
+	PutSaveComment (savegameinfo, flags, forceQuicksave, gameaction == ga_autosave);
 
 	// @Cockatrice - Add date value so we can sort entries by date saved
 	time_t cdate;
 	time(&cdate);
 	int cdatei = (int)cdate;
 	savegameinfo("Save Date", cdatei);
+	savegameinfo("Elapsed Time", level.totaltime);
+	savegameinfo("Level Number", level.levelnum);
 
 	// Intermission stats for hubs
 	G_SerializeHub(savegameglobals);
@@ -2678,7 +2698,7 @@ void G_DoSaveGame (bool okForQuicksave, bool forceQuicksave, FString filename, c
 
 	if (succeeded)
 	{
-		savegameManager.NotifyNewSave(filename, description, cdatei, okForQuicksave, forceQuicksave);
+		savegameManager.NotifyNewSave(filename, description, cdatei, okForQuicksave, forceQuicksave, level.totaltime, level.levelnum, flags);
 		BackupSaveName = filename;
 
 		if (longsavemessages) Printf("%s (%s)\n", GStrings.GetString("GGSAVED"), filename.GetChars());
