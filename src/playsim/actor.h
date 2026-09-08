@@ -1068,6 +1068,21 @@ public:
 		return (Pos() - otherpos).Length();
 	}
 
+	// @Cockatrice - Distance between POS of OTHER and the closest point inside the actor bounds
+	// Used for more precise explosion calculations against the hull of the actor instead of its bottom-center point
+	double Distance3DWithBounds(AActor* other, bool absolute = false) {
+		const DVector3 otherpos = absolute ? other->Pos() : other->PosRelative(this);
+		const DVector3 pos = Pos();
+		DVector3 ourPos(
+			std::clamp(otherpos.X, pos.X - radius, pos.X + radius),
+			std::clamp(otherpos.Y, pos.Y - radius, pos.Y + radius),
+			std::clamp(otherpos.Z, pos.Z, pos.Z + Height)
+		);
+
+		return (ourPos - otherpos).Length();
+	}
+
+
 	DAngle AngleTo(AActor *other, bool absolute = false)
 	{
 		DVector3 otherpos = absolute ? other->Pos() : other->PosRelative(this);

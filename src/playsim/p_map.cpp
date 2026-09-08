@@ -6425,6 +6425,17 @@ CUSTOM_CVAR(Float, splashfactor, 1.f, CVAR_SERVERINFO)
 		selfthrustscale = 1.f / self;
 }
 
+
+// @Cockatrice - Get the closest point inside an actors bounds so we can accurately model radius damage against an unusually large actor
+static inline DVector3 getClosestPosInside(const DVector3& boxPos, double radius, double height, const DVector3& testPos) {
+	return DVector3(
+		std::clamp(testPos.X, boxPos.X - radius, boxPos.X + radius),
+		std::clamp(testPos.Y, boxPos.Y - radius, boxPos.Y + radius),
+		std::clamp(testPos.Z, boxPos.Z, boxPos.Z + height)
+	);
+}
+
+
 //==========================================================================
 //
 // P_GetRadiusDamage
@@ -6489,7 +6500,7 @@ static double GetRadiusDamage(bool fromaction, AActor *bombspot, AActor *thing, 
 	//[inkoalwetrust]: Round explosions just use the actual distance between the source and victim.
 	else
 	{
-		len = bombspot->Distance3D (thing);
+		len = thing->Distance3DWithBounds(bombspot);
 	}
 	len = clamp<double>(len - fulldamagedistance, 0.0, len);
 	points = bombdamagefloat * (1.0 - len * bombdistancefloat);
