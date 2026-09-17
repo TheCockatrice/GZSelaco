@@ -122,6 +122,8 @@ struct particledata_t
 	bool CheckWater(double* outSurfaceHeight);
 	float GetFloorHeight();
 	secplane_t* GetFloorPlane();
+	sector_t* GetSector() const;
+	bool CheckForSectorTag(int tag) const;
 	void UpdateUnderwater();
 	void UpdateDrift();
 

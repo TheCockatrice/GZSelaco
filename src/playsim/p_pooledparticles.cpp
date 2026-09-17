@@ -151,6 +151,25 @@ DEFINE_ACTION_FUNCTION(_ParticleData, PlaySound)
 	ACTION_RETURN_INT(handle);
 };
 
+
+static int CheckParticleSectorTag(particledata_t* data, int tag) {
+	return data->CheckForSectorTag(tag);
+}
+
+
+DEFINE_ACTION_FUNCTION(_ParticleData, GetSector)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(particledata_t);
+	ACTION_RETURN_POINTER(self->GetSector());
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(_ParticleData, CheckForSectorTag, CheckParticleSectorTag)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(particledata_t);
+	PARAM_INT(sector_tag);
+	ACTION_RETURN_INT(self->CheckForSectorTag(sector_tag));
+}
+
 DEFINE_FIELD_X(ParticleAnimFrame, particleanimframe_t, frame);
 DEFINE_FIELD_X(ParticleAnimFrame, particleanimframe_t, duration);
 
@@ -914,6 +933,16 @@ secplane_t* particledata_t::GetFloorPlane()
 
 	return &subsector->sector->floorplane;
 }
+
+sector_t* particledata_t::GetSector() const {
+	return subsector->sector;
+}
+
+bool particledata_t::CheckForSectorTag(int tag) const {
+	const sector_t* sect = subsector->sector;
+	return sect->Level->SectorHasTag(sect->Index(), tag);
+}
+
 
 void particledata_t::UpdateUnderwater()
 {

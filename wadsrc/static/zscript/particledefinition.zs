@@ -159,6 +159,8 @@ struct ParticleData
 
     native Actor SpawnActor(class<Actor> actor, double offsetX = 0.0, double offsetY = 0.0, double offsetZ = 0.0);
     native void PlaySound(Sound sound_id, float volume = 1, float attenuation = ATTN_NORM, float pitch = 0.0);
+    native Sector GetSector() const;
+    native bool CheckForSectorTag(int tag) const;   // @Cockatrice - Returns true if the current sector contains the specified tag
 }
 
 class ParticleDefinition native play
