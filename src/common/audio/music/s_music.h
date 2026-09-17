@@ -7,6 +7,7 @@
 #include "name.h"
 #include "files.h"
 #include <zmusic.h>
+#include "c_cvars.h"
 
 class SoundStream;
 
@@ -17,7 +18,7 @@ enum MusicCustomStreamType : bool {
 };
 int MusicEnabled();
 typedef bool(*StreamCallback)(SoundStream* stream, void* buff, int len, void* userdata);
-SoundStream *S_CreateCustomStream(size_t size, int samplerate, int numchannels, MusicCustomStreamType sampletype, StreamCallback cb, void *userdata);
+SoundStream *S_CreateCustomStream(size_t size, int samplerate, int numchannels, MusicCustomStreamType sampletype, StreamCallback cb, void *userdata, FFloatCVarRef *volumeCVAR = nullptr);
 void S_StopCustomStream(SoundStream* stream);
 void S_PauseAllCustomStreams(bool on);
 

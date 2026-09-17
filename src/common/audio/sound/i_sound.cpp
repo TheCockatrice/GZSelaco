@@ -169,7 +169,7 @@ public:
 	}
 
 	// Streaming sounds.
-	SoundStream *CreateStream (SoundStreamCallback callback, int buffbytes, int flags, int samplerate, void *userdata)
+	SoundStream *CreateStream (SoundStreamCallback callback, int buffbytes, int flags, int samplerate, void *userdata, FFloatCVarRef *volumeCVAR)
 	{
 		return NULL;
 	}

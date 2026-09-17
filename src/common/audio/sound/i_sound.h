@@ -41,6 +41,7 @@
 #include "zstring.h"
 #include <zmusic.h>
 #include "files.h"
+#include "c_cvars.h"
 
 struct FSoundChan;
 
@@ -116,7 +117,7 @@ public:
 	virtual float GetOutputRate() = 0;
 
 	// Streaming sounds.
-	virtual SoundStream *CreateStream (SoundStreamCallback callback, int buffbytes, int flags, int samplerate, void *userdata) = 0;
+	virtual SoundStream *CreateStream (SoundStreamCallback callback, int buffbytes, int flags, int samplerate, void *userdata, FFloatCVarRef* volumeCVAR = nullptr) = 0;
 
 	// Starts a sound.
 	virtual FISoundChannel *StartSound (SoundHandle sfx, float vol, float pitch, int chanflags, FISoundChannel *reuse_chan, float startTime = 0.f, int effectID = -1) = 0;

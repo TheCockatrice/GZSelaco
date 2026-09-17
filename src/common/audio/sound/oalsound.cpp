@@ -199,6 +199,8 @@ class OpenALSoundStream : public SoundStream
 	uint64_t Offset = 0;
 	std::mutex Mutex;
 
+	FFloatCVarRef* VolumeCVAR = nullptr;
+
 	bool SetupSource()
 	{
 		/* Get a source, killing the farthest, lowest-priority sound if needed */
@@ -332,7 +334,13 @@ public:
 
 	void UpdateVolume()
 	{
-		alSourcef(Source, AL_GAIN, Renderer->MusicVolume*Volume);
+		if (VolumeCVAR != nullptr) {
+			alSourcef(Source, AL_GAIN, (float)*VolumeCVAR * Volume);
+		}
+		else {
+			alSourcef(Source, AL_GAIN, Renderer->MusicVolume * Volume);
+		}
+		
 		getALError();
 	}
 
@@ -489,7 +497,7 @@ public:
 		return ok;
 	}
 
-	bool Init(SoundStreamCallback callback, int buffbytes, int flags, int samplerate, void *userdata)
+	bool Init(SoundStreamCallback callback, int buffbytes, int flags, int samplerate, void *userdata, FFloatCVarRef* volumeCVAR = nullptr)
 	{
 		if(!SetupSource())
 			return false;
@@ -497,6 +505,7 @@ public:
 		Callback = callback;
 		UserData = userdata;
 		SampleRate = samplerate;
+		VolumeCVAR = volumeCVAR;
 
 		Format = AL_NONE;
 		if((flags&Bits8)) /* Signed or unsigned? We assume unsigned 8-bit... */
@@ -1431,12 +1440,12 @@ void OpenALSoundRenderer::UnloadSound(SoundHandle sfx)
 }
 
 
-SoundStream *OpenALSoundRenderer::CreateStream(SoundStreamCallback callback, int buffbytes, int flags, int samplerate, void *userdata)
+SoundStream *OpenALSoundRenderer::CreateStream(SoundStreamCallback callback, int buffbytes, int flags, int samplerate, void *userdata, FFloatCVarRef* volumeCVAR)
 {
 	/*if(StreamThread.get_id() == std::thread::id())
 		StreamThread = std::thread(std::mem_fn(&OpenALSoundRenderer::BackgroundProc), this);*/
 	OpenALSoundStream *stream = new OpenALSoundStream(this);
-	if (!stream->Init(callback, buffbytes, flags, samplerate, userdata))
+	if (!stream->Init(callback, buffbytes, flags, samplerate, userdata, volumeCVAR))
 	{
 		delete stream;
 		return NULL;
@@ -2369,7 +2378,6 @@ void OpenALSoundRenderer::UpdateReverb(SoundListener* listener) {
 		getALError();
 	}
 
-
 	// Run the reverb transition if we can
 	if (ReverbTransition < 1.0) {
 		// Add time and distance to the transition
@@ -2764,6 +2772,10 @@ void OpenALSoundRenderer::LoadReverb(const ReverbContainer *env)
 	if (doLoad)
 	{
 		LoadReverbProps(*envReverb, env->Properties, true);
+	}
+	else {
+		alAuxiliaryEffectSloti(EnvSlot, AL_EFFECTSLOT_EFFECT, *envReverb);
+		getALError();
 	}
 
 	// Since we forced reverb here, clear out any transition info
