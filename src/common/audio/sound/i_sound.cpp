@@ -227,6 +227,7 @@ public:
 	void UpdateSounds ()
 	{
 	}
+	void ResetReverb() {}
 
 	bool IsValid ()
 	{

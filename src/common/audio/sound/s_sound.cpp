@@ -1391,8 +1391,10 @@ void SoundEngine::StopAllChannels ()
 		chan = next;
 	}
 
-	if (GSnd)
+	if (GSnd) {
+		GSnd->ResetReverb();
 		GSnd->UpdateSounds();
+	}
 
 	AudioLoaderQueue::Instance->stopAllSounds();
 }

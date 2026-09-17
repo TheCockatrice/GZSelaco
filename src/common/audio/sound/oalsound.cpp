@@ -45,6 +45,8 @@
 #include "m_fixed.h"
 #include "stats.h"
 
+#include "g_levellocals.h"
+
 
 const char *GetSampleTypeName(SampleType type);
 const char *GetChannelConfigName(ChannelConfig chan);
@@ -61,6 +63,15 @@ CVAR(Bool, snd_waterreverb, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR (String, snd_aldevice, "Default", CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 CVAR (Bool, snd_efx, true, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 CVAR (String, snd_alresampler, "Default", CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
+
+// @Cockatrice - time in seconds to interpolate between environments
+// set to 0 to instantly switch environments like classic GZDoom
+CVAR (Float, snd_interpeax, 1.65f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+
+// @Cockatrice - Distance in map units, covering this distance from where an environment has changed will increase interpolation speed between two environments
+// Hitting maxdistance will guarantee a full transition. Distance measured in 2D.
+CVAR (Float, snd_interpeax_maxdistance, 256.0f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+
 
 #ifdef _WIN32
 #define OPENALLIB "openal32.dll"
@@ -974,6 +985,9 @@ OpenALSoundRenderer::OpenALSoundRenderer()
 
 	StreamThread = std::thread(std::mem_fn(&OpenALSoundRenderer::BackgroundProc), this);
 	QueueThread = std::thread(std::mem_fn(&OpenALSoundRenderer::BackgroundQueueProc), this);
+
+	InitTime = std::chrono::steady_clock::now();
+	LastReverb.Instance = -1;	// No previous reverb to interpolate from
 }
 #undef LOAD_DEV_FUNC
 #undef LOAD_FUNC
@@ -1020,6 +1034,10 @@ OpenALSoundRenderer::~OpenALSoundRenderer()
 	}
 	EnvEffects.Clear();
 
+	if (ReverbSlot) {
+		alDeleteEffects(1, &ReverbSlot);
+	}
+
 	if(EnvSlot)
 	{
 		alDeleteAuxiliaryEffectSlots(1, &EnvSlot);
@@ -1043,6 +1061,8 @@ OpenALSoundRenderer::~OpenALSoundRenderer()
 	EffectDefs.clear();
 	alDeleteFilters(1, &DryFilter);
 	DryFilter = 0;
+	ReverbSlot = 0;
+	LastReverb.Instance = -1;
 
 	alcMakeContextCurrent(NULL);
 	alcDestroyContext(Context);
@@ -2160,6 +2180,7 @@ void OpenALSoundRenderer::UpdateSoundParams3D(SoundListener *listener, FISoundCh
 	getALError();
 }
 
+
 void OpenALSoundRenderer::UpdateListener(SoundListener *listener)
 {
 	if(!listener->valid)
@@ -2187,32 +2208,61 @@ void OpenALSoundRenderer::UpdateListener(SoundListener *listener)
 	                         -listener->velocity.Z);
 	getALError();
 
-	const ReverbContainer *env = ForcedEnvironment;
-	if(!env)
+	UpdateReverb(listener);
+}
+
+
+
+void OpenALSoundRenderer::UpdateReverb(SoundListener* listener) {
+	const ReverbContainer* env = ForcedEnvironment;
+	auto now = std::chrono::steady_clock::now();
+
+	if (!env)
 	{
 		env = listener->Environment;
-		if(!env)
+		if (!env)
 			env = DefaultEnvironments[0];
 	}
-	if(env != PrevEnvironment || env->Modified)
+	if (env != PrevEnvironment || env->Modified)
 	{
 		PrevEnvironment = env;
-		DPrintf(DMSG_NOTIFY, "Reverb Environment %s\n", env->Name);
+		
+		if (*snd_interpeax <= 0 || LastReverb.Instance < 0 || level.time < 5) {
+			// Just replace the current environment
+			if (EnvSlot != 0) {
+				LoadReverb(env);
+			}
+			DPrintf(DMSG_NOTIFY, "Reverb Environment %s\n", env->Name);
 
-		if(EnvSlot != 0)
-			LoadReverb(env);
+			LastReverb = env->Properties;
+			LastReverb.Instance = 0;		// Using the unused Instance field as flag
+			CurrentReverb = env->Properties;
+			CurrentReverb.Instance = 1;
+			ReverbTransition = 1.0;
+		}
+		else {
+			DPrintf(DMSG_NOTIFY, "Starting transition to Reverb Environment %s (over %.2f seconds)\n", env->Name, (float)snd_interpeax);
+			TransitionTime = now;
+			ReverbTransition = 0;
+			LastReverb = CurrentReverb;
+			LastReverb.Instance = 0;
+			CurrentReverb = env->Properties;
+			CurrentReverb.Instance = 1;
+			reverbPosition = listener->position;
+		}
 
 		const_cast<ReverbContainer*>(env)->Modified = false;
 	}
 
 	// NOTE: Moving into and out of water will undo pitch variations on sounds.
-	if(listener->underwater || env->SoftwareWater)
+	// It will also kill any transitions currently being done
+	if (listener->underwater || env->SoftwareWater)
 	{
-		if(!WasInWater)
+		if (!WasInWater)
 		{
 			WasInWater = true;
 
-			if(EnvSlot != 0 && *snd_waterreverb)
+			if (EnvSlot != 0 && *snd_waterreverb)
 			{
 				// Find the "Underwater" reverb environment
 				env = S_FindEnvironment(0x1600);
@@ -2224,13 +2274,13 @@ void OpenALSoundRenderer::UpdateListener(SoundListener *listener)
 				alFilterf(EnvFilters[1], AL_LOWPASS_GAINHF, 1.f);
 
 				// Apply the updated filters on the sources
-				FSoundChan *schan = soundEngine->GetChannels();
+				FSoundChan* schan = soundEngine->GetChannels();
 				while (schan)
 				{
 					ALuint source = GET_PTRID(schan->SysChannel);
 					if (source && !(schan->ChanFlags & CHANF_UI))
 					{
-						SFXStatus *status = statusForSource(source);
+						SFXStatus* status = statusForSource(source);
 						if (status) {
 							status->wasInWater = true;
 
@@ -2244,12 +2294,12 @@ void OpenALSoundRenderer::UpdateListener(SoundListener *listener)
 				}
 			}
 
-			FSoundChan *schan = soundEngine->GetChannels();
+			FSoundChan* schan = soundEngine->GetChannels();
 			while (schan)
 			{
 				ALuint source = GET_PTRID(schan->SysChannel);
 				if (source && !(schan->ChanFlags & CHANF_UI)) {
-					SFXStatus *status = statusForSource(source);
+					SFXStatus* status = statusForSource(source);
 					if (status) {
 						status->wasInWater = true;
 
@@ -2258,18 +2308,18 @@ void OpenALSoundRenderer::UpdateListener(SoundListener *listener)
 						}
 					}
 				}
-					
+
 				schan = schan->NextChan;
 			}
 			getALError();
 		}
 	}
-	else if(WasInWater)
+	else if (WasInWater)
 	{
 
 		WasInWater = false;
 
-		if(EnvSlot != 0)
+		if (EnvSlot != 0)
 		{
 			LoadReverb(env);
 
@@ -2278,13 +2328,13 @@ void OpenALSoundRenderer::UpdateListener(SoundListener *listener)
 			alFilterf(EnvFilters[1], AL_LOWPASS_GAIN, 1.f);
 			alFilterf(EnvFilters[1], AL_LOWPASS_GAINHF, 1.f);
 
-			FSoundChan *schan = soundEngine->GetChannels();
+			FSoundChan* schan = soundEngine->GetChannels();
 			while (schan)
 			{
 				ALuint source = GET_PTRID(schan->SysChannel);
 				if (source && !(schan->ChanFlags & CHANF_UI))
 				{
-					SFXStatus *status = statusForSource(source);
+					SFXStatus* status = statusForSource(source);
 					if (status) {
 						status->wasInWater = false;
 
@@ -2299,12 +2349,12 @@ void OpenALSoundRenderer::UpdateListener(SoundListener *listener)
 		}
 
 
-		FSoundChan *schan = soundEngine->GetChannels();
+		FSoundChan* schan = soundEngine->GetChannels();
 		while (schan)
 		{
 			ALuint source = GET_PTRID(schan->SysChannel);
 			if (source && !(schan->ChanFlags & CHANF_UI)) {
-				SFXStatus *status = statusForSource(source);
+				SFXStatus* status = statusForSource(source);
 				if (status) {
 					status->wasInWater = false;
 
@@ -2318,7 +2368,36 @@ void OpenALSoundRenderer::UpdateListener(SoundListener *listener)
 		}
 		getALError();
 	}
+
+
+	// Run the reverb transition if we can
+	if (ReverbTransition < 1.0) {
+		// Add time and distance to the transition
+		float elapsedTime = static_cast<float>(std::chrono::duration_cast<std::chrono::milliseconds>(now - TransitionTime).count()) / 1000.0f;
+		FVector2 rp(reverbPosition.X, reverbPosition.Z), lp(listener->position.X, listener->position.Z);
+		float distance = (rp - lp).Length();
+
+		ReverbTransition = std::clamp(
+			std::max(elapsedTime / (float)snd_interpeax, distance / (float)snd_interpeax_maxdistance),
+			0.0f,
+			1.0f
+		);
+
+		// Interpolate the two environments and apply
+		InterpolateReverb(ReverbTransition);
+	}
 }
+
+
+// Called with StopAllSounds or whatever
+void OpenALSoundRenderer::ResetReverb() {
+	ReverbTransition = 1;
+	LastReverb = CurrentReverb;
+	LastReverb.Instance = -1;
+	CurrentReverb.Instance = 1;
+	PrevEnvironment = nullptr;
+}
+
 
 void OpenALSoundRenderer::UpdateSounds()
 {
@@ -2511,6 +2590,139 @@ void OpenALSoundRenderer::PurgeStoppedSources()
 	}
 }
 
+
+// @Cockatrice - Configures the sound environment in ReverbSlot between LastReverb and CurrentReverb
+void OpenALSoundRenderer::InterpolateReverb(float tm) {
+	REVERB_PROPERTIES newProps;
+
+	if (tm >= 1.0) {
+		newProps = CurrentReverb;
+	}
+	else {
+		REVERB_PROPERTIES::Interpolate(LastReverb, CurrentReverb, tm, newProps);
+	}
+
+
+	bool loadOK = false;
+
+	if (!ReverbSlot && ReverbSlotEnabled) {
+		bool ok = false;
+
+		alGenEffects(1, &ReverbSlot);
+		if (getALError() == AL_NO_ERROR)
+		{
+			alEffecti(ReverbSlot, AL_EFFECT_TYPE, AL_EFFECT_EAXREVERB);
+			ok = (alGetError() == AL_NO_ERROR);
+			if (!ok)
+			{
+				alEffecti(ReverbSlot, AL_EFFECT_TYPE, AL_EFFECT_REVERB);
+				ok = (alGetError() == AL_NO_ERROR);
+			}
+			if (!ok)
+			{
+				alEffecti(ReverbSlot, AL_EFFECT_TYPE, AL_EFFECT_NULL);
+				ok = (alGetError() == AL_NO_ERROR);
+			}
+			
+			if (!ok) {
+				alDeleteEffects(1, &ReverbSlot);
+				getALError();
+			}
+		}
+
+		if (!ok) {
+			// mark ReverbSlot as invalid so we don't keep trying to create it over and over
+			ReverbSlotEnabled = false;
+			DPrintf(DMSG_ERROR, "Reverb failed to initialize!\n");
+		} 
+
+		loadOK = ok;
+	}
+	else if (ReverbSlot) {
+		// Effect was already created on a previous call
+		loadOK = true;
+	}
+
+
+	if (loadOK) {
+		// We can proceed to set values
+		LoadReverbProps(ReverbSlot, newProps);
+	}
+}
+
+
+void OpenALSoundRenderer::LoadReverbProps(ALuint slot, const REVERB_PROPERTIES& props, bool apply) {
+	ALint type = AL_EFFECT_NULL;
+
+	alGetEffecti(slot, AL_EFFECT_TYPE, &type);
+#define mB2Gain(x) ((float)pow(10., (x)/2000.))
+	if (type == AL_EFFECT_EAXREVERB)
+	{
+		ALfloat reflectpan[3] = { props.ReflectionsPan0,
+								  props.ReflectionsPan1,
+								  props.ReflectionsPan2 };
+		ALfloat latepan[3] = { props.ReverbPan0, props.ReverbPan1,
+							   props.ReverbPan2 };
+#undef SETPARAM
+#define SETPARAM(e,t,v) alEffectf((e), AL_EAXREVERB_##t, clamp((v), AL_EAXREVERB_MIN_##t, AL_EAXREVERB_MAX_##t))
+		SETPARAM(slot, DIFFUSION, props.EnvDiffusion);
+		SETPARAM(slot, DENSITY, powf(props.EnvSize, 3.0f) * 0.0625f);
+		SETPARAM(slot, GAIN, mB2Gain(props.Room));
+		SETPARAM(slot, GAINHF, mB2Gain(props.RoomHF));
+		SETPARAM(slot, GAINLF, mB2Gain(props.RoomLF));
+		SETPARAM(slot, DECAY_TIME, props.DecayTime);
+		SETPARAM(slot, DECAY_HFRATIO, props.DecayHFRatio);
+		SETPARAM(slot, DECAY_LFRATIO, props.DecayLFRatio);
+		SETPARAM(slot, REFLECTIONS_GAIN, mB2Gain(props.Reflections));
+		SETPARAM(slot, REFLECTIONS_DELAY, props.ReflectionsDelay);
+		alEffectfv(slot, AL_EAXREVERB_REFLECTIONS_PAN, reflectpan);
+		SETPARAM(slot, LATE_REVERB_GAIN, mB2Gain(props.Reverb));
+		SETPARAM(slot, LATE_REVERB_DELAY, props.ReverbDelay);
+		alEffectfv(slot, AL_EAXREVERB_LATE_REVERB_PAN, latepan);
+		SETPARAM(slot, ECHO_TIME, props.EchoTime);
+		SETPARAM(slot, ECHO_DEPTH, props.EchoDepth);
+		SETPARAM(slot, MODULATION_TIME, props.ModulationTime);
+		SETPARAM(slot, MODULATION_DEPTH, props.ModulationDepth);
+		SETPARAM(slot, AIR_ABSORPTION_GAINHF, mB2Gain(props.AirAbsorptionHF));
+		SETPARAM(slot, HFREFERENCE, props.HFReference);
+		SETPARAM(slot, LFREFERENCE, props.LFReference);
+		SETPARAM(slot, ROOM_ROLLOFF_FACTOR, props.RoomRolloffFactor);
+		alEffecti(slot, AL_EAXREVERB_DECAY_HFLIMIT,
+			(props.Flags & REVERB_FLAGS_DECAYHFLIMIT) ? AL_TRUE : AL_FALSE);
+#undef SETPARAM
+	}
+	else if (type == AL_EFFECT_REVERB)
+	{
+#define SETPARAM(e,t,v) alEffectf((e), AL_REVERB_##t, clamp((v), AL_REVERB_MIN_##t, AL_REVERB_MAX_##t))
+		SETPARAM(slot, DIFFUSION, props.EnvDiffusion);
+		SETPARAM(slot, DENSITY, powf(props.EnvSize, 3.0f) * 0.0625f);
+		SETPARAM(slot, GAIN, mB2Gain(props.Room));
+		SETPARAM(slot, GAINHF, mB2Gain(props.RoomHF));
+		SETPARAM(slot, DECAY_TIME, props.DecayTime);
+		SETPARAM(slot, DECAY_HFRATIO, props.DecayHFRatio);
+		SETPARAM(slot, REFLECTIONS_GAIN, mB2Gain(props.Reflections));
+		SETPARAM(slot, REFLECTIONS_DELAY, props.ReflectionsDelay);
+		SETPARAM(slot, LATE_REVERB_GAIN, mB2Gain(props.Reverb));
+		SETPARAM(slot, LATE_REVERB_DELAY, props.ReverbDelay);
+		SETPARAM(slot, AIR_ABSORPTION_GAINHF, mB2Gain(props.AirAbsorptionHF));
+		SETPARAM(slot, ROOM_ROLLOFF_FACTOR, props.RoomRolloffFactor);
+		alEffecti(slot, AL_REVERB_DECAY_HFLIMIT,
+			(props.Flags & REVERB_FLAGS_DECAYHFLIMIT) ? AL_TRUE : AL_FALSE);
+#undef SETPARAM
+	}
+#undef mB2Gain
+	else {
+		Printf(TEXTCOLOR_RED"No effect type!\n");
+	}
+
+	if (apply) {
+		alAuxiliaryEffectSloti(EnvSlot, AL_EFFECTSLOT_EFFECT, slot);
+		getALError();
+	}
+}
+
+
+
 void OpenALSoundRenderer::LoadReverb(const ReverbContainer *env)
 {
 	ALuint *envReverb = EnvEffects.CheckKey(env->ID);
@@ -2549,72 +2761,17 @@ void OpenALSoundRenderer::LoadReverb(const ReverbContainer *env)
 		}
 	}
 
-	if(doLoad)
+	if (doLoad)
 	{
-		const REVERB_PROPERTIES &props = env->Properties;
-		ALint type = AL_EFFECT_NULL;
-
-		alGetEffecti(*envReverb, AL_EFFECT_TYPE, &type);
-#define mB2Gain(x) ((float)pow(10., (x)/2000.))
-		if(type == AL_EFFECT_EAXREVERB)
-		{
-			ALfloat reflectpan[3] = { props.ReflectionsPan0,
-			                          props.ReflectionsPan1,
-			                          props.ReflectionsPan2 };
-			ALfloat latepan[3] = { props.ReverbPan0, props.ReverbPan1,
-			                       props.ReverbPan2 };
-#undef SETPARAM
-#define SETPARAM(e,t,v) alEffectf((e), AL_EAXREVERB_##t, clamp((v), AL_EAXREVERB_MIN_##t, AL_EAXREVERB_MAX_##t))
-			SETPARAM(*envReverb, DIFFUSION, props.EnvDiffusion);
-			SETPARAM(*envReverb, DENSITY, powf(props.EnvSize, 3.0f) * 0.0625f);
-			SETPARAM(*envReverb, GAIN, mB2Gain(props.Room));
-			SETPARAM(*envReverb, GAINHF, mB2Gain(props.RoomHF));
-			SETPARAM(*envReverb, GAINLF, mB2Gain(props.RoomLF));
-			SETPARAM(*envReverb, DECAY_TIME, props.DecayTime);
-			SETPARAM(*envReverb, DECAY_HFRATIO, props.DecayHFRatio);
-			SETPARAM(*envReverb, DECAY_LFRATIO, props.DecayLFRatio);
-			SETPARAM(*envReverb, REFLECTIONS_GAIN, mB2Gain(props.Reflections));
-			SETPARAM(*envReverb, REFLECTIONS_DELAY, props.ReflectionsDelay);
-			alEffectfv(*envReverb, AL_EAXREVERB_REFLECTIONS_PAN, reflectpan);
-			SETPARAM(*envReverb, LATE_REVERB_GAIN, mB2Gain(props.Reverb));
-			SETPARAM(*envReverb, LATE_REVERB_DELAY, props.ReverbDelay);
-			alEffectfv(*envReverb, AL_EAXREVERB_LATE_REVERB_PAN, latepan);
-			SETPARAM(*envReverb, ECHO_TIME, props.EchoTime);
-			SETPARAM(*envReverb, ECHO_DEPTH, props.EchoDepth);
-			SETPARAM(*envReverb, MODULATION_TIME, props.ModulationTime);
-			SETPARAM(*envReverb, MODULATION_DEPTH, props.ModulationDepth);
-			SETPARAM(*envReverb, AIR_ABSORPTION_GAINHF, mB2Gain(props.AirAbsorptionHF));
-			SETPARAM(*envReverb, HFREFERENCE, props.HFReference);
-			SETPARAM(*envReverb, LFREFERENCE, props.LFReference);
-			SETPARAM(*envReverb, ROOM_ROLLOFF_FACTOR, props.RoomRolloffFactor);
-			alEffecti(*envReverb, AL_EAXREVERB_DECAY_HFLIMIT,
-					  (props.Flags&REVERB_FLAGS_DECAYHFLIMIT)?AL_TRUE:AL_FALSE);
-#undef SETPARAM
-		}
-		else if(type == AL_EFFECT_REVERB)
-		{
-#define SETPARAM(e,t,v) alEffectf((e), AL_REVERB_##t, clamp((v), AL_REVERB_MIN_##t, AL_REVERB_MAX_##t))
-			SETPARAM(*envReverb, DIFFUSION, props.EnvDiffusion);
-			SETPARAM(*envReverb, DENSITY, powf(props.EnvSize, 3.0f) * 0.0625f);
-			SETPARAM(*envReverb, GAIN, mB2Gain(props.Room));
-			SETPARAM(*envReverb, GAINHF, mB2Gain(props.RoomHF));
-			SETPARAM(*envReverb, DECAY_TIME, props.DecayTime);
-			SETPARAM(*envReverb, DECAY_HFRATIO, props.DecayHFRatio);
-			SETPARAM(*envReverb, REFLECTIONS_GAIN, mB2Gain(props.Reflections));
-			SETPARAM(*envReverb, REFLECTIONS_DELAY, props.ReflectionsDelay);
-			SETPARAM(*envReverb, LATE_REVERB_GAIN, mB2Gain(props.Reverb));
-			SETPARAM(*envReverb, LATE_REVERB_DELAY, props.ReverbDelay);
-			SETPARAM(*envReverb, AIR_ABSORPTION_GAINHF, mB2Gain(props.AirAbsorptionHF));
-			SETPARAM(*envReverb, ROOM_ROLLOFF_FACTOR, props.RoomRolloffFactor);
-			alEffecti(*envReverb, AL_REVERB_DECAY_HFLIMIT,
-					  (props.Flags&REVERB_FLAGS_DECAYHFLIMIT)?AL_TRUE:AL_FALSE);
-#undef SETPARAM
-		}
-#undef mB2Gain
+		LoadReverbProps(*envReverb, env->Properties, true);
 	}
 
-	alAuxiliaryEffectSloti(EnvSlot, AL_EFFECTSLOT_EFFECT, *envReverb);
-	getALError();
+	// Since we forced reverb here, clear out any transition info
+	LastReverb = env->Properties;
+	LastReverb.Instance = 0;		// Using the unused Instance field as flag
+	CurrentReverb = env->Properties;
+	CurrentReverb.Instance = 1;
+	ReverbTransition = 1.0;
 }
 
 FSoundChan *OpenALSoundRenderer::FindLowestChannel()

@@ -161,6 +161,7 @@ public:
 
 	virtual void UpdateListener (SoundListener *) = 0;
 	virtual void UpdateSounds () = 0;
+	virtual void ResetReverb() = 0;		// Reset any interpolation of reverb environments
 
 	virtual bool IsValid () = 0;
 	virtual void PrintStatus () = 0;

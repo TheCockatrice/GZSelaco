@@ -112,6 +112,7 @@ public:
 
 	virtual void UpdateListener(SoundListener *);
 	virtual void UpdateSounds();
+	virtual void ResetReverb();
 
 	virtual void MarkStartTime(FISoundChannel*, float startTime);
 	virtual float GetAudibility(FISoundChannel*);
@@ -194,10 +195,13 @@ private:
 	void BackgroundQueueProc();
 	void FlushPlayQueue();
 	void UpdatePlayedSounds();
+	void UpdateReverb(SoundListener* listener);
     void AddStream(OpenALSoundStream *stream);
     void RemoveStream(OpenALSoundStream *stream);
 
 	void LoadReverb(const ReverbContainer *env);
+	void LoadReverbProps(ALuint slot, const REVERB_PROPERTIES& props, bool apply = true);
+	void InterpolateReverb(float tm);
 	void PurgeStoppedSources();
 	static FSoundChan *FindLowestChannel();
 
@@ -262,6 +266,14 @@ private:
 	TArray<OpenALEffectDef> EffectDefs;
 	TArray<ALuint> EffectSlots;
 	TArray<ALuint> Effects;
+	
+	// @Cockatrice - Reverb transition info
+	std::chrono::steady_clock::time_point InitTime, TransitionTime;		// Ref time for transitions
+	ALuint ReverbSlot = 0;						// Slot used by reverb when interpolating
+	bool ReverbSlotEnabled = true;				// Flag when failed to create reverb effect slot
+	FVector3 reverbPosition;					// Last reverb position, distance from previous pos will increase speed of interpolation between environments
+	REVERB_PROPERTIES LastReverb, CurrentReverb;
+	float ReverbTransition = 1.0;				// Current transition between reverbs
 
 	// So we can change the volume of 'dry' sounds, so we don't hear both the dry and wet at the same time
 	ALuint DryFilter; 
