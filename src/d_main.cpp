@@ -131,6 +131,8 @@
 
 using namespace FileSys;
 
+EXTERN_CVAR(Bool, enablemods)
+EXTERN_CVAR(Bool, modsexist)
 EXTERN_CVAR(Int, gl_texture_quality)
 EXTERN_CVAR(Int, vk_max_transfer_threads)
 EXTERN_CVAR(Bool, hud_althud)
@@ -2147,9 +2149,76 @@ static void AddModFilesFrom(FString path, std::vector<std::string>& allwads) {
 }
 
 
+static bool CheckModFilesFrom(FString path) {
+	FString findmask = path + "*.*";
+
+	FileSys::FileList list;
+
+	if (FileSys::ScanDirectory(list, path.GetChars(), "*.*", true))
+	{
+		for (auto& entry : list)
+		{
+			auto p = strrchr(entry.FileName.c_str(), '.');
+			if (p != nullptr && !entry.isDirectory)
+			{
+				// Only valid extensions
+				if (!stricmp(p, ".wad") || !stricmp(p, ".pk3") || !stricmp(p, ".pk7"))
+				{
+					return true;
+				}
+			}
+		}
+	}
+
+	return false;
+}
+
+
+// Do not add mod files for launching, but verify that some exist at all
+static bool CheckForModFiles() {
+	const char* modFolder = "Mods";
+	FStringf slasheddir("%s/%s/", progdir.GetChars(), modFolder);
+
+	// Check Mods folder and Mods/Workshop folder...
+	if (CheckModFilesFrom(slasheddir)) return true;
+	if (CheckModFilesFrom(slasheddir + "Workshop" + "/")) return true;
+
+	// Check the workshop.txt file, verify files exist
+	FString workshopPath = slasheddir + "workshop.txt";
+	FILE* ws = fopen(workshopPath.GetChars(), "r");
+	if (ws != NULL) {
+		char buff[1024];
+
+		// Skip first line
+		fgets(buff, 1024, ws);
+
+		while (fgets(buff, 1024, ws)) {
+			size_t len = strnlen(buff, 1024);
+			if (len > 4) {
+				buff[len - 1] = '\0';	// Remove nasty \n
+
+				auto p = strrchr(buff, '.');
+				if (p != nullptr) {
+					if (!strnicmp(p, ".pk3", 1024)) {
+						// Found mod file from workshop, signal true
+						fclose(ws);
+						return true;
+					}
+				}
+			}
+		}
+
+		fclose(ws);
+	}
+
+	return false;
+}
+
+
 static void AddModFiles(std::vector<std::string>& allwads) {
-	if (Args->CheckParm("-nomods")) {
+	if (Args->CheckParm("-nomods") || !enablemods) {
 		Printf("Skipping Mod Loading\n");
+
 		return;
 	}
 
@@ -3393,11 +3462,45 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 		FixMacHexen(fileSystem);
 		FindStrifeTeaserVoices(fileSystem);
 	};
-	allwads.insert(
-		allwads.end(),
-		std::make_move_iterator(pwads.begin()),
-		std::make_move_iterator(pwads.end())
-	);
+
+
+	// @Cockatrice - enablemods is designed as a Chapter2 gate so first launch disables mods, should they exist
+	// If we haven't found any mods, or there are no pwads to include let's just turn mods on since turning them off serves no purpose
+	const bool hasInstalledMods = CheckForModFiles();
+	modsexist = hasInstalledMods;
+
+	// For development purposes we need the files directory, so make that exempt from counting as a mod
+	if (!modsexist && pwads.size() > 0) {
+		for (auto& p : pwads) {
+			if (p != "files") {
+				modsexist = true;
+				break;
+			}
+		}
+	}
+
+	// Do the toggle if safe
+	if (!enablemods && !modsexist) {
+		enablemods = true;
+	}
+
+	
+	if (enablemods) {
+		allwads.insert(
+			allwads.end(),
+			std::make_move_iterator(pwads.begin()),
+			std::make_move_iterator(pwads.end())
+		);
+	}
+	else {
+		// Only add pwads that are sanctioned
+		// In this case, only add files
+		for (auto& p : pwads) {
+			if (p == "files") {
+				allwads.push_back(p);
+			}
+		}
+	}
 
 	AddModFiles(allwads);
 

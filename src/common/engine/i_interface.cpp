@@ -30,6 +30,21 @@ bool			pauseext;
 
 FStartupInfo GameStartupInfo;
 
+// @Cockatrice - Introduced for updating to Chapter 2, we need to disable mods because none of them will work
+// This will have to be updated again for 1.0 (Chapter 3) to a different variable name so we can disable mods again
+// Default to FALSE so the user has to confirm turning mods back on after launching the update
+// Will disable ALL pwads at startup except specifically sanctioned ones
+// Note: This will not disable wad loading from the autoload in the config file.  If a user was knowledgable enough to modify the config
+// we will assume they can remove a few incompatible wads
+CVAR(Bool, enablemods, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
+
+
+// @Cockatrice - Basic set-once cvar to determine if any mod files are specified in MODS subdirectory, command line
+// or in workshop.txt
+// Informational so we don't prompt users about mods if they don't actually have any installed
+CVAR(Bool, modsexist, false, CVAR_NOSAVE | CVAR_NOSET | CVAR_CONFIG_ONLY);
+
+
 CVAR(Bool, queryiwad, QUERYIWADDEFAULT, CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
 CVAR(String, defaultiwad, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
 CVAR(Bool, vid_fps, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
