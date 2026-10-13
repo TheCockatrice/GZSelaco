@@ -2180,8 +2180,10 @@ static bool CheckForModFiles() {
 	FStringf slasheddir("%s/%s/", progdir.GetChars(), modFolder);
 
 	// Check Mods folder and Mods/Workshop folder...
-	if (CheckModFilesFrom(slasheddir)) return true;
-	if (CheckModFilesFrom(slasheddir + "Workshop" + "/")) return true;
+	if (CheckModFilesFrom(slasheddir)) 
+		return true;
+	if (CheckModFilesFrom(slasheddir + "Workshop" + "/")) 
+		return true;
 
 	// Check the workshop.txt file, verify files exist
 	FString workshopPath = slasheddir + "workshop.txt";
@@ -3357,6 +3359,16 @@ static int FileSystemPrintf(FSMessageLevel level, const char* fmt, ...)
 	}
 	return (int)text.Len();
 }
+
+
+bool StrEndsWith(const std::string& str, const std::string& suffix) {
+	return str.size() >= suffix.size() &&
+		std::equal(suffix.rbegin(), suffix.rend(), str.rbegin(),
+			[](char a, char b) {
+				return std::tolower((unsigned char)a) == std::tolower((unsigned char)b);
+			});
+}
+
 //==========================================================================
 //
 // D_InitGame
@@ -3472,7 +3484,8 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 	// For development purposes we need the files directory, so make that exempt from counting as a mod
 	if (!modsexist && pwads.size() > 0) {
 		for (auto& p : pwads) {
-			if (p != "files") {
+			// Hack for development. If the string ends with any case of files, such as ./Files etc we will accept it
+			if (!StrEndsWith(p, "files")) {
 				modsexist = true;
 				break;
 			}
@@ -3496,7 +3509,7 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 		// Only add pwads that are sanctioned
 		// In this case, only add files
 		for (auto& p : pwads) {
-			if (p == "files") {
+			if (StrEndsWith(p, "files")) {
 				allwads.push_back(p);
 			}
 		}
