@@ -2341,6 +2341,7 @@ void P_LoadDefinedParticles(FSerializer& arc, FLevelLocals* Level, const char* k
 	ParticleDefinitionLoadingLevel = nullptr;
 
 	// Go through all the particles and destroy any that are lacking a definition
+	// @Cockatrice - Calculate the initial subsector here
 	int i = pool.ActiveParticles;
 	while (i != NO_PARTICLE)
 	{
@@ -2352,6 +2353,9 @@ void P_LoadDefinedParticles(FSerializer& arc, FLevelLocals* Level, const char* k
 		if (!particle.definition)
 		{
 			P_DestroyDefinedParticle(Level, particleIndex);
+		}
+		else {
+			particle.subsector = Level->PointInRenderSubsector(particle.pos);
 		}
 	}
 }
