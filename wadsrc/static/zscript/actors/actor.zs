@@ -561,6 +561,7 @@ class Actor : Thinker native
 	virtual native int TakeSpecialDamage (Actor inflictor, Actor source, int damage, Name damagetype);
 	virtual native void Die(Actor source, Actor inflictor, int dmgflags = 0, Name MeansOfDeath = 'none');
 	virtual native bool Slam(Actor victim);
+	virtual native void Grunt(Line ln, int reason);
 	virtual void Touch(Actor toucher) {}
 	virtual native void FallAndSink(double grav, double oldfloorz);
 	native bool MorphInto(Actor morph);

@@ -872,6 +872,9 @@ public:
 	virtual void Die (AActor *source, AActor *inflictor, int dmgflags = 0, FName MeansOfDeath = NAME_None);
 	void CallDie(AActor *source, AActor *inflictor, int dmgflags = 0, FName MeansOfDeath = NAME_None);
 
+	// Called when we need the actor to grunt, like when hitting a wall
+	void CallGrunt(line_t* hitWall = nullptr, int reason = 0);
+
 	// Perform some special damage action. Returns the amount of damage to do.
 	// Returning -1 signals the damage routine to exit immediately
 	virtual int DoSpecialDamage (AActor *target, int damage, FName damagetype);

@@ -7930,6 +7930,38 @@ bool AActor::IsHostile (AActor *other)
 	return true;
 }
 
+
+//==========================================================================
+//
+// AActor :: CallGrunt
+//
+// Engine used to hardcode grunt sounds on CHAN_VOICE, instead we'll give
+// the object the choice to grunt or not.
+//
+//==========================================================================
+
+
+DEFINE_ACTION_FUNCTION(AActor, Grunt)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	S_Sound(self, CHAN_VOICE, 0, "*grunt", 1, ATTN_IDLE);
+	return 0;
+}
+
+
+void AActor::CallGrunt(line_t* hitWall, int reason)
+{
+	IFVIRTUAL(AActor, Grunt)
+	{
+		VMValue params[3] = { (DObject*)this, hitWall, reason };
+		VMCall(func, params, 3, nullptr, 0);
+		return;
+	}
+	else S_Sound(this, CHAN_VOICE, 0, "*grunt", 1, ATTN_IDLE);
+}
+ 
+
+
 //==========================================================================
 //
 // AActor :: DoSpecialDamage
