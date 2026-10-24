@@ -831,9 +831,9 @@ void S_PlaySoundEffect(AActor* a, int chan, const FString& effect, EChanFlags fl
 	S_PlaySoundPitchEffect(a, effect, chan, flags, sid, vol, atten, 0.f, 0.f);
 }
 
-void A_StartSoundEffect(AActor* self, int soundid, const FString& effect, int channel, int flags, double volume, double attenuation, double pitch, double startTime)
+int A_StartSoundEffect(AActor* self, int soundid, const FString& effect, int channel, int flags, double volume, double attenuation, double pitch, double startTime)
 {
-	S_PlaySoundPitchEffect(self, effect, channel, EChanFlags::FromInt(flags), FSoundID::fromInt(soundid), (float)volume, (float)attenuation, (float)pitch, (float)startTime);
+	return S_PlaySoundPitchEffect(self, effect, channel, EChanFlags::FromInt(flags), FSoundID::fromInt(soundid), (float)volume, (float)attenuation, (float)pitch, (float)startTime);
 }
 
 int StartSoundEffect(AActor* self, int soundid, const FString& effect, int channel, int flags, double volume, double attenuation, double pitch, double startTime)
@@ -841,11 +841,11 @@ int StartSoundEffect(AActor* self, int soundid, const FString& effect, int chann
 	return S_PlaySoundPitchEffect(self, effect, channel, EChanFlags::FromInt(flags), FSoundID::fromInt(soundid), (float)volume, (float)attenuation, (float)pitch, (float)startTime);
 }
 
-void A_PlaySoundEffect(AActor* self, int soundid, const FString& effect, int channel, double volume, int looping, double attenuation, int local, double pitch)
+int A_PlaySoundEffect(AActor* self, int soundid, const FString& effect, int channel, double volume, int looping, double attenuation, int local, double pitch)
 {
 	if (looping) channel |= CHANF_LOOP | CHANF_NOSTOP;
 	if (local) channel |= CHANF_LOCAL;
-	A_StartSoundEffect(self, soundid, effect, channel & 7, channel & ~7, volume, attenuation, pitch, 0.0f);
+	return A_StartSoundEffect(self, soundid, effect, channel & 7, channel & ~7, volume, attenuation, pitch, 0.0f);
 }
 
 //==========================================================================

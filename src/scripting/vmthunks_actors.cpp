@@ -196,7 +196,7 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_PlaySoundEffect, A_PlaySoundEffect)
 	PARAM_FLOAT(attenuation);
 	PARAM_BOOL(local);
 	PARAM_FLOAT(pitch);
-	A_PlaySoundEffect(self, soundid, effect, channel, volume, looping, attenuation, local, pitch);
+	ACTION_RETURN_INT(A_PlaySoundEffect(self, soundid, effect, channel, volume, looping, attenuation, local, pitch));
 	return 0;
 }
 
@@ -240,7 +240,7 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_StartSoundEffect, A_StartSoundEffect)
 	PARAM_FLOAT(attenuation);
 	PARAM_FLOAT(pitch);
 	PARAM_FLOAT(startTime);
-	A_StartSoundEffect(self, soundid, effect, channel, flags, volume, attenuation, pitch, startTime);
+	ACTION_RETURN_INT(A_StartSoundEffect(self, soundid, effect, channel, flags, volume, attenuation, pitch, startTime));
 	return 0;
 }
 
