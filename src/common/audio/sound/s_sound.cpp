@@ -1034,6 +1034,7 @@ void SoundEngine::RestartChannel(FSoundChan *chan)
 	if (chan->ChanFlags & CHANF_AREA) startflags |= SNDF_AREA;
 	if (chan->ChanFlags & (CHANF_UI|CHANF_NOPAUSE)) startflags |= SNDF_NOPAUSE;
 	if (chan->ChanFlags & CHANF_ABSTIME) startflags |= SNDF_ABSTIME;
+	if (chan->ChanFlags & CHANF_NOREVERB) startflags |= SNDF_NOREVERB;
 
 	if (chan->ChanFlags & CHANF_IS3D)
 	{
