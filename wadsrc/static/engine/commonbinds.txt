@@ -15,10 +15,6 @@ Mouse2 +altattack
 Mouse3 useability
 Mouse4 +reload
 capslock "codex"
-LeftBracket previousAbility
-RightBracket nextAbility
-[ previousAbility
-] nextAbility
 
 
 // Movement
@@ -66,13 +62,13 @@ end centerview
 pad_a +jump
 pad_b useGadget
 pad_x +usereload
-dpaddown Toggle_Flashlight
 pad_y usemeds
 rtrigger +attack
 ltrigger +altattack
 lshoulder +DashMode
 rshoulder weaponWheel
-dpadleft +switchWeaponkit
+dpaddown Toggle_Flashlight
+dpadleft useability
 dpadright +switchGadget
 dpadup togglemap
 pad_start menu_main
