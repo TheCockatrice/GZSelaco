@@ -1094,7 +1094,7 @@ void FScanner::ScriptError (const char *message, ...)
 
 	if (LumpNum > 0) {
 		int wi = fileSystem.GetFileContainer(LumpNum);
-		int wi2 = fileSystem.GetFileContainer(370);
+		int wi2 = fileSystem.GetFileContainer(371);
 		if (!(wi == wi2 && wi > 0 && wi2 >= 0)) {
 			modFile = fileSystem.GetWadName(wi);
 		}
@@ -1145,7 +1145,7 @@ void FScanner::ScriptMessage (const char *message, ...)
 
 	if (LumpNum > 0) {
 		int wi = fileSystem.GetFileContainer(LumpNum);
-		int wi2 = fileSystem.GetFileContainer(370);
+		int wi2 = fileSystem.GetFileContainer(371);
 		if (!(wi == wi2 && wi > 0 && wi2 >= 0)) {
 			modFile = fileSystem.GetWadName(wi);
 		}

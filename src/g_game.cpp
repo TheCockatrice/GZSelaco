@@ -2501,7 +2501,7 @@ static void PutSaveWads (FSerializer &arc)
 	bool foundmods = false;
 
 	int wi = primaryLevel->lumpnum > 0 ? fileSystem.GetFileContainer(primaryLevel->lumpnum) : -1;
-	int wi2 = fileSystem.GetFileContainer(370);
+	int wi2 = fileSystem.GetFileContainer(371);
 	TArray<FString> wadNames;
 	for (int x = wi2 + 2; x < fileSystem.GetNumWads(); x++) {
 		wadNames.Push(fileSystem.GetWadName(x));

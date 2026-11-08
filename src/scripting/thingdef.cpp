@@ -466,7 +466,7 @@ void LoadActors()
 	if (FScriptPosition::ErrorCounter > 0)
 	{
 		// Check for mod files
-		int wi2 = fileSystem.GetFileContainer(370);
+		int wi2 = fileSystem.GetFileContainer(371);
 		FString wadNames = "";
 		int wadCount = 0;
 		for (int x = wi2 + 2; x < fileSystem.GetNumWads(); x++) {
