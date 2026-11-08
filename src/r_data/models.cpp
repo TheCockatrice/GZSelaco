@@ -1236,6 +1236,10 @@ void ParseModelDefLump(int Lump)
 				else if (sc.Compare("nopixelstretch")) {
 					smf.flags |= MDL_NOPIXELSTRETCH;
 				}
+				else if (sc.Compare("sunshading")) {
+					// Do nothing.
+					// @Cockatrice - Added this to prevent errors. sunshading was added to MODELDEF for the lightmapper and it just generates annoying errors here
+				}
 				else
 				{
 					sc.ScriptMessage("Unrecognized string \"%s\"", sc.String);
