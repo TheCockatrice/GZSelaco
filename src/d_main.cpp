@@ -1324,6 +1324,9 @@ void D_DoomLoop ()
 				Printf(PRINT_NONOTIFY | PRINT_BOLD, "\n%s\n", error.what());
 			}
 			D_ErrorCleanup();
+
+			// @Cockatrice - Inserted to restore joystick usage after error
+			lasttic = gametic;
 		}
 		catch (CVMAbortException &error)
 		{
@@ -1332,6 +1335,9 @@ void D_DoomLoop ()
 			error.MaybePrintMessage();
 			Printf(PRINT_NONOTIFY | PRINT_BOLD, "%s", error.stacktrace.GetChars());
 			D_ErrorCleanup();
+
+			// @Cockatrice - Inserted to restore joystick usage after error
+			lasttic = gametic;
 
 			FString fullError;
 			fullError.Format(TEXTCOLOR_RED "%s" TEXTCOLOR_NORMAL "\n%s", error.GetMessage(), error.stacktrace.GetChars());
