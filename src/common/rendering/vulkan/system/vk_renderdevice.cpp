@@ -1280,7 +1280,7 @@ void VulkanRenderDevice::CancelBackgroundCache(FGameTexture* tex) {
 			const int numLayers = mat->NumLayers();
 			for (int i = 0; i < numLayers; i++) {
 				MaterialLayerInfo* layer;
-				auto hwtex = static_cast<VkHardwareTexture*>(mat->GetLayer(0, qp.translation, &layer));
+				auto hwtex = static_cast<VkHardwareTexture*>(mat->GetLayer(i, qp.translation, &layer));
 				if (hwtex->GetState() != IHardwareTexture::HardwareState::READY) {
 					hwtex->SetHardwareState(IHardwareTexture::HardwareState::NONE, 0);
 				}

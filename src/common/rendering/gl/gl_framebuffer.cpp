@@ -449,7 +449,7 @@ void OpenGLFrameBuffer::CancelBackgroundCache(FGameTexture* tex) {
 			const int numLayers = mat->NumLayers();
 			for (int i = 0; i < numLayers; i++) {
 				MaterialLayerInfo* layer;
-				auto hwtex = static_cast<FHardwareTexture*>(mat->GetLayer(0, qp.translation.index(), &layer));
+				auto hwtex = static_cast<FHardwareTexture*>(mat->GetLayer(i, qp.translation.index(), &layer));
 				if (hwtex->GetState(i) != IHardwareTexture::HardwareState::READY) {
 					hwtex->SetHardwareState(IHardwareTexture::HardwareState::NONE, i);
 				}
