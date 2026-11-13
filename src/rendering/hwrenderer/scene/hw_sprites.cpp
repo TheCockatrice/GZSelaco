@@ -86,8 +86,8 @@ CVAR(Float, gl_sclipthreshold, 10.0, CVAR_ARCHIVE)
 CVAR(Float, gl_sclipfactor, 1.8f, CVAR_ARCHIVE)
 CVAR(Int, gl_particles_style, 2, CVAR_ARCHIVE | CVAR_GLOBALCONFIG) // 0 = square, 1 = round, 2 = smooth
 CVAR(Int, gl_billboard_mode, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
-CVAR(Bool, gl_billboard_faces_camera, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
-CVAR(Bool, hw_force_cambbpref, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+//CVAR(Bool, gl_billboard_faces_camera, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+//CVAR(Bool, hw_force_cambbpref, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Bool, gl_billboard_particles, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Bool, gl_selflighting, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 
@@ -444,10 +444,11 @@ bool HWSprite::CalculateVertices(HWDrawInfo* di, FVector3* v, DVector3* vp)
 		//&& di->mViewActor != nullptr
 		&& (gl_billboard_mode == 1 || (actor && actor->renderflags & RF_FORCEXYBILLBOARD))));
 
-	const bool drawBillboardFacingCamera = hw_force_cambbpref ? gl_billboard_faces_camera :
+	const bool drawBillboardFacingCamera = false;
+		/*hw_force_cambbpref ? gl_billboard_faces_camera :
 		gl_billboard_faces_camera
 		|| ((actor && (!(actor->renderflags2 & RF2_BILLBOARDNOFACECAMERA) || (actor->renderflags2 & RF2_BILLBOARDFACECAMERA)))
-		|| (isparticle && particlehastexture && (!(particleflags & SPF_NOFACECAMERA) || (particleflags & SPF_FACECAMERA))));
+		|| (isparticle && particlehastexture && (!(particleflags & SPF_NOFACECAMERA) || (particleflags & SPF_FACECAMERA))));*/
 
 	// [Nash] has +ROLLSPRITE
 	const bool drawRollSpriteActor = (actor != nullptr && actor->renderflags & RF_ROLLSPRITE);
@@ -1452,10 +1453,10 @@ void HWSprite::Process(HWDrawInfo *di, AActor* thing, sector_t * sector, area_t 
 		trans = 1.f;
 
 		if (!gl_sprite_blend || modelframe ||
-			(thing->renderflags & (RF_FLATSPRITE | RF_WALLSPRITE)) ||
+			(thing->renderflags & (RF_FLATSPRITE | RF_WALLSPRITE)) /* ||
 			(hw_force_cambbpref ? gl_billboard_faces_camera :
 			(gl_billboard_faces_camera && !(thing->renderflags2 & RF2_BILLBOARDNOFACECAMERA)) ||
-			thing->renderflags2 & RF2_BILLBOARDFACECAMERA))
+			thing->renderflags2 & RF2_BILLBOARDFACECAMERA)*/)
 		{
 			RenderStyle.SrcAlpha = STYLEALPHA_One;
 			RenderStyle.DestAlpha = STYLEALPHA_Zero;
