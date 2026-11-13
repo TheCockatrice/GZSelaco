@@ -19,7 +19,7 @@ void OnMenuOpen(bool makeSound);
 
 class FSavegameManager : public FSavegameManagerBase
 {
-	void PerformSaveGame(const char *fn, const char *sgdesc) override;
+	void PerformSaveGame(const char *fn, const char *sgdesc, int flags) override;
 	void PerformLoadGame(const char *fn, bool) override;
 	FString ExtractSaveComment(FSerializer &arc) override;
 	FString BuildSaveName(const char* prefix, int slot) override;

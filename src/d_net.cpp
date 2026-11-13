@@ -2879,6 +2879,7 @@ void Net_SkipCommand (int type, uint8_t **stream)
 		case DEM_SAVEGAME:
 			skip = strlen ((char *)(*stream)) + 1;
 			skip += strlen ((char *)(*stream) + skip) + 1;
+			skip += sizeof(int32_t);
 			break;
 
 		case DEM_SINFCHANGEDXOR:

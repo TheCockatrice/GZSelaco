@@ -34,7 +34,7 @@ public:
 
 protected:
 	int InsertSaveNode(FSaveGameNode *node);
-	virtual void PerformSaveGame(const char *fn, const char *sgdesc) = 0;
+	virtual void PerformSaveGame(const char *fn, const char *sgdesc, int flags = 0) = 0;
 	virtual void PerformLoadGame(const char *fn, bool) = 0;
 	virtual FString ExtractSaveComment(FSerializer &arc) = 0;
 	virtual FString BuildSaveName(const char* prefix, int slot) = 0;
