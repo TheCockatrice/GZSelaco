@@ -2078,12 +2078,13 @@ void P_ThinkDefinedParticles(FLevelLocals* Level)
 		}
 
 		// Handle crossing a sector portal.
+		bool crossedPortal = false;
 		if (!s->PortalBlocksMovement(sector_t::ceiling))
 		{
 			if (particle->pos.Z > s->GetPortalPlaneZ(sector_t::ceiling))
 			{
 				particle->pos += s->GetPortalDisplacement(sector_t::ceiling);
-				particle->subsector = NULL;
+				crossedPortal = true;
 			}
 		}
 		else if (!s->PortalBlocksMovement(sector_t::floor))
@@ -2091,8 +2092,17 @@ void P_ThinkDefinedParticles(FLevelLocals* Level)
 			if (particle->pos.Z < s->GetPortalPlaneZ(sector_t::floor))
 			{
 				particle->pos += s->GetPortalDisplacement(sector_t::floor);
-				particle->subsector = NULL;
+				crossedPortal = true;
 			}
+		}
+
+		if (crossedPortal) {
+			// @Cockatrice - We have to never leave the subector null, so it sucks but let's rebuild it now
+			// ThinkParticle is very likely going to run before this gets rebuilt
+			particle->subsector = Level->PointInRenderSubsector(particle->pos);
+			s = particle->subsector->sector;
+			particle->floorz = particle->GetFloorHeight();
+			particle->ceilingz = (float)s->ceilingplane.ZatPoint(particle->pos);
 		}
 
 		bool bounced = false;
