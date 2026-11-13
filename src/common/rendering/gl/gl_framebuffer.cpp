@@ -408,11 +408,10 @@ void OpenGLFrameBuffer::CancelBackgroundCache(FGameTexture* tex) {
 
 	bool iPaused = !BackgroundCachePaused();
 	if (iPaused) PauseBackgroundCache(true);
-	else {
-		// Wait on the tex threads
-		for (auto& t : bgTransferThreads) {
-			t->waitForRun();
-		}
+
+	// Wait on the tex threads
+	for (auto& t : bgTransferThreads) {
+		t->waitForRun();
 	}
 
 	// Remove the texture from primary and secondary queues
@@ -458,7 +457,7 @@ void OpenGLFrameBuffer::CancelBackgroundCache(FGameTexture* tex) {
 	}
 
 	// Finalize any matching textures in the loaded queue
-	UpdateBackgroundCache();
+	UpdateBackgroundCache(true);
 
 	if (iPaused) ResumeBackgroundCache();
 }

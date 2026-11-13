@@ -1239,11 +1239,10 @@ void VulkanRenderDevice::CancelBackgroundCache(FGameTexture* tex) {
 
 	bool iPaused = !BackgroundCachePaused();
 	if (iPaused) PauseBackgroundCache(true);
-	else {
-		// Wait on the tex threads
-		for (auto& t : bgTransferThreads) {
-			t->waitForRun();
-		}
+	
+	// Wait on the tex threads
+	for (auto& t : bgTransferThreads) {
+		t->waitForRun();
 	}
 
 	// Remove the texture from primary and secondary queues
@@ -1289,7 +1288,7 @@ void VulkanRenderDevice::CancelBackgroundCache(FGameTexture* tex) {
 	}
 
 	// Finalize any matching textures in the loaded queue
-	UpdateBackgroundCache();
+	UpdateBackgroundCache(true);
 
 	// Don't resume background cache, it will resume next tick anyways!
 	//if (iPaused) ResumeBackgroundCache();
