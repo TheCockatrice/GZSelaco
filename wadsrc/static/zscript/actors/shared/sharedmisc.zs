@@ -322,7 +322,7 @@ class LightGroup : Actor
 
 	void Init()
 	{
-		cvarReduceFlicker = CVar.FindCVar("g_photosensitivitymode2");
+		cvarReduceFlicker = CVar.FindCVar("g_photosensitivitymode");
 
 		enabled = !bDormant;
 
