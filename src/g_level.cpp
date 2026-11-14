@@ -1934,6 +1934,7 @@ void FLevelLocals::Init()
 	cluster_info_t *clus = FindClusterInfo (info->cluster);
 
 	invasiontier = info->invasiontier;
+	minTechModules = info->minTechModules;
 	tilt = info->tilt;
 	tiltAngle = info->tiltAngle;
 	partime = info->partime;

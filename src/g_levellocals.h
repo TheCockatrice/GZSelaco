@@ -556,7 +556,7 @@ public:
 	uint32_t	spawnindex;
 
 	level_info_t *info;
-	int			invasiontier;
+	int			invasiontier, minTechModules;
 	double		tilt, tiltAngle;
 	int			cluster;
 	int			clusterflags;
