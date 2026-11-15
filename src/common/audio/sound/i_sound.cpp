@@ -51,7 +51,7 @@
 
 EXTERN_CVAR (Float, snd_sfxvolume)
 EXTERN_CVAR(Float, snd_musicvolume)
-CUSTOM_CVAR(Int, snd_samplerate, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CUSTOM_CVAR(Int, snd_samplerate, 48000, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 {
 	if (self != 0 && self != 8000 && self != 11025 && self != 22050 && self != 32000 && self != 44100 && self != 48000)
 	{
@@ -60,7 +60,7 @@ CUSTOM_CVAR(Int, snd_samplerate, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 	}
 }
 CVAR(Int, snd_buffersize, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
-CVAR(Int, snd_hrtf, -1, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Int, snd_hrtf, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 
 #if !defined(NO_OPENAL)	
 #define DEF_BACKEND "openal"
