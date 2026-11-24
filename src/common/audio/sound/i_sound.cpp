@@ -51,7 +51,7 @@
 
 EXTERN_CVAR (Float, snd_sfxvolume)
 EXTERN_CVAR(Float, snd_musicvolume)
-CUSTOM_CVAR(Int, snd_samplerate, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CUSTOM_CVAR(Int, snd_samplerate, 48000, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 {
 	if (self != 0 && self != 8000 && self != 11025 && self != 22050 && self != 32000 && self != 44100 && self != 48000)
 	{
@@ -60,7 +60,7 @@ CUSTOM_CVAR(Int, snd_samplerate, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 	}
 }
 CVAR(Int, snd_buffersize, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
-CVAR(Int, snd_hrtf, -1, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Int, snd_hrtf, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 
 #if !defined(NO_OPENAL)	
 #define DEF_BACKEND "openal"
@@ -169,17 +169,17 @@ public:
 	}
 
 	// Streaming sounds.
-	SoundStream *CreateStream (SoundStreamCallback callback, int buffbytes, int flags, int samplerate, void *userdata)
+	SoundStream *CreateStream (SoundStreamCallback callback, int buffbytes, int flags, int samplerate, void *userdata, FFloatCVarRef *volumeCVAR)
 	{
 		return NULL;
 	}
 
 	// Starts a sound.
-	FISoundChannel *StartSound (SoundHandle sfx, float vol, float pitch, int chanflags, FISoundChannel *reuse_chan, float startTime)
+	FISoundChannel *StartSound (SoundHandle sfx, float vol, float pitch, int chanflags, FISoundChannel *reuse_chan, float startTime, int effectID)
 	{
 		return NULL;
 	}
-	FISoundChannel *StartSound3D (SoundHandle sfx, SoundListener *listener, float vol, FRolloffInfo *rolloff, float distscale, float pitch, int priority, const FVector3 &pos, const FVector3 &vel, int channum, int chanflags, FISoundChannel *reuse_chan, float startTime)
+	FISoundChannel *StartSound3D (SoundHandle sfx, SoundListener *listener, float vol, FRolloffInfo *rolloff, float distscale, float pitch, int priority, const FVector3 &pos, const FVector3 &vel, int channum, int chanflags, FISoundChannel *reuse_chan, float startTime, int effectID)
 	{
 		return NULL;
 	}
@@ -227,6 +227,7 @@ public:
 	void UpdateSounds ()
 	{
 	}
+	void ResetReverb() {}
 
 	bool IsValid ()
 	{

@@ -86,8 +86,8 @@ CVAR(Float, gl_sclipthreshold, 10.0, CVAR_ARCHIVE)
 CVAR(Float, gl_sclipfactor, 1.8f, CVAR_ARCHIVE)
 CVAR(Int, gl_particles_style, 2, CVAR_ARCHIVE | CVAR_GLOBALCONFIG) // 0 = square, 1 = round, 2 = smooth
 CVAR(Int, gl_billboard_mode, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
-CVAR(Bool, gl_billboard_faces_camera, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
-CVAR(Bool, hw_force_cambbpref, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+//CVAR(Bool, gl_billboard_faces_camera, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+//CVAR(Bool, hw_force_cambbpref, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Bool, gl_billboard_particles, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Bool, gl_selflighting, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 
@@ -172,13 +172,35 @@ void HWSprite::DrawSprite(HWDrawInfo *di, FRenderState &state, bool translucent)
 	}
 	if (RenderStyle.BlendOp != STYLEOP_Shadow)
 	{
-		if (di->Level->HasDynamicLights && !di->isFullbrightScene() && !fullbright)
+		if (!di->isFullbrightScene() && !fullbright)
 		{
-			if (dynlightindex == -1)	// only set if we got no light buffer index. This covers all cases where sprite lighting is used.
+			if (di->Level->HasDynamicLights)
 			{
-				float out[3] = {};
-				di->GetDynSpriteLight(gl_light_sprites ? actor : nullptr, gl_light_particles && isparticle ? this : nullptr, out);
-				state.SetDynLight(out[0], out[1], out[2]);
+				if (dynlightindex == -1)	// only set if we got no light buffer index. This covers all cases where sprite lighting is used.
+				{
+					float out[3] = {};
+					di->GetDynSpriteLight(gl_light_sprites ? actor : nullptr, gl_light_particles && isparticle ? this : nullptr, out);
+					state.SetDynLight(out[0], out[1], out[2]);
+				}
+			}
+
+			if (di->Level->LightProbes.Size() > 0)
+			{
+				FVector3 probeColor;
+				if (gl_light_particles && isparticle)
+				{
+					if (TryGetLightProbeColor(di->Level, x, y, z, probeColor))
+					{
+						state.SetLightProbe(probeColor.X, probeColor.Y, probeColor.Z);
+					}
+				}
+				else if (gl_light_sprites && actor)
+				{
+					if (TryGetLightProbeColor(di->Level, actor, probeColor))
+					{
+						state.SetLightProbe(probeColor.X, probeColor.Y, probeColor.Z);
+					}
+				}
 			}
 		}
 		sector_t *cursec = actor ? actor->Sector : isparticle ? particlesubsector->sector : nullptr;
@@ -311,16 +333,20 @@ void HWSprite::DrawSprite(HWDrawInfo *di, FRenderState &state, bool translucent)
 		}
 		else
 		{
-			if (actor && di->Level->LightProbes.Size() > 0)
+			SetHeavyProbe(state, &level, actor);
+
+			if(actor && (actor->flags9 & MF9_DECOUPLEDANIMATIONS))
 			{
-				LightProbe* probe = FindLightProbe(di->Level, actor->X(), actor->Y(), actor->Center());
-				if (probe)
-					state.SetDynLight(probe->Red, probe->Green, probe->Blue);
+				IFVIRTUALPTR(actor, AActor, AnimateBones)
+				{
+					CallVM<void>(func, actor, di->Viewpoint.TicFrac);
+				}
 			}
 
 			FHWModelRenderer renderer(di, state, dynlightindex);
 			RenderModel(&renderer, x, y, z, modelframe, actor, di->Viewpoint.TicFrac);
 			state.SetVertexBuffer(screen->mVertexData);
+			state.ClearHeavyProbe();
 		}
 	}
 
@@ -348,6 +374,7 @@ void HWSprite::DrawSprite(HWDrawInfo *di, FRenderState &state, bool translucent)
 	state.SetAddColor(0);
 	state.EnableTexture(true);
 	state.SetDynLight(0, 0, 0);
+	state.SetLightProbe(0, 0, 0);
 }
 
 //==========================================================================
@@ -417,10 +444,11 @@ bool HWSprite::CalculateVertices(HWDrawInfo* di, FVector3* v, DVector3* vp)
 		//&& di->mViewActor != nullptr
 		&& (gl_billboard_mode == 1 || (actor && actor->renderflags & RF_FORCEXYBILLBOARD))));
 
-	const bool drawBillboardFacingCamera = hw_force_cambbpref ? gl_billboard_faces_camera :
+	const bool drawBillboardFacingCamera = false;
+		/*hw_force_cambbpref ? gl_billboard_faces_camera :
 		gl_billboard_faces_camera
-		&& ((actor && (!(actor->renderflags2 & RF2_BILLBOARDNOFACECAMERA) || (actor->renderflags2 & RF2_BILLBOARDFACECAMERA)))
-		|| (isparticle && particlehastexture && (!(particleflags & SPF_NOFACECAMERA) || (particleflags & SPF_FACECAMERA))));
+		|| ((actor && (!(actor->renderflags2 & RF2_BILLBOARDNOFACECAMERA) || (actor->renderflags2 & RF2_BILLBOARDFACECAMERA)))
+		|| (isparticle && particlehastexture && (!(particleflags & SPF_NOFACECAMERA) || (particleflags & SPF_FACECAMERA))));*/
 
 	// [Nash] has +ROLLSPRITE
 	const bool drawRollSpriteActor = (actor != nullptr && actor->renderflags & RF_ROLLSPRITE);
@@ -440,7 +468,7 @@ bool HWSprite::CalculateVertices(HWDrawInfo* di, FVector3* v, DVector3* vp)
 	float yy = -center.Y + y;
 	float zz = -center.Z + z;
 	// [Nash] check for special sprite drawing modes
-	if (drawWithXYBillboard || isWallSprite)
+	if (drawWithXYBillboard || drawBillboardFacingCamera || isWallSprite)
 	{
 		mat.MakeIdentity();
 		mat.Translate(center.X, center.Z, center.Y); // move to sprite center
@@ -758,6 +786,29 @@ void HWSprite::PerformSpriteClipAdjustment(AActor *thing, const DVector2 &thingp
 	}
 }
 
+
+static inline double GetDistanceFadeAlpha(HWDrawInfo* di, AActor* thing) {
+	const auto& vp = di->Viewpoint;
+	FIntCVar* cvar = thing->GetInfo()->distancecheck;
+	if (cvar != nullptr && *cvar >= 0) {
+		DVector3 delta = (thing->Pos() - vp.Pos);
+		double dist = delta.LengthSquared();
+		const double check = ((double)**cvar) - 128.0;
+
+		// If we are out of the fade range, always return 1.0
+		if (dist <= check * check) {
+			return 1.0;
+		}
+
+		dist = delta.Length() - check;
+
+		// Lerp between check and maxcheck
+		return std::max(0.0, 1.0 - (dist / 128.0));
+	}
+
+	return 1.0;
+}
+
 //==========================================================================
 //
 // 
@@ -792,7 +843,11 @@ void HWSprite::Process(HWDrawInfo *di, AActor* thing, sector_t * sector, area_t 
 	const auto &vp = di->Viewpoint;
 	AActor *camera = vp.camera;
 
-	if (thing->renderflags & RF_INVISIBLE || !thing->RenderStyle.IsVisible(thing->Alpha))
+	const double distanceAlpha = GetDistanceFadeAlpha(di, thing);
+	const double alpha = thing->InterpolatedAlpha(vp.TicFrac) * distanceAlpha;
+	const bool isAlphaCulled = distanceAlpha < 1.0;
+
+	if (thing->renderflags & RF_INVISIBLE || !thing->RenderStyle.IsVisible(alpha))
 	{
 		if (!(thing->flags & MF_STEALTH) || !di->isStealthVision() || thing == camera)
 			return;
@@ -807,7 +862,7 @@ void HWSprite::Process(HWDrawInfo *di, AActor* thing, sector_t * sector, area_t 
 		return;
 
 	int spritenum = thing->sprite;
-	DVector2 sprscale(thing->Scale.X, thing->Scale.Y);
+	DVector2 sprscale = thing->InterpolatedScale(vp.TicFrac);
 	if (thing->player != nullptr)
 	{
 		P_CheckPlayerSprite(thing, spritenum, sprscale);
@@ -1104,7 +1159,7 @@ void HWSprite::Process(HWDrawInfo *di, AActor* thing, sector_t * sector, area_t 
 
 		r.Scale(sprscale.X, isSpriteShadow ? sprscale.Y * 0.15 * thing->isoscaleY : sprscale.Y * thing->isoscaleY);
 
-		if ((thing->renderflags & (RF_ROLLSPRITE|RF_FLATSPRITE)) || (thing->renderflags2 & RF2_SQUAREPIXELS))
+		if ((thing->renderflags & RF_ROLLSPRITE) || (thing->renderflags2 & RF2_SQUAREPIXELS))
 		{
 			double ps = di->Level->pixelstretch;
 			double mult = 1.0 / sqrt(ps); // shrink slightly
@@ -1289,7 +1344,8 @@ void HWSprite::Process(HWDrawInfo *di, AActor* thing, sector_t * sector, area_t 
 
 	ThingColor = (thing->RenderStyle.Flags & STYLEF_ColorIsFixed) ? thing->fillcolor : 0xffffff;
 	ThingColor.a = 255;
-	RenderStyle = thing->RenderStyle;
+	// @Cockatrice - Force render style to translucent if we are reducing alpha for distance fade
+	RenderStyle = isAlphaCulled && (thing->RenderStyle == LegacyRenderStyles[STYLE_Normal]) ? LegacyRenderStyles[STYLE_Translucent] : thing->RenderStyle;
 
 	// colormap stuff is a little more complicated here...
 	if (di->isFullbrightScene())
@@ -1345,7 +1401,7 @@ void HWSprite::Process(HWDrawInfo *di, AActor* thing, sector_t * sector, area_t 
 	translation = thing->Translation;
 
 	OverrideShader = -1;
-	trans = thing->Alpha;
+	trans = alpha;
 	hw_styleflags = STYLEHW_Normal;
 
 	if (RenderStyle.BlendOp >= STYLEOP_Fuzz && RenderStyle.BlendOp <= STYLEOP_FuzzOrRevSub)
@@ -1397,10 +1453,10 @@ void HWSprite::Process(HWDrawInfo *di, AActor* thing, sector_t * sector, area_t 
 		trans = 1.f;
 
 		if (!gl_sprite_blend || modelframe ||
-			(thing->renderflags & (RF_FLATSPRITE | RF_WALLSPRITE)) ||
+			(thing->renderflags & (RF_FLATSPRITE | RF_WALLSPRITE)) /* ||
 			(hw_force_cambbpref ? gl_billboard_faces_camera :
 			(gl_billboard_faces_camera && !(thing->renderflags2 & RF2_BILLBOARDNOFACECAMERA)) ||
-			thing->renderflags2 & RF2_BILLBOARDFACECAMERA))
+			thing->renderflags2 & RF2_BILLBOARDFACECAMERA)*/)
 		{
 			RenderStyle.SrcAlpha = STYLEALPHA_One;
 			RenderStyle.DestAlpha = STYLEALPHA_Zero;
@@ -1872,9 +1928,14 @@ void HWSprite::ProcessDefinedParticle(HWDrawInfo* di, particledata_t* particle, 
 
 	trans = (particle->alpha * particle->fadeAlpha) + particle->alphaStep * timefrac;
 
+	if (definition->AlphaFadeInTime > 0)
+	{
+		trans *= min(particle->tics / definition->AlphaFadeInTime, 1.0f);
+	}
+
 	FVector2 svf = (FVector2(particle->scale.X * particle->scaleStep.X, particle->scale.Y * particle->scaleStep.Y) - particle->scale) * timefrac;
 	FVector2 scale = FVector2(particle->scale.X + svf.X, particle->scale.Y + svf.Y);
-	r.Scale(scale.X * particle->fadeScale.X, scale.Y * particle->fadeScale.Y);
+	r.Scale(scale.X * (particle->fadeScale.X + particle->fadeScaleStep.X * timefrac), scale.Y * (particle->fadeScale.Y + particle->fadeScaleStep.Y * timefrac));
 
 	float avf = particle->angleStep * timefrac;
 	float pvf = particle->pitchStep * timefrac;
@@ -1882,7 +1943,7 @@ void HWSprite::ProcessDefinedParticle(HWDrawInfo* di, particledata_t* particle, 
 	Angles.Yaw = TAngle<double>::fromDeg(particle->angle + avf);
 	Angles.Pitch = TAngle<double>::fromDeg(particle->pitch + pvf);
 
-	if (particle->flags & SPF_ROLL | DPF_FLAT)
+	if (particle->flags & (SPF_ROLL | DPF_FLAT))
 	{
 		double ps = di->Level->pixelstretch;
 		double mult = 1.0 / sqrt(ps); // shrink slightly

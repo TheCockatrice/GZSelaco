@@ -111,6 +111,8 @@ EXTERN_CVAR (Int, disableautosave)
 EXTERN_CVAR (String, playerclass)
 
 extern uint8_t globalfreeze, globalchangefreeze;
+int startpos = 0; // [RH] Support for multiple starts per level
+int laststartpos = 0;
 
 #define SNAP_ID			MAKE_ID('s','n','A','p')
 #define DSNP_ID			MAKE_ID('d','s','N','p')
@@ -173,7 +175,7 @@ ELightMode getRealLightmode(FLevelLocals* Level, bool for3d)
 
 CVAR(Int, sv_alwaystally, 0, CVAR_SERVERINFO)
 
-static FRandom pr_classchoice ("RandomPlayerClassChoice");
+static FRandom pr_classchoice ("RandomPlayerClassChoice", false);
 
 extern level_info_t TheDefaultLevelInfo;
 extern bool timingdemo;
@@ -717,7 +719,9 @@ void G_InitNew (const char *mapname, bool bTitleLevel, int mapVersion)
 		gamestate = GS_LEVEL;
 	}
 	
-	G_DoLoadLevel (mapname, 0, false, !savegamerestore, mapVersion);
+	if (!savegamerestore)
+		startpos = laststartpos = 0;
+	G_DoLoadLevel (mapname, startpos, false, !savegamerestore, mapVersion);
 
 	if (!savegamerestore && (gameinfo.gametype == GAME_Strife || (SBarInfoScript[SCRIPT_CUSTOM] != nullptr && SBarInfoScript[SCRIPT_CUSTOM]->GetGameType() == GAME_Strife)))
 	{
@@ -734,7 +738,6 @@ void G_InitNew (const char *mapname, bool bTitleLevel, int mapVersion)
 // G_DoCompleted
 //
 static FString	nextlevel;
-static int		startpos;	// [RH] Support for multiple starts per level
 extern int		NoWipe;		// [RH] Don't wipe when travelling in hubs
 static int		changeflags;
 static bool		unloading;
@@ -1171,7 +1174,6 @@ void G_DoCompleted (void)
 	if (gamestate == GS_TITLELEVEL)
 	{
 		G_DoLoadLevel (nextlevel, startpos, false, false);
-		startpos = 0;
 		viewactive = true;
 		return;
 	}
@@ -1444,7 +1446,6 @@ void G_DoLoadLevel(const FString &nextmapname, int position, bool autosave, bool
 void FLevelLocals::DoLoadLevel(const FString &nextmapname, int position, bool autosave, bool newGame, int mapVersion)
 {
 	MapName = nextmapname;
-	static int lastposition = 0;
 	int i;
 
 	if (NextSkill >= 0)
@@ -1456,9 +1457,9 @@ void FLevelLocals::DoLoadLevel(const FString &nextmapname, int position, bool au
 	}
 
 	if (position == -1)
-		position = lastposition;
+		position = laststartpos;
 	else
-		lastposition = position;
+		laststartpos = position;
 
 	Init();
 	StatusBar->DetachAllMessages ();
@@ -1655,7 +1656,6 @@ void G_DoWorldDone (void)
 	}
 	primaryLevel->StartTravel ();
 	G_DoLoadLevel (nextlevel, startpos, true, false);
-	startpos = 0;
 	gameaction = ga_nothing;
 	viewactive = true; 
 }
@@ -1698,6 +1698,9 @@ void FLevelLocals::StartTravel ()
 					inv->ChangeStatNum (STAT_TRAVELLING);
 					inv->UnlinkFromWorld (nullptr);
 					inv->DeleteAttachedLights();
+					tid = inv->tid;
+					inv->SetTID(0);
+					inv->tid = tid;
 				}
 			}
 		}
@@ -1802,7 +1805,7 @@ int FLevelLocals::FinishTravel ()
 		pawn->LinkToWorld (nullptr);
 		pawn->ClearInterpolation();
 		pawn->ClearFOVInterpolation();
-		const int tid = pawn->tid;	// Save TID (actor isn't linked into the hash chain yet)
+		int tid = pawn->tid;	// Save TID (actor isn't linked into the hash chain yet)
 		pawn->tid = 0;				// Reset TID
 		pawn->SetTID(tid);			// Set TID (and link actor into the hash chain)
 		pawn->SetState(pawn->SpawnState);
@@ -1813,6 +1816,9 @@ int FLevelLocals::FinishTravel ()
 			inv->ChangeStatNum (STAT_INVENTORY);
 			inv->LinkToWorld (nullptr);
 			P_FindFloorCeiling(inv, FFCF_ONLYSPAWNPOS);
+			tid = inv->tid;
+			inv->tid = 0;
+			inv->SetTID(tid);
 
 			IFVIRTUALPTRNAME(inv, NAME_Inventory, Travelled)
 			{
@@ -1928,6 +1934,7 @@ void FLevelLocals::Init()
 	cluster_info_t *clus = FindClusterInfo (info->cluster);
 
 	invasiontier = info->invasiontier;
+	minTechModules = info->minTechModules;
 	tilt = info->tilt;
 	tiltAngle = info->tiltAngle;
 	partime = info->partime;
@@ -2091,7 +2098,7 @@ void G_ReadSnapshots(FResourceFile *resf)
 
 	G_ClearSnapshots();
 
-	for (unsigned j = 0; j < resf->EntryCount(); j++)
+	for (unsigned j = 0; j < resf->EntryCountU(); j++)
 	{
 		auto name = resf->getName(j);
 		auto ptr = strstr(name, ".map.json");
@@ -2523,6 +2530,18 @@ int IsPointInMap(FLevelLocals *Level, double x, double y, double z)
 void FLevelLocals::SetMusic()
 {
 	S_ChangeMusic(Music.GetChars(), musicorder);
+}
+
+
+void FLevelLocals::ResetLightmapRenderInfo()
+{
+	for (auto& it : LMSectorInfos)
+	{
+		it.QueuedForRender = false;
+		it.LastRenderFrame = 0;
+	}
+
+	LMNeedsRebuild = true;
 }
 
 

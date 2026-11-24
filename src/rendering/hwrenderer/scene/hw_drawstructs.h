@@ -238,14 +238,17 @@ public:
 
 	bool DoHorizon(HWWallDispatcher* di, seg_t* seg, sector_t* fs, vertex_t* v1, vertex_t* v2);
 
-	bool SetWallCoordinates(seg_t* seg, FTexCoordInfo* tci, float ceilingrefheight,
-		float topleft, float topright, float bottomleft, float bottomright, float t_ofs, float skew);
+	bool SetWallCoordinates(seg_t* seg, FTexCoordInfo* tci, float texturetop,
+		float topleft, float topright, float bottomleft, float bottomright, float t_ofs, float skew, 
+		float* clipOfs);
 
 	void DoTexture(HWWallDispatcher* di, int type, seg_t* seg, int peg,
 		float ceilingrefheight, float floorrefheight,
 		float CeilingHeightstart, float CeilingHeightend,
 		float FloorHeightstart, float FloorHeightend,
-		float v_offset, float skew);
+		float v_offset, float skew,
+		float preclip_topleft, float preclip_topright,
+		float preclip_bottomleft, float preclip_bottomright);
 
 	void DoMidTexture(HWWallDispatcher* di, seg_t* seg, bool drawfogboundary,
 		sector_t* front, sector_t* back,
@@ -257,7 +260,9 @@ public:
 
 	void BuildFFBlock(HWWallDispatcher* di, seg_t* seg, F3DFloor* rover, int roverIndex,
 		float ff_topleft, float ff_topright,
-		float ff_bottomleft, float ff_bottomright);
+		float ff_bottomleft, float ff_bottomright,
+		float preclip_topleft, float preclip_topright,
+		float preclip_bottomleft, float preclip_bottomright);
 	void InverseFloors(HWWallDispatcher* di, seg_t* seg, sector_t* frontsector,
 		float topleft, float topright,
 		float bottomleft, float bottomright);
@@ -457,7 +462,10 @@ inline float Dist2(float x1,float y1,float x2,float y2)
 
 bool hw_SetPlaneTextureRotation(const HWSectorPlane * secplane, FGameTexture * gltexture, VSMatrix &mat);
 void hw_GetDynModelLight(AActor *self, FDynLightData &modellightdata, double ticFrac = 1.0);
-LightProbe* FindLightProbe(FLevelLocals* level, float x, float y, float z);
+LightProbe* FindLightProbe(FLevelLocals* level, float x, float y, float z, float floorz = -FLT_MAX);
+bool TryGetLightProbeColor(FLevelLocals* level, AActor* actor, FVector3& out);
+bool TryGetLightProbeColor(FLevelLocals* level, float x, float y, float z, FVector3& out, float floorz = -FLT_MAX);
+void SetHeavyProbe(FRenderState& state, FLevelLocals* level, AActor* actor);
 
 extern const float LARGE_VALUE;
 

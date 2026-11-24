@@ -518,6 +518,7 @@ public:
 		th->Alpha = -1;
 		th->Health = 1;
 		th->FloatbobPhase = -1;
+		th->HeavyProbeIndex = -1;
 		sc.MustGetToken('{');
 		while (!sc.CheckToken('}'))
 		{
@@ -796,6 +797,11 @@ public:
 				CHECK_N(Zd | Zdt)
 					break;
 
+			case NAME_lm_sunenabled:
+				CHECK_N(Zd | Zdt)
+				th->score = 1; // Processed later in MapLoader::ProcessZDRayInfo
+					break;
+
 			default:
 				CHECK_N(Zd | Zdt)
 				if (0 == strnicmp("user_", key.GetChars(), 5))
@@ -1002,6 +1008,10 @@ public:
 			// This switch contains all keys of the UDMF base spec which only apply to Hexen format specials
 			if (!isTranslated) switch (key.GetIndex())
 			{
+			case NAME_Walking:
+				Flag(ld->activation, SPAC_Walking, key);
+				continue;
+
 			case NAME_Playercross:
 				Flag(ld->activation, SPAC_Cross, key); 
 				continue;

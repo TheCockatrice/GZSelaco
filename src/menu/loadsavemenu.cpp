@@ -180,9 +180,9 @@ void FSavegameManager::PerformLoadGame(const char *fn, bool flag)
 //
 //=============================================================================
 
-void FSavegameManager::PerformSaveGame(const char *fn, const char *savegamestring)
+void FSavegameManager::PerformSaveGame(const char *fn, const char *savegamestring, int flags)
 {
-	G_SaveGame(fn, savegamestring);
+	G_SaveGame(fn, savegamestring, flags);
 }
 
 //=============================================================================

@@ -116,6 +116,7 @@ extend class Object
 	private native static Object BuiltinNewDoom(Class<Object> cls, int outerclass, int compatibility);
 	private native static TranslationID BuiltinFindTranslation(Name nm);
 	private native static int BuiltinCallLineSpecial(int special, Actor activator, int arg1, int arg2, int arg3, int arg4, int arg5);
+	private native static State BuiltinStateOffset(State st, int offset);
 	// These really should be global functions...
 	native static String G_SkillName();
 	native static int G_SkillPropertyInt(int p);
@@ -132,6 +133,7 @@ extend class Object
 	}
 	deprecated("4.3", "Use S_StartSound() instead") native static void S_Sound (Sound sound_id, int channel, float volume = 1, float attenuation = ATTN_NORM, float pitch = 0.0, float startTime = 0.0);
 	native static SoundHandle S_StartSound (Sound sound_id, int channel, int flags = 0, float volume = 1, float attenuation = ATTN_NORM, float pitch = 0.0, float startTime = 0.0);
+	native static SoundHandle S_StartSoundEffect (Sound sound_id, string effect, int channel, int flags = 0, float volume = 1, float attenuation = ATTN_NORM, float pitch = 0.0, float startTime = 0.0);
 	native static void S_StopSound (int channel, Sound sound_id = -1);
 	native static void S_PauseSound (bool notmusic, bool notsfx);
 	native static void S_ResumeSound (bool notsfx);
@@ -191,6 +193,7 @@ class Thinker : Object native play
 	
 	virtual native void Tick();
 	virtual native void PostBeginPlay();
+	virtual void OnLoad() {}
 	native void ChangeStatNum(int stat);
 
 	virtual native void Sleep(int tics);
@@ -352,6 +355,7 @@ struct LevelInfo native
 	native readonly int partime;
 	native readonly int sucktime;
 	native readonly int invasiontier;
+	native readonly int minTechModules;
 	native readonly double tilt, tiltAngle;
 	native readonly int flags;
 	native readonly int flags2;
@@ -464,6 +468,7 @@ struct LevelLocals native
 	native int total_monsters;
 	native int killed_monsters;
 	native int invasiontier;
+	native readonly int minTechModules;
 	native double tilt, tiltAngle;
 	native play double gravity;
 	native play double aircontrol;
@@ -583,6 +588,9 @@ struct LevelLocals native
 	native void QuitGame();
 
 	native void SetNewSkill(int newSkill);
+
+
+	clearscope native static bool WorldPaused();
 }
 
 // a few values of this need to be readable by the play code.

@@ -61,6 +61,9 @@
 #include "texturemanager.h"
 #include "v_draw.h"
 
+extern int paused;
+extern bool pauseext;
+
 DVector2 AM_GetPosition();
 int Net_GetLatency(int *ld, int *ad);
 void PrintPickupMessage(bool localview, const FString &str);
@@ -499,6 +502,23 @@ DEFINE_ACTION_FUNCTION_NATIVE(_Sector, RemoveForceField, RemoveForceField)
 	 return 0;
  }
 
+int WorldPaused()
+{
+	if (paused)
+		return true;
+
+	if (netgame || gamestate != GS_LEVEL)
+		return false;
+
+	return pauseext || menuactive == MENU_On || ConsoleState == c_down || ConsoleState == c_falling;
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(FLevelLocals, WorldPaused, WorldPaused)
+{
+	PARAM_PROLOGUE;
+	ACTION_RETURN_BOOL(WorldPaused());
+}
+
 static sector_t *PointInSectorXY(FLevelLocals *self, double x, double y)
 {
 	return self->PointInSector(x ,y);
@@ -867,6 +887,34 @@ DEFINE_ACTION_FUNCTION_NATIVE(_Sector, SetXOffset, SetXOffset)
  {
 	 PARAM_SELF_STRUCT_PROLOGUE(sector_t);
 	 ACTION_RETURN_INT(self->GetLightLevel());
+ }
+
+ static void SetPlaneReflectivity(sector_t* self, int pos, double val)
+ {
+	 if (pos < 0 || pos > 1) ThrowAbortException(X_ARRAY_OUT_OF_BOUNDS, "pos must be either 0 or 1");
+	 self->SetPlaneReflectivity(pos, val);
+ }
+
+ DEFINE_ACTION_FUNCTION_NATIVE(_Sector, SetPlaneReflectivity, SetPlaneReflectivity)
+ {
+	 PARAM_SELF_STRUCT_PROLOGUE(sector_t);
+	 PARAM_INT(pos);
+	 PARAM_FLOAT(val)
+	 SetPlaneReflectivity(self, pos, val);
+	 return 0;
+ }
+
+ static double GetPlaneReflectivity(sector_t* self, int pos)
+ {
+	 if (pos < 0 || pos > 1) ThrowAbortException(X_ARRAY_OUT_OF_BOUNDS, "pos must be either 0 or 1");
+	 return self->GetPlaneReflectivity(pos);
+ }
+
+ DEFINE_ACTION_FUNCTION_NATIVE(_Sector, GetPlaneReflectivity, GetPlaneReflectivity)
+ {
+	 PARAM_SELF_STRUCT_PROLOGUE(sector_t);
+	 PARAM_INT(pos);
+	 ACTION_RETURN_FLOAT(GetPlaneReflectivity(self, pos));
  }
 
  static int PortalBlocksView(sector_t *self, int pos)
@@ -2761,6 +2809,7 @@ DEFINE_FIELD_X(LevelInfo, level_info_t, SkyPic1)
 DEFINE_FIELD_X(LevelInfo, level_info_t, SkyPic2)
 DEFINE_FIELD_X(LevelInfo, level_info_t, F1Pic)
 DEFINE_FIELD_X(LevelInfo, level_info_t, invasiontier)
+DEFINE_FIELD_X(LevelInfo, level_info_t, minTechModules)
 DEFINE_FIELD_X(LevelInfo, level_info_t, tilt)
 DEFINE_FIELD_X(LevelInfo, level_info_t, tiltAngle)
 DEFINE_FIELD_X(LevelInfo, level_info_t, cluster)
@@ -2805,6 +2854,7 @@ DEFINE_FIELD(FLevelLocals, starttime)
 DEFINE_FIELD(FLevelLocals, partime)
 DEFINE_FIELD(FLevelLocals, sucktime)
 DEFINE_FIELD(FLevelLocals, invasiontier) // @Cockatrice - Selaco specific setting
+DEFINE_FIELD(FLevelLocals, minTechModules) // @Cockatrice - Selaco specific setting
 DEFINE_FIELD(FLevelLocals, tilt)		 // @Cockatrice - Simulated tilt in degrees
 DEFINE_FIELD(FLevelLocals, tiltAngle)	 // Angle that the tilt is applied at
 DEFINE_FIELD(FLevelLocals, cluster)

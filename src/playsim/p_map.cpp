@@ -103,10 +103,10 @@ static void CheckForPushSpecial(line_t *line, int side, AActor *mobj, DVector2 *
 static void SpawnShootDecal(AActor *t1, AActor *defaults, const FTraceResults &trace);
 static void SpawnDeepSplash(AActor *t1, const FTraceResults &trace, AActor *puff);
 
-static FRandom pr_tracebleed("TraceBleed");
-static FRandom pr_checkthing("CheckThing");
-static FRandom pr_lineattack("LineAttack");
-static FRandom pr_crunch("DoCrunch");
+static FRandom pr_tracebleed("TraceBleed", false);
+static FRandom pr_checkthing("CheckThing", false);
+static FRandom pr_lineattack("LineAttack", false);
+static FRandom pr_crunch("DoCrunch", false);
 
 // keep track of special lines as they are hit,
 // but don't process them until the move is proven valid
@@ -920,11 +920,12 @@ bool PIT_CheckLine(FMultiBlockLinesIterator &mit, FMultiBlockLinesIterator::Chec
 
 	// MBF bouncers are treated as missiles here.
 	bool Projectile = (tm.thing->flags & MF_MISSILE || tm.thing->BounceFlags & BOUNCE_MBF);
+	bool blockedByLineBits = (ld->blockBits & tm.thing->lineBlockBits);			// @Cockatrice - Allow projectiles to be blocked by linebits 
 
 	uint32_t ProjectileBlocking = ML_BLOCKEVERYTHING | ML_BLOCKPROJECTILE;
 	if ( tm.thing->flags8 & MF8_BLOCKASPLAYER ) ProjectileBlocking |= ML_BLOCK_PLAYERS | ML_BLOCKING;
 
-	if (!(Projectile) || (ld->flags & ProjectileBlocking) )
+	if (!(Projectile) || (ld->flags & ProjectileBlocking) || blockedByLineBits)
 	{
 		if (ld->flags & ML_RAILING)
 		{
@@ -3127,7 +3128,8 @@ void FSlide::HitSlideLine(line_t* ld)
 			tmmove.Y /= 2; // absorb half the velocity
 			if (slidemo->player && slidemo->health > 0 && !(slidemo->player->cheats & CF_PREDICTING))
 			{
-				S_Sound(slidemo, CHAN_VOICE, 0, "*grunt", 1, ATTN_IDLE); // oooff!//   ^
+				slidemo->CallGrunt(ld, 1);
+				//S_Sound(slidemo, CHAN_VOICE, 0, "*grunt", 1, ATTN_IDLE); // oooff!//   ^
 			}
 		}																		//   |
 		else																	// phares
@@ -3143,7 +3145,8 @@ void FSlide::HitSlideLine(line_t* ld)
 			tmmove.Y = -tmmove.Y / 2;
 			if (slidemo->player && slidemo->health > 0 && !(slidemo->player->cheats & CF_PREDICTING))
 			{
-				S_Sound(slidemo, CHAN_VOICE, 0, "*grunt", 1, ATTN_IDLE); // oooff!
+				slidemo->CallGrunt(ld, 1);
+				//S_Sound(slidemo, CHAN_VOICE, 0, "*grunt", 1, ATTN_IDLE); // oooff!
 			}
 		}
 		else
@@ -3175,7 +3178,8 @@ void FSlide::HitSlideLine(line_t* ld)
 		movelen /= 2; // absorb
 		if (slidemo->player && slidemo->health > 0 && !(slidemo->player->cheats & CF_PREDICTING))
 		{
-			S_Sound(slidemo, CHAN_VOICE, 0, "*grunt", 1, ATTN_IDLE); // oooff!
+			slidemo->CallGrunt(ld, 1);
+			//S_Sound(slidemo, CHAN_VOICE, 0, "*grunt", 1, ATTN_IDLE); // oooff!
 		}
 		tmmove = moveangle.ToVector(movelen);
 	}	
@@ -5015,7 +5019,7 @@ AActor *P_LineAttack(AActor *t1, DAngle angle, double distance,
 			}
 
 			if (!(puffDefaults != NULL && puffDefaults->flags3&MF3_BLOODLESSIMPACT)) {
-				IFVIRTUALPTR(trace.Actor, AActor, SpawnLineAttackBlood)
+				IFVIRTUALPTR(hitActor, AActor, SpawnLineAttackBlood)
 				{
 					VMValue params[] = { hitActor, t1, bleedpos.X, bleedpos.Y, bleedpos.Z, TData.ActorHits[x].HitAngle.Degrees(), damage, newdam};
 					VMCall(func, params, countof(params), nullptr, 0);
@@ -6424,6 +6428,17 @@ CUSTOM_CVAR(Float, splashfactor, 1.f, CVAR_SERVERINFO)
 		selfthrustscale = 1.f / self;
 }
 
+
+// @Cockatrice - Get the closest point inside an actors bounds so we can accurately model radius damage against an unusually large actor
+static inline DVector3 getClosestPosInside(const DVector3& boxPos, double radius, double height, const DVector3& testPos) {
+	return DVector3(
+		std::clamp(testPos.X, boxPos.X - radius, boxPos.X + radius),
+		std::clamp(testPos.Y, boxPos.Y - radius, boxPos.Y + radius),
+		std::clamp(testPos.Z, boxPos.Z, boxPos.Z + height)
+	);
+}
+
+
 //==========================================================================
 //
 // P_GetRadiusDamage
@@ -6488,7 +6503,7 @@ static double GetRadiusDamage(bool fromaction, AActor *bombspot, AActor *thing, 
 	//[inkoalwetrust]: Round explosions just use the actual distance between the source and victim.
 	else
 	{
-		len = bombspot->Distance3D (thing);
+		len = thing->Distance3DWithBounds(bombspot);
 	}
 	len = clamp<double>(len - fulldamagedistance, 0.0, len);
 	points = bombdamagefloat * (1.0 - len * bombdistancefloat);
@@ -7527,7 +7542,7 @@ bool P_ChangeSector(sector_t *sector, int crunch, double amt, int floorOrCeil, b
 				}
 
 				n->visited = true; 							// mark thing as processed
-				if (!(n->m_thing->flags & MF_NOBLOCKMAP) ||	//jff 4/7/98 don't do these
+				if (!(n->m_thing->flags5 & MF5_NOINTERACTION) ||	//jff 4/7/98 don't do these
 					(n->m_thing->flags5 & MF5_MOVEWITHSECTOR))
 				{
 					iterator(n->m_thing, &cpos);		 			// process it

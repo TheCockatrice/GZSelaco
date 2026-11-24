@@ -1329,6 +1329,7 @@ void MapLoader::LoadThings (MapData * map)
 		mti[i].Alpha = -1;
 		mti[i].Health = 1;
 		mti[i].FloatbobPhase = -1;
+		mti[i].HeavyProbeIndex = -1;
 
 		mti[i].pos.X = LittleShort(mt->x);
 		mti[i].pos.Y = LittleShort(mt->y);
@@ -1421,6 +1422,7 @@ void MapLoader::LoadThings2 (MapData * map)
 		mti[i].Alpha = -1;
 		mti[i].Health = 1;
 		mti[i].FloatbobPhase = -1;
+		mti[i].HeavyProbeIndex = -1;
 		mti[i].friendlyseeblocks = -1;
 	}
 }
@@ -1437,8 +1439,15 @@ void MapLoader::SpawnThings (int position)
 
 	for (int i=0; i < numthings; i++)
 	{
-		AActor *actor = Level->SpawnMapThing (i, &MapThingsConverted[i], position);
-		unsigned *udi = MapThingsUserDataIndex.CheckKey((unsigned)i);
+		FMapThing* mthing = &MapThingsConverted[i];
+
+		if (mthing->EdNum == 9890) // ZDRayInfo
+		{
+			ProcessZDRayInfo(i, mthing);
+		}
+
+		AActor *actor = Level->SpawnMapThing (i, mthing, position);
+		unsigned* udi = MapThingsUserDataIndex.CheckKey((unsigned)i);
 		if (udi != nullptr)
 		{
 			SetMapThingUserData(actor, *udi);
@@ -2491,7 +2500,21 @@ void MapLoader::CreateBlockMap ()
 	}
 }
 
+void MapLoader::ProcessZDRayInfo(int index, FMapThing* mthing)
+{
+	bool sunenabled = mthing->score == 1; // Comes from ParseThing
 
+	if (sunenabled)
+	{
+		// Code reused from ZDRay sun direction
+		double sdx = g_cosdeg(mthing->angle) * g_cosdeg(mthing->pitch);
+		double sdy = g_sindeg(mthing->angle) * g_cosdeg(mthing->pitch);
+		double sdz = -g_sindeg(mthing->pitch);
+		Level->SunDirection.X = (float)-sdx;
+		Level->SunDirection.Y = (float)-sdy;
+		Level->SunDirection.Z = (float)-sdz;
+	}
+}
 
 //===========================================================================
 //
@@ -3047,7 +3070,7 @@ void MapLoader::LoadLevel(MapData *map, const char *lumpname, int position)
 	{
 		// Check for compressed nodes first, then uncompressed nodes
 		FileReader *fr = nullptr;
-		uint32_t id = MAKE_ID('X', 'x', 'X', 'x'), idcheck = 0, idcheck2 = 0, idcheck3 = 0, idcheck4 = 0, idcheck5 = 0, idcheck6 = 0;
+		uint32_t id = MAKE_ID('X', 'x', 'X', 'x'), idcheck = 0, idcheck2 = 0, idcheck3 = 0, idcheck4 = 0, idcheck5 = 0, idcheck6 = 0, idchecksum = MAKE_ID('C', 'H', 'K', 'S');
 
 		if (map->Size(ML_ZNODES) != 0)
 		{
@@ -3071,6 +3094,26 @@ void MapLoader::LoadLevel(MapData *map, const char *lumpname, int position)
 		if (fr != nullptr && fr->isOpen()) fr->Read(&id, 4);
 		if (id != 0 && (id == idcheck || id == idcheck2 || id == idcheck3 || id == idcheck4 || id == idcheck5 || id == idcheck6))
 		{
+			ptrdiff_t originalPos = fr->Tell();
+
+			// Check if we have a checksum header
+			// NL: NOTE: This code is old! Just keeping here to preserve compatibility with older maps.
+			//           We now get the checksum from the LMCHKSUM lump.
+			int checksumheader = 0;
+			fr->Read(&checksumheader, 4);
+			if (checksumheader == idchecksum)
+			{
+				for (int i = 0; i < 16; i++)
+				{
+					NodeChecksum[i] = fr->ReadUInt8();
+				}
+			}
+			else
+			{
+				// otherwise just go back to where we were
+				fr->Seek(originalPos, FileSys::FileReader::SeekSet);
+			}
+
 			NodesLoaded = LoadExtendedNodes(*fr, id);
 		}
 		else if (!map->isText)	// regular nodes are not supported for text maps
@@ -3203,13 +3246,14 @@ void MapLoader::LoadLevel(MapData *map, const char *lumpname, int position)
 	// Spawn 3d floors - must be done before spawning things so it can't be done in P_SpawnSpecials
 	Spawn3DFloors();
 
-	SpawnThings(position);
-
-	// Load and link lightmaps - must be done after P_Spawn3DFloors (and SpawnThings? Potentially for baking static model actors?)
+	// Load and link lightmaps - must be done after P_Spawn3DFloors
 	if (!ForceNodeBuild)
 	{
 		LoadLightmap(map);
+		LoadLightGroups(map);
 	}
+
+	SpawnThings(position);
 
 	for (int i = 0; i < MAXPLAYERS; ++i)
 	{
@@ -3243,15 +3287,15 @@ void MapLoader::LoadLevel(MapData *map, const char *lumpname, int position)
 	}
 
 	InitRenderInfo();				// create hardware independent renderer resources for the level. This must be done BEFORE the PolyObj Spawn!!!
+	
 	Level->ClearDynamic3DFloorData();	// CreateVBO must be run on the plain 3D floor data.
-	CreateVBO(screen->mVertexData, Level->sectors);
-
-	screen->InitLightmap(Level->LMTextureSize, Level->LMTextureCount, Level->LMTextureData);
-
-	for (auto &sec : Level->sectors)
+	for (auto& sec : Level->sectors)
 	{
 		P_Recalculate3DFloors(&sec);
 	}
+
+	CreateVBO(screen->mVertexData, Level->sectors);
+	screen->InitLightmap(Level->LMMasterTextureSize, Level->LMTextureCount, Level->LMMasterTextureData, Level->LMCompressed);
 
 	SWRenderer->SetColormap(Level);	//The SW renderer needs to do some special setup for the level's default colormap.
 	InitPortalGroups(Level);
@@ -3302,12 +3346,13 @@ void MapLoader::SetSubsectorLightmap(const LightmapSurface &surface)
 	else
 	{
 		int index = surface.Type == ST_CEILING ? 0 : 1;
-		const auto &ffloors = surface.Subsector->sector->e->XFloor.ffloors;
+		auto &ffloors = surface.Subsector->sector->e->XFloor.ffloors;
 		for (unsigned int i = 0; i < ffloors.Size(); i++)
 		{
 			if (ffloors[i]->model == surface.ControlSector)
 			{
 				surface.Subsector->lightmap[index][i + 1] = surface;
+				ffloors[i]->lmindex = i;
 			}
 		}
 	}
@@ -3348,19 +3393,38 @@ void MapLoader::LoadLightmap(MapData *map)
 {
 	// We have to reset everything as FLevelLocals is recycled between maps
 	Level->LightProbes.Reset();
+	Level->HeavyProbes.Reset();
 	Level->LPCells.Reset();
 	Level->LMTexCoords.Reset();
 	Level->LMSurfaces.Reset();
-	Level->LMTextureData.Reset();
+	Level->LMMasterTextureData.Reset();
+	Level->LMMasterTextureActualSizes.Reset();
 	Level->LMTextureCount = 0;
-	Level->LMTextureSize = 0;
+	Level->LMMasterTextureSize = IVector2(0, 0);
+	Level->LMSectorInfos.Reset();
+	Level->LMSectorInfos.Resize((uint32_t)Level->sectors.size());
+	Level->LightGroups.Reset();
+	Level->MasterLightmaps.Reset();
+	Level->LightGroupMeshes.Reset();
+	Level->LightGroupLightmapInfos.Reset();
 	Level->LPMinX = 0;
 	Level->LPMinY = 0;
 	Level->LPWidth = 0;
 	Level->LPHeight = 0;
+	Level->LPCellSize = 16;
+	Level->LMVersion = -1;
+	Level->LMNeedsRebuild = true;
+	Level->LMRenderFrame = 0;
 
-	if (!Args->CheckParm("-enablelightmaps"))
-		return;		// this feature is still too early WIP to allow general access
+	for (size_t i = 0; i < Level->Lightmaps.size(); i++)
+	{
+		Level->Lightmaps[i]->CleanHardwareData(true);
+		delete Level->Lightmaps[i];
+	}
+	Level->Lightmaps.Reset();
+
+	if (Args->CheckParm("-disablelightmaps"))
+		return;
 
 	if (!map->Size(ML_LIGHTMAP))
 		return;
@@ -3371,34 +3435,127 @@ void MapLoader::LoadLightmap(MapData *map)
 
 
 	int version = fr.ReadInt32();
-	if (version != 0)
+	if ((version & 0x5e1ac000) != 0x5e1ac000) // 'Selaco' + Version XX
 	{
-		Printf(PRINT_HIGH, "LoadLightmap: unsupported lightmap lump version\n");
+		Printf(PRINT_HIGH, "LoadLightmap: Not a Selaco-style lightmap lump\n");
 		return;
 	}
 
-	uint16_t textureSize = fr.ReadUInt16();
-	uint16_t numTextures = fr.ReadUInt16();
+	// The *actual* version number, minus the 'Selaco' identifier
+	version = version & 0x000000FF;
+
+	if (version > 6)
+	{
+		Printf(PRINT_HIGH, "LoadLightmap: Unsupported lightmap lump version\n");
+		return;
+	}
+
+	if (version >= 5)
+	{
+		if (map->Size(ML_LMCHKSUM))
+		{
+			FileReader& fr = map->Reader(ML_LMCHKSUM);
+			for (int i = 0; i < 16; i++)
+			{
+				NodeChecksum[i] = fr.ReadUInt8();
+			}
+		}
+
+		uint8_t lmChecksum[16];
+		for (int i = 0; i < 16; i++)
+		{
+			lmChecksum[i] = fr.ReadUInt8();
+		}
+
+		if (memcmp(lmChecksum, NodeChecksum, 16) != 0 && Args->CheckParm("-uselmchecksum"))
+		{
+			Printf(TEXTCOLOR_RED "Lightmap checksum mismatch! Lightmaps need to be rebaked.\n");
+			Printf("\tExpected: 0x");
+			for (int i = 0; i < 16; i++)
+			{
+				Printf("%02X", (int)lmChecksum[i]);
+			}
+			Printf("\n\tFound:    0x");
+			for (int i = 0; i < 16; i++)
+			{
+				Printf("%02X", (int)NodeChecksum[i]);
+			}
+			Printf("\n");
+
+			Level->LMInvalidBake = true;
+
+			// Make everything in the map fullbright
+			for (sector_t& sector : Level->sectors)
+			{
+				sector.lightlevel = 255;
+				sector.Colormap.LightColor = PalEntry(255, 255, 255);
+			}
+
+			return;
+		}
+	}
+
+	Level->LMInvalidBake = false;
+	Level->LMVersion = version;
+
+	IVector2 textureSize;
+	textureSize.X = fr.ReadUInt16();
+	textureSize.Y = fr.ReadUInt16();
+	uint16_t numMasterTextures = fr.ReadUInt16();
+	uint16_t numGroupTextures = fr.ReadUInt16();
 	uint32_t numSurfaces = fr.ReadUInt32();
 	uint32_t numTexCoords = fr.ReadUInt32();
-	uint32_t numLightProbes = fr.ReadUInt32();
+	int32_t numLightProbes = fr.ReadUInt32();
+	int32_t numHeavyProbes = version >= 4 ? fr.ReadUInt32() : 0;
+	uint32_t numSectorInfos = version >= 3 ? fr.ReadUInt32() : 0;
 	uint32_t numSubsectors = fr.ReadUInt32();
-	uint32_t numTexBytes = numTextures * textureSize * textureSize * 3 * 2;
+	Level->LPCellSize = fr.ReadInt32();
+	Level->LMCompressed = version >= 6 ? fr.ReadInt8() : false;
+	
+	uint32_t numMasterTexBytes;
+	if (Level->LMCompressed)
+	{
+		numMasterTexBytes = numMasterTextures * (textureSize.X / 4) * (textureSize.Y / 4) * sizeof(uint64_t) * 2;
+	}
+	else
+	{
+		numMasterTexBytes = numMasterTextures * textureSize.X * textureSize.Y * 4;
+	}
 
-	if (numSurfaces == 0 || numTexCoords == 0 || numTexBytes == 0)
+	if (numSurfaces == 0 || numTexCoords == 0 || numMasterTexBytes == 0)
 		return;
 
-	Printf(PRINT_HIGH, "WARNING! Lightmaps are an experimental feature and are subject to change before being finalized. Do not expect this to work as-is in future releases of %s!\n", GAMENAME);
-
-	/*if (numSubsectors != Level->subsectors.Size())
+	if (numSubsectors != Level->subsectors.Size())
 	{
 		Printf(PRINT_HIGH, "LoadLightmap: subsector count for level doesn't match (%d in wad vs %d in engine)\n", (int)numSubsectors, (int)Level->subsectors.Size());
-	}*/
+	}
 
 	if (numLightProbes > 0)
 	{
 		Level->LightProbes.Resize(numLightProbes);
-		fr.Read(&Level->LightProbes[0], sizeof(LightProbe) * numLightProbes);
+
+		for (int i = 0; i < numLightProbes; i++)
+		{
+			LightProbe& probe = Level->LightProbes[i];
+
+			probe.X = fr.ReadFloat();
+			probe.Y = fr.ReadFloat();
+			probe.Z = fr.ReadFloat();
+			probe.Red = fr.ReadFloat();
+			probe.Green = fr.ReadFloat();
+			probe.Blue = fr.ReadFloat();
+
+			probe.numSubProbes = fr.ReadUInt8();
+
+			for (int s = 0; s < 4; s++)
+			{
+				probe.subProbes[s].groupID = fr.ReadUInt32();
+				probe.subProbes[s].Red = fr.ReadFloat();
+				probe.subProbes[s].Green = fr.ReadFloat();
+				probe.subProbes[s].Blue = fr.ReadFloat();
+			}
+		}
+		//fr.Read(&Level->LightProbes[0], sizeof(LightProbe) * numLightProbes);
 
 		// Sort the light probes so that they are ordered by cell.
 		// This lets us point at the first probe knowing all other probes in the cell will follow.
@@ -3454,6 +3611,36 @@ void MapLoader::LoadLightmap(MapData *map)
 		}
 	}
 
+	if (numHeavyProbes > 0)
+	{
+		Level->HeavyProbes.Resize(numHeavyProbes);
+
+		for (int i = 0; i < numHeavyProbes; i++)
+		{
+			HeavyProbe& probe = Level->HeavyProbes[i];
+
+			probe.X = fr.ReadFloat();
+			probe.Y = fr.ReadFloat();
+			probe.Z = fr.ReadFloat();
+			probe.thingID = fr.ReadInt32();
+
+			probe.numSamples = fr.ReadUInt8();
+
+			for (int s = 0; s < 4; s++)
+			{
+				probe.samples[s].R = fr.ReadFloat();
+				probe.samples[s].G = fr.ReadFloat();
+				probe.samples[s].B = fr.ReadFloat();
+				probe.samples[s].dirX = fr.ReadFloat();
+				probe.samples[s].dirY = fr.ReadFloat();
+				probe.samples[s].dirZ = fr.ReadFloat();
+				probe.samples[s].groupID = fr.ReadUInt32();
+			}
+
+			MapThingsConverted[probe.thingID].HeavyProbeIndex = i;
+		}
+	}
+
 	Level->LMTexCoords.Resize(numTexCoords * 2);
 
 	// Allocate room for all surfaces
@@ -3487,6 +3674,17 @@ void MapLoader::LoadLightmap(MapData *map)
 		offset += count * 2;
 	}
 
+	// [NL] Since the order of the sides can change during load, create a way
+	// to translate from the original UMDF sidedef index to the real sidenum
+	// TODO: Could probably optimize this into a flat array, but we need to know how 
+	// large to make the array, since the size could have changed.
+	TMap<int, int> umdfSideToSideNum;
+	for (size_t i = 0; i < Level->sides.size(); i++)
+	{
+		const side_t& side = Level->sides[i];
+		umdfSideToSideNum.Insert(side.UDMFIndex, side.sidenum);
+	}
+
 	// Load the surfaces we have lightmap data for
 
 	for (uint32_t i = 0; i < numSurfaces; i++)
@@ -3496,9 +3694,13 @@ void MapLoader::LoadLightmap(MapData *map)
 
 		SurfaceType type = (SurfaceType)fr.ReadUInt32();
 		uint32_t typeIndex = fr.ReadUInt32();
+		uint32_t ownerSector = (version >= 2) ? fr.ReadUInt32() : 0xffffffff;
 		uint32_t controlSector = fr.ReadUInt32();
 		uint32_t lightmapNum = fr.ReadUInt32();
 		uint32_t firstTexCoord = fr.ReadUInt32();
+
+		if (ownerSector != 0xffffffff)
+			surface.OwnerSector = &Level->sectors[ownerSector];
 
 		if (controlSector != 0xffffffff)
 			surface.ControlSector = &Level->sectors[controlSector];
@@ -3515,8 +3717,15 @@ void MapLoader::LoadLightmap(MapData *map)
 		}
 		else if (type != ST_NULL)
 		{
-			surface.Side = &Level->sides[typeIndex];
-			SetSideLightmap(surface);
+			if (int* sideIndex = umdfSideToSideNum.CheckKey(typeIndex))
+			{
+				surface.Side = &Level->sides[*sideIndex];
+				SetSideLightmap(surface);
+			}
+			else
+			{
+				Printf(PRINT_HIGH, "Couldn't find sidedef %d to apply lightmap to\n", typeIndex);
+			}
 		}
 	}
 
@@ -3526,14 +3735,275 @@ void MapLoader::LoadLightmap(MapData *map)
 
 	// Load lightmap textures
 
-	Level->LMTextureCount = numTextures;
-	Level->LMTextureSize = textureSize;
-	Level->LMTextureData.Resize((numTexBytes + 1) / 2);
-	uint8_t* data = (uint8_t*)&Level->LMTextureData[0];
-	fr.Read(data, numTexBytes);
+	Level->LMTextureCount = numMasterTextures;
+	Level->LMMasterTextureSize = textureSize;
+	Level->LMMasterTextureActualSizes.Resize(numMasterTextures);
+
+	Level->Lightmaps.Resize(numMasterTextures + numGroupTextures);
+	Level->MasterLightmaps.Resize(numMasterTextures);
+	Level->LightGroupLightmapInfos.Resize(numGroupTextures);
+
+	for (int i = 0; i < numMasterTextures; i++)
+	{
+		IVector2 actualSize;
+		actualSize.X = fr.ReadUInt16();
+		actualSize.Y = fr.ReadUInt16();
+		Level->LMMasterTextureActualSizes[i] = actualSize;
+		Level->MasterLightmaps[i].indexCount = -1;
+
+		if (version >= 2)
+		{
+			uint32_t numVerts = fr.ReadUInt32();
+			int numIndices = fr.ReadInt32();
+
+			Level->MasterLightmaps[i].indexCount = numIndices;
+
+			if (numVerts > 0 && numIndices > 0)
+			{
+				TArray<F2DDrawer::TwoDVertex> verts(numVerts, true);
+				fr.Read(verts.Data(), numVerts * sizeof(F2DDrawer::TwoDVertex));
+
+				TArray<int> indices(numIndices, true);
+				fr.Read(indices.Data(), numIndices * sizeof(int));
+
+				Level->MasterLightmaps[i].meshBuffers.UploadData(verts.Data(), numVerts, indices.Data(), numIndices);
+			}
+		}
+	}
+
+	Level->LMMasterTextureData.Resize((numMasterTexBytes + 1));
+	uint8_t* data = (uint8_t*)&Level->LMMasterTextureData[0];
+	fr.Read(data, numMasterTexBytes);
+	data[numMasterTexBytes] = 0;
+
 #if 0
 	// Apply compression predictor
 	for (uint32_t i = 1; i < numTexBytes; i++)
 		data[i] += data[i - 1];
 #endif
+
+	size_t texDataOffset = 0;
+	for (int i = 0; i < numMasterTextures; i++)
+	{
+		assert(textureSize.X != 0 && textureSize.Y != 0);
+
+		// Create the lightmap texture
+		FWrapperTexture* wrapper = new FWrapperTexture(textureSize.X, textureSize.Y);
+		IHardwareTexture* texture = wrapper->GetHardwareTexture(0, 0);
+		if (Level->LMCompressed)
+		{
+			int compressedTextureSize = (textureSize.X / 4) * (textureSize.Y / 4) * sizeof(uint64_t) * 2;
+			texture->CreateCompressedTexture(data + i * compressedTextureSize, textureSize.X, textureSize.Y, -1, false, IHardwareTexture::COMPRESSION_BC7_UNORM, "MasterLightmap");
+		}
+		else
+		{
+			texture->CreateTexture(data + i * (textureSize.X * textureSize.Y) * sizeof(int32_t), textureSize.X, textureSize.Y, -1, false, "MasterLightmap", true);
+		}
+		texture->Finalize();
+		FGameTexture* lightmap = Level->Lightmaps[i] = new FGameTexture(wrapper, "MasterLightmap");
+
+		// Create the Master lightmap (Base lightmap that everything renders on top of)
+		Level->MasterLightmaps[i].base = lightmap;
+
+		IVector2 actualSize = Level->LMMasterTextureActualSizes[i];
+
+		// Create a Quad mesh to render the base lightmap to the Master lightmap
+		FVector2 p1 = FVector2(0, (float)(textureSize.Y - actualSize.Y));
+		FVector2 p2 = FVector2((float)actualSize.X, (float)textureSize.Y);
+		FVector2 uv1 = FVector2(0, (float)actualSize.Y / (float)textureSize.Y);
+		FVector2 uv2 = FVector2((float)actualSize.X / (float)textureSize.X, 0);
+
+		F2DDrawer::TwoDVertex quadVerts[4] =
+		{
+			F2DDrawer::TwoDVertex{p1.X, p1.Y, 0, uv1.X, uv1.Y, 0xffffffff},
+			F2DDrawer::TwoDVertex{p2.X, p1.Y, 0, uv2.X, uv1.Y, 0xffffffff},
+			F2DDrawer::TwoDVertex{p2.X, p2.Y, 0, uv2.X, uv2.Y, 0xffffffff},
+			F2DDrawer::TwoDVertex{p1.X, p2.Y, 0, uv1.X, uv2.Y, 0xffffffff},
+		};
+
+		int quadIndices[6] = { 0, 1, 2, 0, 2, 3 };
+
+		Level->MasterLightmaps[i].quadBuffer.UploadData(quadVerts, 4, quadIndices, 6);
+	}
+
+	for (int i = 0; i < numGroupTextures; i++)
+	{
+		Level->LightGroupLightmapInfos[i] = LightgroupLightmapInfo();
+		Level->LightGroupLightmapInfos[i].LightmapIndex = i;
+		Level->LightGroupLightmapInfos[i].MasterInfos.Reserve(numMasterTextures);
+
+		for (int j = 0; j < numMasterTextures; j++)
+		{
+			Level->LightGroupLightmapInfos[i].MasterInfos[j] = LightgroupLightmapInfo::PerMasterInfo();
+		}
+
+		int width = fr.ReadUInt16();
+		int height = fr.ReadUInt16();
+
+		assert(width != 0 && height != 0);
+
+		int dataSize;
+		
+		if (Level->LMCompressed)
+		{
+			dataSize = (width / 4) * (height / 4) * sizeof(uint64_t) * 2;
+		}
+		else
+		{
+			dataSize = width * height * 4;
+		}
+
+		TArray<uint8_t> groupData(dataSize, true);
+		uint8_t* data = (uint8_t*)&groupData[0];
+		fr.Read(data, dataSize);
+		
+		// Create the lightmap texture
+		FWrapperTexture* wrapper = new FWrapperTexture(width, height);
+		IHardwareTexture* texture = wrapper->GetHardwareTexture(0, 0);
+		if (Level->LMCompressed)
+		{
+			texture->CreateCompressedTexture(data, width, height, -1, false, IHardwareTexture::COMPRESSION_BC7_UNORM, "MasterLightmap");
+		}
+		else
+		{
+			texture->CreateTexture(data, width, height, -1, false, "GroupLightmap", true);
+		}
+
+		texture->Finalize();
+		FGameTexture* lightmap = Level->Lightmaps[i + numMasterTextures] = new FGameTexture(wrapper, "GroupLightmap");
+	}
+
+	for (uint32_t i = 0; i < numSectorInfos; i++)
+	{
+		int sectorIndex = fr.ReadUInt32();
+
+		LMSectorInfo& sectorInfo = Level->LMSectorInfos[sectorIndex];
+		sectorInfo.SectorIndex = sectorIndex;
+
+		int numMasterInfos = (int)fr.ReadUInt16();
+		sectorInfo.MasterInfos.Resize(numMasterInfos);
+		for (int j = 0; j < numMasterInfos; j++)
+		{
+			sectorInfo.MasterInfos[j].LightGroupIndex = (int)fr.ReadInt16();
+			sectorInfo.MasterInfos[j].LightmapIndex = (int)fr.ReadInt16();
+			sectorInfo.MasterInfos[j].MeshIndex = (int)fr.ReadInt16();
+			sectorInfo.MasterInfos[j].MeshIndexStart = fr.ReadInt32();
+			sectorInfo.MasterInfos[j].MeshIndexCount = fr.ReadInt32();
+
+			assert(sectorInfo.MasterInfos[j].LightmapIndex >= 0);
+		}
+
+		int numLightGroupInfos = (int)fr.ReadUInt16();
+		sectorInfo.LightGroupInfos.Resize(numLightGroupInfos);
+		for (int j = 0; j < numLightGroupInfos; j++)
+		{
+			sectorInfo.LightGroupInfos[j].LightGroupIndex = (int)fr.ReadInt16();
+			sectorInfo.LightGroupInfos[j].LightmapIndex = (int)fr.ReadInt16();
+			sectorInfo.LightGroupInfos[j].MeshIndex = (int)fr.ReadInt16();
+			sectorInfo.LightGroupInfos[j].MeshIndexStart = fr.ReadInt32();
+			sectorInfo.LightGroupInfos[j].MeshIndexCount = fr.ReadInt32();
+
+			assert(sectorInfo.LightGroupInfos[j].LightmapIndex >= 0);
+		}
+	}
+
+	if (version >= 3)
+	{
+		uint32_t sanityCheck = fr.ReadUInt32();
+
+		if (sanityCheck != 0x900d900d)
+		{
+			assert(false && "Lightmap failed to load correctly!");
+			Printf(PRINT_HIGH, "LoadLightmap: Sanity check failed, possibly corrupted level\n");
+		}
+	}
+}
+
+void MapLoader::LoadLightGroups(MapData* map)
+{
+	if (!map->Size(ML_LIGHTGRP))
+		return;
+
+	FileReader& fr = map->Reader(ML_LIGHTGRP);
+
+	uint32_t version = fr.ReadUInt32();
+
+	if (version >= 2)
+	{
+		uint32_t numMeshes = fr.ReadUInt32();
+		Level->LightGroupMeshes.Resize(numMeshes);
+
+		for (uint32_t i = 0; i < numMeshes; i++)
+		{
+			LightGroupMesh& mesh = Level->LightGroupMeshes[i];
+
+			mesh.LightGroupIndex = fr.ReadUInt32();
+			mesh.sourceLightmapIndex = fr.ReadUInt32();
+			mesh.targetLightmapIndex = fr.ReadUInt32();
+
+			uint32_t numVerts = fr.ReadUInt32();
+			TArray<F2DDrawer::TwoDVertex> verts(numVerts, true);
+			fr.Read(verts.Data(), numVerts * sizeof(F2DDrawer::TwoDVertex));
+
+			int numIndices = mesh.indexCount = fr.ReadInt32();
+			TArray<int> indices(numIndices, true);
+			fr.Read(indices.Data(), numIndices * sizeof(int));
+
+			mesh.buffers.UploadData(verts.Data(), numVerts, indices.Data(), numIndices);
+		}
+	}
+
+	uint32_t numLightGroups = fr.ReadUInt32();
+	for (uint32_t i = 0; i < numLightGroups; i++)
+	{
+		Level->LightGroups.Push(LightGroupData{ Level->LightGroups.Size() });
+		LightGroupData* lightGroup = &Level->LightGroups.back();
+
+		lightGroup->Intensity = 1.0f;
+
+		lightGroup->ThingID = fr.ReadUInt16();
+		fr.Read(&lightGroup->BoundsMin, sizeof(FVector3));
+		fr.Read(&lightGroup->BoundsMax, sizeof(FVector3));
+
+		uint32_t numMeshes = fr.ReadUInt32();
+		lightGroup->MeshIDs.Resize(numMeshes);
+
+		if (version < 2)
+		{
+			Level->LightGroupMeshes.Grow(numMeshes);
+		}
+
+		for (uint32_t i = 0; i < numMeshes; i++)
+		{
+			if (version >= 2)
+			{
+				lightGroup->MeshIDs[i] = fr.ReadUInt32();
+			}
+			else
+			{
+				uint32_t meshIndex = Level->LightGroupMeshes.Push(LightGroupMesh());
+				LightGroupMesh& mesh = Level->LightGroupMeshes[meshIndex];
+				lightGroup->MeshIDs[i] = meshIndex;
+
+				mesh.sourceLightmapIndex = fr.ReadUInt32();
+				mesh.targetLightmapIndex = fr.ReadUInt32();
+
+				uint32_t numVerts = fr.ReadUInt32();
+				TArray<F2DDrawer::TwoDVertex> verts(numVerts, true);
+				fr.Read(verts.Data(), numVerts * sizeof(F2DDrawer::TwoDVertex));
+
+				int numIndices = mesh.indexCount = fr.ReadInt32();
+				TArray<int> indices(numIndices, true);
+				fr.Read(indices.Data(), numIndices * sizeof(int));
+
+				mesh.buffers.UploadData(verts.Data(), numVerts, indices.Data(), numIndices);
+			}
+		}
+
+		if (version == 1)
+		{
+			int numAffectedSectors = fr.ReadUInt32();
+			// TODO: Load in affected sectors
+		}
+	}
 }

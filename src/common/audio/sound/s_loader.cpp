@@ -422,7 +422,7 @@ void AudioLoaderQueue::update() {
 					playTime.Clock();
 
 					for (auto snd : playlist) {
-						soundEngine->StartSoundER(loaded.sfx, snd.type, snd.source, snd.pos, snd.vel, snd.channel, snd.flags, loaded.soundID, snd.orgSoundID, snd.volume, snd.attenuation, &snd.rolloff, snd.pitch, snd.startTime, false, snd.handle);
+						soundEngine->StartSoundER(loaded.sfx, snd.type, snd.source, snd.pos, snd.vel, snd.channel, snd.flags, loaded.soundID, snd.orgSoundID, snd.volume, snd.attenuation, &snd.rolloff, snd.pitch, snd.startTime, false, snd.handle, snd.effectID);
 						numPlayed++;
 					}
 

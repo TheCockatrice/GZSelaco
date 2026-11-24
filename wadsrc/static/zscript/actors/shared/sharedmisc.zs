@@ -302,3 +302,163 @@ class ArmorBonus : BasicArmorBonus
 		loop;
 	}
 }
+
+class LightGroup : Actor
+{
+	enum AnimationType
+	{
+		LGAT_Normal,
+		LGAT_Flicker,
+		LGAT_FlickerRandom,
+		LGAT_Pulse
+	}
+
+	int user_animationType;
+	int user_animationInterval;
+	int user_animationOffset;
+	float user_primaryIntensity;
+	float user_secondaryIntensity;
+	bool user_allowColorChange;
+
+	void Init()
+	{
+		cvarReduceFlicker = CVar.FindCVar("g_photosensitivitymode");
+
+		enabled = !bDormant;
+
+		if (user_animationInterval <= 0)
+		{
+			user_animationInterval = NormalizeAngle(spawnAngle);
+		}
+
+		if (user_animationInterval > 0)
+		{
+			activeTics = user_animationOffset % user_animationInterval;
+		}
+
+		// For non-pulse types, make sure the secondary intensity is the largest one, mimicking FLightDefaults::OrderIntensities()
+		if (user_animationType != LGAT_Pulse && user_primaryIntensity > user_secondaryIntensity)
+		{
+			float temp = user_primaryIntensity;
+			user_primaryIntensity = user_secondaryIntensity;
+			user_secondaryIntensity = temp;
+		}
+	}
+
+	override void Activate(Actor activator)
+	{
+		if (user_animationInterval > 0)
+		{
+			activeTics = user_animationOffset % user_animationInterval;
+		}
+		else
+		{
+			activeTics = 0;
+		}
+
+		enabled = true;
+		ActivateLightGroup();
+	}
+
+	override void Deactivate(Actor activator)
+	{
+		enabled = false;
+		DeactivateLightGroup();
+	}
+
+	override void Tick() 
+	{
+		Super.Tick();
+
+		if (!initialized)
+		{
+			initialized = true;
+			Init();
+		}
+
+		// Need to update the enabled flag every tic.
+		if (enabled)
+		{
+			ActivateLightGroup();
+		}
+		else
+		{
+			DeactivateLightGroup();
+		}
+
+		// Mark this LightGroup to render this frame
+		if (!bDormant)
+		{
+			int reduceFlickering = cvarReduceFlicker ? cvarReduceFlicker.GetInt() : 0;
+
+			if (reduceFlickering == 0)
+			{
+				if (user_animationType == LGAT_Flicker)
+				{
+					SetIntensity(random(0, 360) < user_animationInterval ? user_primaryIntensity : user_secondaryIntensity);
+				}
+				else if (user_animationType == LGAT_FlickerRandom)
+				{
+					float flickerRange = user_secondaryIntensity - user_primaryIntensity;
+					float amt = frandom(0, 1);
+		
+					if (activeTics > user_animationInterval)
+					{
+						activeTics = 0;
+					}
+
+					if (activeTics == 0 || GetIntensity() > user_secondaryIntensity)
+					{
+						SetIntensity(user_primaryIntensity + (amt * flickerRange));
+					}
+				}
+				else if (user_animationType == LGAT_Pulse)
+				{
+					float time = float(activeTics) / TICRATE;
+					float pulseTime = float(user_animationInterval) / TICRATE;
+					float cycle = time / pulseTime;
+					float mult = (sin(cycle * 360) + 1) / 2;
+					float intensity = user_secondaryIntensity + (user_primaryIntensity - user_secondaryIntensity) * mult;
+
+					SetIntensity(intensity);
+				}
+			}
+			else
+			{
+				SetIntensity(1.0);
+			}
+
+			activeTics++;
+
+			if (GetIntensity() > 0)
+			{
+				if (user_allowColorChange)
+				{
+					UpdateTintColor();
+				}
+			}
+		}
+	}
+
+	double NormalizeAngle(double value, double start = 0, double end = 360) 
+	{
+        double width       = end - start;
+        double offsetValue = value - start;
+
+        return (offsetValue - (floor(offsetValue / width) * width)) + start;
+    }
+
+	private native void UpdateTintColor();
+	private native void SetIntensity(float intensity);
+	private native float GetIntensity();
+	private native void ActivateLightGroup();
+	private native void DeactivateLightGroup();
+
+	bool initialized;
+	int activeTics;
+
+	bool enabled;
+
+	private CVar cvarReduceFlicker;
+
+}

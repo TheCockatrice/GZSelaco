@@ -65,6 +65,7 @@ void CleanSWDrawer()
 
 #include "g_levellocals.h"
 #include "a_dynlight.h"
+#include "a_lightgroup.h"
 
 
 void CollectLights(FLevelLocals* Level, double ticFrac = 1.0)
@@ -358,6 +359,15 @@ sector_t* RenderView(player_t* player)
 		// Shader start time does not need to be handled per level. Just use the one from the camera to render from.
 		if (player->camera)
 			CheckTimer(*RenderState, player->camera->Level->ShaderStartTime);
+
+		// Draw all lightmaps
+		for (auto Level : AllLevels())
+		{
+			if (Level->MasterLightmaps.size() > 0)
+			{
+				P_RenderLightGroups(Level);
+			}
+		}
 
 		// Draw all canvases that changed
 		for (FCanvas* canvas : AllCanvases)

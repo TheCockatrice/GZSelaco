@@ -110,7 +110,7 @@ enum EDemoCommand
 	DEM_INVUSEALL,		// 18 Use every item (panic!)
 	DEM_INVUSE,			// 19 4 bytes: ID of item to use
 	DEM_PAUSE,			// 20 Pause game
-	DEM_SAVEGAME,		// 21 String: Filename, String: Description
+	DEM_SAVEGAME,		// 21 String: Filename, String: Description, int32_t: flags
 	DEM_UNDONE3,		// 22 
 	DEM_UNDONE4,		// 23
 	DEM_UNDONE5,		// 24

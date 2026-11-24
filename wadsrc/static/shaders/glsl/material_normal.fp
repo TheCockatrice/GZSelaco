@@ -37,8 +37,22 @@ vec3 lightContribution(int i, vec3 normal)
 
 vec3 ProcessMaterialLight(Material material, vec3 color)
 {
-	vec4 dynlight = uDynLightColor;
+	vec4 lightProbeColor = uLightProbeColor;
+
+	vec4 dynlight = uDynLightColor + lightProbeColor;
 	vec3 normal = material.Normal;
+
+	//
+	// apply heavy probes
+	//
+	if (uHeavyProbeSampleCount > 0)
+	{
+		for (int i = 0; i < uHeavyProbeSampleCount; i++)
+		{
+			float dotProd = max(dot(normal, -uHeavyProbeSampleDirs[i].xyz), 0.0);
+			dynlight.rgb += dotProd * uHeavyProbeSampleColors[i].rgb;
+		}
+	}
 
 	if (uLightIndex >= 0)
 	{

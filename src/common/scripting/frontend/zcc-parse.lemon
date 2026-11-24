@@ -80,6 +80,7 @@ static void SetNodeLine(ZCC_TreeNode *name, int line)
 		ZCC_Identifier *Replaces;
 		ZCC_Identifier *Sealed;
 		VersionInfo Version;
+		FString *DeprecationMessage;
 	};
 
 	struct StateOpts {
@@ -232,6 +233,7 @@ class_head(X) ::= EXTEND CLASS(T) IDENTIFIER(A).
 	head->Version = {0, 0};
 	head->Type = nullptr;
 	head->Symbol = nullptr;
+	head->DeprecationMessage = nullptr;
 	X = head;
 }
 
@@ -247,6 +249,7 @@ class_head(X) ::= CLASS(T) IDENTIFIER(A) class_ancestry(B) class_flags(C).
 	head->Version = C.Version;
 	head->Type = nullptr;
 	head->Symbol = nullptr;
+	head->DeprecationMessage = C.DeprecationMessage;
 	X = head;
 }
 
@@ -255,16 +258,25 @@ class_ancestry(X) ::= .						{ X = NULL; }
 class_ancestry(X) ::= COLON dottable_id(A).	{ X = A; /*X-overwrites-A*/ }
 
 %type class_flags{ClassFlagsBlock}
-class_flags(X) ::= .										{ X.Flags = 0; X.Replaces = NULL; X.Version = {0,0}; X.Sealed = NULL; }
-class_flags(X) ::= class_flags(A) ABSTRACT.					{ X.Flags = A.Flags | ZCC_Abstract; X.Replaces = A.Replaces; X.Version = A.Version; X.Sealed = A.Sealed; }
-class_flags(X) ::= class_flags(A) FINAL.					{ X.Flags = A.Flags | ZCC_Final; X.Replaces = A.Replaces; X.Version = A.Version; X.Sealed =  A.Sealed;}
-class_flags(X) ::= class_flags(A) UNIT.						{ X.Flags = A.Flags | ZCC_Unit;  X.Replaces = A.Replaces; X.Version = A.Version; X.Sealed =  A.Sealed;}
-class_flags(X) ::= class_flags(A) NATIVE.					{ X.Flags = A.Flags | ZCC_Native; X.Replaces = A.Replaces; X.Version = A.Version; X.Sealed =  A.Sealed; }
-class_flags(X) ::= class_flags(A) UI.						{ X.Flags = A.Flags | ZCC_UIFlag; X.Replaces = A.Replaces; X.Version = A.Version; X.Sealed =  A.Sealed; }
-class_flags(X) ::= class_flags(A) PLAY.						{ X.Flags = A.Flags | ZCC_Play; X.Replaces = A.Replaces; X.Version = A.Version; X.Sealed =  A.Sealed; }
-class_flags(X) ::= class_flags(A) REPLACES dottable_id(B).	{ X.Flags = A.Flags; X.Replaces = B; X.Version = A.Version; X.Sealed = A.Sealed; }
-class_flags(X) ::= class_flags(A) VERSION LPAREN STRCONST(C) RPAREN.	{ X.Flags = A.Flags | ZCC_Version; X.Replaces = A.Replaces; X.Version = C.String->GetChars(); X.Sealed =  A.Sealed; }
-class_flags(X) ::= class_flags(A) SEALED LPAREN states_opt(B) RPAREN.		{ X.Flags = A.Flags | ZCC_Sealed; X.Replaces = A.Replaces; X.Version = A.Version; X.Sealed = B; }
+class_flags(X) ::= .										{ X.Flags = 0; X.Replaces = NULL; X.Version = {0,0}; X.Sealed = NULL; X.DeprecationMessage = NULL; }
+class_flags(X) ::= class_flags(A) ABSTRACT.					{ X.Flags = A.Flags | ZCC_Abstract; X.Replaces = A.Replaces; X.Version = A.Version; X.Sealed = A.Sealed; X.DeprecationMessage = A.DeprecationMessage; }
+class_flags(X) ::= class_flags(A) FINAL.					{ X.Flags = A.Flags | ZCC_Final; X.Replaces = A.Replaces; X.Version = A.Version; X.Sealed = A.Sealed; X.DeprecationMessage = A.DeprecationMessage; }
+class_flags(X) ::= class_flags(A) UNIT.						{ X.Flags = A.Flags | ZCC_Unit;  X.Replaces = A.Replaces; X.Version = A.Version; X.Sealed =  A.Sealed; }
+class_flags(X) ::= class_flags(A) NATIVE.					{ X.Flags = A.Flags | ZCC_Native; X.Replaces = A.Replaces; X.Version = A.Version; X.Sealed = A.Sealed; X.DeprecationMessage = A.DeprecationMessage; }
+class_flags(X) ::= class_flags(A) UI.						{ X.Flags = A.Flags | ZCC_UIFlag; X.Replaces = A.Replaces; X.Version = A.Version; X.Sealed = A.Sealed; X.DeprecationMessage = A.DeprecationMessage; }
+class_flags(X) ::= class_flags(A) PLAY.						{ X.Flags = A.Flags | ZCC_Play; X.Replaces = A.Replaces; X.Version = A.Version; X.Sealed = A.Sealed; X.DeprecationMessage = A.DeprecationMessage; }
+class_flags(X) ::= class_flags(A) REPLACES dottable_id(B).	{ X.Flags = A.Flags; X.Replaces = B; X.Version = A.Version; X.Sealed = A.Sealed; X.DeprecationMessage = A.DeprecationMessage; }
+class_flags(X) ::= class_flags(A) VERSION LPAREN STRCONST(C) RPAREN.	{ X.Flags = A.Flags | ZCC_Version; X.Replaces = A.Replaces; X.Version = C.String->GetChars(); X.Sealed = A.Sealed; X.DeprecationMessage = A.DeprecationMessage; }
+class_flags(X) ::= class_flags(A) SEALED LPAREN states_opt(B) RPAREN.		{ X.Flags = A.Flags | ZCC_Sealed; X.Replaces = A.Replaces; X.Version = A.Version; X.Sealed = B; X.DeprecationMessage = A.DeprecationMessage; }
+
+class_flags(X) ::= class_flags(A) DEPRECATED LPAREN STRCONST(C) opt_deprecation_message(D) RPAREN.
+{
+	X.Flags = A.Flags | ZCC_Deprecated;
+	X.Replaces = A.Replaces;
+	X.Version = C.String->GetChars();
+	X.Sealed =  A.Sealed;
+	X.DeprecationMessage = D.String;
+}
 
 /*----- Dottable Identifier -----*/
 // This can be either a single identifier or two identifiers connected by a .
@@ -413,6 +425,7 @@ struct_def(X) ::= STRUCT(T) IDENTIFIER(A) struct_flags(S) LBRACE opt_struct_body
 	def->Symbol = nullptr;
 	def->Version = S.Version;
 	def->Flags = S.Flags;
+	def->DeprecationMessage = S.DeprecationMessage;
 	X = def;
 }
 
@@ -423,18 +436,28 @@ struct_def(X) ::= EXTEND STRUCT(T) IDENTIFIER(A) LBRACE opt_struct_body(B) RBRAC
 	def->Body = B;
 	def->Type = nullptr;
 	def->Symbol = nullptr;
+	def->Version = {0, 0};
 	def->Flags = ZCC_Extension;
+	def->DeprecationMessage = nullptr;
 	X = def;
 }
 
 %type struct_flags{ClassFlagsBlock}
-struct_flags(X) ::= .										{ X.Flags = 0; X.Version = {0, 0}; }
-struct_flags(X) ::= struct_flags(A) UI.						{ X.Flags = A.Flags | ZCC_UIFlag; }
-struct_flags(X) ::= struct_flags(A) PLAY.					{ X.Flags = A.Flags | ZCC_Play; }
-struct_flags(X) ::= struct_flags(A) CLEARSCOPE.				{ X.Flags = A.Flags | ZCC_ClearScope; }
-struct_flags(X) ::= struct_flags(A) NATIVE.					{ X.Flags = A.Flags | ZCC_Native; }
-struct_flags(X) ::= struct_flags(A) UNIT.					{ X.Flags = A.Flags | ZCC_Unit; }
-struct_flags(X) ::= struct_flags(A) VERSION LPAREN STRCONST(C) RPAREN.	{ X.Flags = A.Flags | ZCC_Version; X.Version = C.String->GetChars(); }
+struct_flags(X) ::= .													{ X.Flags = 0; X.Version = {0, 0}; X.DeprecationMessage = NULL; }
+struct_flags(X) ::= struct_flags(A) UI.									{ X.Flags = A.Flags | ZCC_UIFlag; X.Version = A.Version; X.DeprecationMessage = A.DeprecationMessage; }
+struct_flags(X) ::= struct_flags(A) PLAY.								{ X.Flags = A.Flags | ZCC_Play; X.Version = A.Version; X.DeprecationMessage = A.DeprecationMessage; }
+struct_flags(X) ::= struct_flags(A) CLEARSCOPE.							{ X.Flags = A.Flags | ZCC_ClearScope; X.Version = A.Version; X.DeprecationMessage = A.DeprecationMessage; }
+struct_flags(X) ::= struct_flags(A) NATIVE.								{ X.Flags = A.Flags | ZCC_Native; X.Version = A.Version; X.DeprecationMessage = A.DeprecationMessage; }
+struct_flags(X) ::= struct_flags(A) UNIT.								{ X.Flags = A.Flags | ZCC_Unit; X.Version = A.Version; X.DeprecationMessage = A.DeprecationMessage; }
+struct_flags(X) ::= struct_flags(A) UNSAFE LPAREN INTERNAL RPAREN.		{ X.Flags = A.Flags | ZCC_VMInternalStruct; X.Version = A.Version; X.DeprecationMessage = A.DeprecationMessage; }
+struct_flags(X) ::= struct_flags(A) VERSION LPAREN STRCONST(C) RPAREN.	{ X.Flags = A.Flags | ZCC_Version; X.Version = C.String->GetChars(); X.DeprecationMessage = A.DeprecationMessage; }
+
+struct_flags(X) ::= struct_flags(A) DEPRECATED LPAREN STRCONST(C) opt_deprecation_message(D) RPAREN.
+{
+	X.Flags = A.Flags | ZCC_Deprecated;
+	X.Version = C.String->GetChars();
+	X.DeprecationMessage = D.String;
+}
 
 opt_struct_body(X) ::= .								{ X = NULL; }
 opt_struct_body(X) ::= struct_body(X).
@@ -959,6 +982,7 @@ type_name(X) ::= DOT dottable_id(A).
 
 /* Aggregate types */
 %type aggregate_type {ZCC_Type *}
+%type aggregate_type_pre {ZCC_Type *}
 %type type {ZCC_Type *}
 %type type_list {ZCC_Type *}
 %type type_list_or_void {ZCC_Type *}
@@ -967,30 +991,92 @@ type_name(X) ::= DOT dottable_id(A).
 %type array_size{ZCC_Expression *}
 %type array_size_expr{ZCC_Expression *}
 
-aggregate_type(X) ::= MAP(T) LT type_or_array(A) COMMA type_or_array(B) GT.	/* ZSMap<K, V> */
+aggregate_type_pre(X) ::= MAP(T) LT type_or_array(A) COMMA type_or_array(B).	/* ZSMap<K, V> */
 {
 	NEW_AST_NODE(MapType,map,T);
 	map->KeyType = A;
 	map->ValueType = B;
 	X = map;
+	X->ArraySize = NULL;
 }
 
-aggregate_type(X) ::= MAPITERATOR(T) LT type_or_array(A) COMMA type_or_array(B) GT.	/* ZSMapIterator<K, V> */
+aggregate_type_pre(X) ::= MAPITERATOR(T) LT type_or_array(A) COMMA type_or_array(B).	/* ZSMapIterator<K, V> */
 {
 	NEW_AST_NODE(MapIteratorType,map_it,T);
 	map_it->KeyType = A;
 	map_it->ValueType = B;
 	X = map_it;
+	X->ArraySize = NULL;
 }
 
-aggregate_type(X) ::= ARRAY(T) LT type_or_array(A) GT.							/* TArray<type> */
+aggregate_type_pre(X) ::= ARRAY(T) LT type_or_array(A).							/* TArray<type> */
 {
 	NEW_AST_NODE(DynArrayType,arr,T);
 	arr->ElementType = A;
 	X = arr;
+	X->ArraySize = NULL;
 }
 
-aggregate_type(X) ::= func_ptr_type(A). { X = A; /*X-overwrites-A*/ }
+aggregate_type_pre(X) ::= func_ptr_type(A). { X = A; /*X-overwrites-A*/ X->ArraySize = NULL; }
+
+aggregate_type_pre(X) ::= CLASS(T) LT dottable_id(A). /* class<type> */
+{
+	NEW_AST_NODE(ClassType,cls,T);
+	cls->Restriction = A;
+	X = cls;
+	X->ArraySize = NULL;
+}
+
+aggregate_type(X) ::= aggregate_type_pre(A) GT. { X = A; X->ArraySize = NULL; }
+
+aggregate_type(X) ::= MAP(T) LT type_or_array(A) COMMA aggregate_type_pre(B) RSH.	/* ZSMap<K, V<...>> */
+{
+	if(!stat->sc->CheckParseVersion(MakeVersion(4, 15, 1)))
+	{
+		stat->sc->ScriptMessage(">> without space in parametrized types only supported for zscript >= 4.15.1");
+		FScriptPosition::ErrorCounter++;
+	}
+	NEW_AST_NODE(MapType,map,T);
+	map->KeyType = A;
+	map->ValueType = B;
+	X = map;
+	X->ArraySize = NULL;
+}
+
+aggregate_type(X) ::= MAPITERATOR(T) LT type_or_array(A) COMMA aggregate_type_pre(B) RSH.	/* ZSMapIterator<K, V<...>> */
+{
+	if(!stat->sc->CheckParseVersion(MakeVersion(4, 15, 1)))
+	{
+		stat->sc->ScriptMessage(">> without space in parametrized types only supported for zscript >= 4.15.1");
+		FScriptPosition::ErrorCounter++;
+	}
+	NEW_AST_NODE(MapIteratorType,map_it,T);
+	map_it->KeyType = A;
+	map_it->ValueType = B;
+	X = map_it;
+	X->ArraySize = NULL;
+}
+
+aggregate_type(X) ::= ARRAY(T) LT aggregate_type_pre(A) RSH. /* TArray<T<...>> */
+{
+	if(!stat->sc->CheckParseVersion(MakeVersion(4, 15, 1)))
+	{
+		stat->sc->ScriptMessage(">> without space in parametrized types only supported for zscript >= 4.15.1");
+		FScriptPosition::ErrorCounter++;
+	}
+	NEW_AST_NODE(DynArrayType,arr,T);
+	arr->ElementType = A;
+	X = arr;
+	X->ArraySize = NULL;
+}
+
+aggregate_type(X) ::= CLASS(T).							/* class<type> */
+{
+	NEW_AST_NODE(ClassType,cls,T);
+	cls->Restriction = NULL;
+	X = cls;
+	X->ArraySize = NULL;
+}
 
 %type func_ptr_type {ZCC_FuncPtrType *}
 %type func_ptr_params {ZCC_FuncPtrParamDecl *}
@@ -1004,7 +1090,7 @@ fn_ptr_flag(X) ::= CLEARSCOPE.		{ X.Int = ZCC_ClearScope; }
 //fn_ptr_flag(X) ::= VIRTUALSCOPE.	{ X.Int = ZCC_VirtualScope; }	//virtual scope not allowed
 
 
-func_ptr_type(X) ::= FNTYPE(T) LT fn_ptr_flag(F) type_list_or_void(A) LPAREN func_ptr_params(B) RPAREN GT. /* Function<...(...)> */
+func_ptr_type(X) ::= FNTYPE(T) LT fn_ptr_flag(F) type_list_or_void(A) LPAREN func_ptr_params(B) RPAREN. /* Function<...(...)> */
 {
 	NEW_AST_NODE(FuncPtrType,fn_ptr,T);
 	fn_ptr->RetType = A;
@@ -1013,7 +1099,7 @@ func_ptr_type(X) ::= FNTYPE(T) LT fn_ptr_flag(F) type_list_or_void(A) LPAREN fun
 	X = fn_ptr;
 }
 
-func_ptr_type(X) ::= FNTYPE(T) LT VOID GT. /* Function<void> */
+func_ptr_type(X) ::= FNTYPE(T) LT VOID. /* Function<void> */
 {
 	NEW_AST_NODE(FuncPtrType,fn_ptr,T);
 	fn_ptr->RetType = nullptr;
@@ -1054,15 +1140,6 @@ func_ptr_param(X) ::= func_param_flags(A) type(B) AND.
 	parm->Flags = A.Int | ZCC_Out;
 	X = parm;
 }
-
-aggregate_type(X) ::= CLASS(T) class_restrictor(A).							/* class<type> */
-{
-	NEW_AST_NODE(ClassType,cls,T);
-	cls->Restriction = A;
-	X = cls;
-}
-class_restrictor(X) ::= .						{ X = NULL; }
-class_restrictor(X) ::= LT dottable_id(A) GT.	{ X = A; /*X-overwrites-A*/ }
 
 type(X) ::= type_name(A).					{ X = A; /*X-overwrites-A*/ X->ArraySize = NULL; }
 type(X) ::= aggregate_type(A).				{ X = A; /*X-overwrites-A*/ X->ArraySize = NULL; }
@@ -1317,10 +1394,12 @@ decl_flag(X) ::= VARARG(T).     { X.Int = ZCC_VarArg; X.SourceLoc = T.SourceLoc;
 decl_flag(X) ::= UI(T).			{ X.Int = ZCC_UIFlag; X.SourceLoc = T.SourceLoc; }
 decl_flag(X) ::= PLAY(T).		{ X.Int = ZCC_Play; X.SourceLoc = T.SourceLoc; }
 decl_flag(X) ::= CLEARSCOPE(T). { X.Int = ZCC_ClearScope; X.SourceLoc = T.SourceLoc; }
+decl_flag(X) ::= UNSAFE(T) LPAREN CLEARSCOPE RPAREN. { X.Int = ZCC_UnsafeClearScope; X.SourceLoc = T.SourceLoc; }
 decl_flag(X) ::= VIRTUALSCOPE(T). { X.Int = ZCC_VirtualScope; X.SourceLoc = T.SourceLoc; }
 
-func_const(X) ::= .							{ X.Int = 0; X.SourceLoc = stat->sc->GetMessageLine(); }
-func_const(X) ::= CONST(T).					{ X.Int = ZCC_FuncConst; X.SourceLoc = T.SourceLoc; }
+func_const(X) ::= .									{ X.Int = 0; X.SourceLoc = stat->sc->GetMessageLine(); }
+func_const(X) ::= CONST(T).							{ X.Int = ZCC_FuncConst; X.SourceLoc = T.SourceLoc; }
+func_const(X) ::= UNSAFE(T) LPAREN CONST RPAREN.	{ X.Int = ZCC_FuncConstUnsafe; X.SourceLoc = T.SourceLoc; }
 
 opt_func_body(X) ::= SEMICOLON.				{ X = NULL; }
 opt_func_body(X) ::= function_body(X).
@@ -1477,7 +1556,7 @@ primary(X) ::= LPAREN CLASS LT IDENTIFIER(A) GT RPAREN LPAREN func_expr_list(B) 
 	X = expr;
 }
 
-primary(X) ::= LPAREN func_ptr_type(A) RPAREN LPAREN expr(B) RPAREN. [DOT]		// function pointer type cast
+primary(X) ::= LPAREN func_ptr_type(A) GT RPAREN LPAREN expr(B) RPAREN. [DOT]		// function pointer type cast
 {
 	NEW_AST_NODE(FunctionPtrCast, expr, A);
 	expr->Operation = PEX_FunctionPtrCast;

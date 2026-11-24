@@ -33,7 +33,7 @@ vec2 lightAttenuation(int i, vec3 normal, vec3 viewdir, float lightcolorA, float
 
 vec3 ProcessMaterialLight(Material material, vec3 color)
 {
-	vec4 dynlight = uDynLightColor;
+	vec4 dynlight = uDynLightColor + uLightProbeColor;
 	vec4 specular = vec4(0.0, 0.0, 0.0, 1.0);
 
 	vec3 normal = material.Normal;

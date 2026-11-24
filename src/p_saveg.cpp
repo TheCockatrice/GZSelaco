@@ -989,7 +989,7 @@ void FLevelLocals::Serialize(FSerializer &arc, bool hubload)
 				I_Error("Failed to load savegame");
 			}
 			else {
-				I_Error2(4, arc.fullErrorMessage.GetChars());
+				I_Error2(4, "%s", arc.fullErrorMessage.GetChars());
 			}
 		}
 	}
@@ -1003,6 +1003,8 @@ void FLevelLocals::Serialize(FSerializer &arc, bool hubload)
 		("flags2", flags2)
 		("flags3", flags3)
 		("fadeto", fadeto)
+		("skyspeed1", skyspeed1)
+		("skyspeed2", skyspeed2)
 		("found_secrets", found_secrets)
 		("found_items", found_items)
 		("killed_monsters", killed_monsters)

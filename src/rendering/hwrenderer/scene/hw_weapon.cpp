@@ -91,7 +91,7 @@ void HWDrawInfo::DrawPSprite(HUDSprite *huds, FRenderState &state)
 		state.AlphaFunc(Alpha_GEqual, 0);
 
 		FHWModelRenderer renderer(this, state, huds->lightindex);
-		RenderHUDModel(&renderer, huds->weapon, huds->translation, huds->rotation + FVector3(huds->mx / 4., (huds->my - WEAPONTOP) / -4., 0), huds->pivot, huds->mframe);
+		RenderHUDModel(&renderer, huds->weapon, huds->translation, huds->rotation + FVector3(huds->mx / 4., (huds->my - WEAPONTOP) / -4., 0), huds->pivot, huds->mframe, Viewpoint.TicFrac);
 		state.SetVertexBuffer(screen->mVertexData);
 	}
 	else
@@ -109,6 +109,7 @@ void HWDrawInfo::DrawPSprite(HUDSprite *huds, FRenderState &state)
 	state.SetObjectColor(0xffffffff);
 	state.SetAddColor(0);
 	state.SetDynLight(0, 0, 0);
+	state.SetLightProbe(0, 0, 0);
 	state.EnableBrightmap(false);
 }
 
@@ -851,6 +852,14 @@ void HWDrawInfo::PreparePlayerSprites2D(sector_t * viewsector, area_t in_area)
 			GetDynSpriteLight(playermo, nullptr, hudsprite.dynrgb);
 		}
 
+		FVector3 probeColor;
+		if (TryGetLightProbeColor(Level, (float)playermo->X(), (float)playermo->Y(), (float)playermo->Center(), probeColor))
+		{
+			hudsprite.dynrgb[0] += probeColor.X;
+			hudsprite.dynrgb[1] += probeColor.Y;
+			hudsprite.dynrgb[2] += probeColor.Z;
+		}
+
 		if (!hudsprite.GetWeaponRect(this, psp, spos.X, spos.Y, player, vp.TicFrac)) continue;
 		hudsprites.Push(hudsprite);
 	}
@@ -953,12 +962,12 @@ void HWDrawInfo::PreparePlayerSprites3D(sector_t * viewsector, area_t in_area)
 		{
 			hw_GetDynModelLight(playermo, lightdata, vp.TicFrac);
 			hudsprite.lightindex = screen->mLights->UploadLights(lightdata);
-			LightProbe* probe = FindLightProbe(playermo->Level, playermo->X(), playermo->Y(), playermo->Center());
-			if (probe)
+			FVector3 probeColor;
+			if (TryGetLightProbeColor(playermo->Level, playermo->X(), playermo->Y(), playermo->Center(), probeColor))
 			{
-				hudsprite.dynrgb[0] = probe->Red;
-				hudsprite.dynrgb[1] = probe->Green;
-				hudsprite.dynrgb[2] = probe->Blue;
+				hudsprite.dynrgb[0] = probeColor.X;
+				hudsprite.dynrgb[1] = probeColor.Y;
+				hudsprite.dynrgb[2] = probeColor.Z;
 			}
 		}
 

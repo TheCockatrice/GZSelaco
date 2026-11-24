@@ -1082,7 +1082,8 @@ static float ZeroLightmapUVs[8] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.
 //
 //==========================================================================
 bool HWWall::SetWallCoordinates(seg_t * seg, FTexCoordInfo *tci, float texturetop,
-	float topleft, float topright, float bottomleft, float bottomright, float t_ofs, float skew)
+	float topleft, float topright, float bottomleft, float bottomright, float t_ofs, float skew, 
+	float* clipOfs)
 {
 	//
 	//
@@ -1118,6 +1119,11 @@ bool HWWall::SetWallCoordinates(seg_t * seg, FTexCoordInfo *tci, float textureto
 		lindex = -1.0f;
 	}
 
+	lightuv[UPLFT].v = srclightuv[UPLFT].v;
+	lightuv[LOLFT].v = srclightuv[LOLFT].v;
+	lightuv[UPRGT].v = srclightuv[UPRGT].v;
+	lightuv[LORGT].v = srclightuv[LORGT].v;
+
 	//
 	//
 	// set up coordinates for the left side of the polygon
@@ -1135,8 +1141,8 @@ bool HWWall::SetWallCoordinates(seg_t * seg, FTexCoordInfo *tci, float textureto
 			tcs[LOLFT].v = tci->FloatToTexV(-zbottom[0] + texturetop);
 		}
 
-		lightuv[UPLFT].v = srclightuv[UPLFT].v;
-		lightuv[LOLFT].v = srclightuv[LOLFT].v;
+		//lightuv[UPLFT].v = srclightuv[UPLFT].v;
+		//lightuv[LOLFT].v = srclightuv[LOLFT].v;
 	}
 	else
 	{
@@ -1158,8 +1164,8 @@ bool HWWall::SetWallCoordinates(seg_t * seg, FTexCoordInfo *tci, float textureto
 			tcs[LOLFT].v = tcs[UPLFT].v = tci->FloatToTexV(-ztop[0] + texturetop);
 		}
 
-		lightuv[UPLFT].v = srclightuv[UPLFT].v + inter_x * (srclightuv[UPRGT].v - srclightuv[UPLFT].v);
-		lightuv[LOLFT].v = srclightuv[LOLFT].v + inter_x * (srclightuv[LORGT].v - srclightuv[LOLFT].v);
+		//lightuv[UPLFT].v = srclightuv[UPLFT].v + inter_x * (srclightuv[UPRGT].v - srclightuv[UPLFT].v);
+		//lightuv[LOLFT].v = srclightuv[LOLFT].v + inter_x * (srclightuv[LORGT].v - srclightuv[LOLFT].v);
 	}
 
 	//
@@ -1179,8 +1185,8 @@ bool HWWall::SetWallCoordinates(seg_t * seg, FTexCoordInfo *tci, float textureto
 			tcs[LORGT].v = tci->FloatToTexV(-zbottom[1] + texturetop + skew);
 		}
 
-		lightuv[UPRGT].v = srclightuv[UPRGT].v;
-		lightuv[LORGT].v = srclightuv[LORGT].v;
+// 		lightuv[UPRGT].v = srclightuv[UPRGT].v;
+// 		lightuv[LORGT].v = srclightuv[LORGT].v;
 	}
 	else
 	{
@@ -1201,8 +1207,8 @@ bool HWWall::SetWallCoordinates(seg_t * seg, FTexCoordInfo *tci, float textureto
 			tcs[LORGT].v = tcs[UPRGT].v = tci->FloatToTexV(-ztop[1] + texturetop + skew);
 		}
 
-		lightuv[UPRGT].v = srclightuv[UPRGT].v + inter_x * (srclightuv[UPRGT].v - srclightuv[UPLFT].v);
-		lightuv[LORGT].v = srclightuv[LORGT].v + inter_x * (srclightuv[LORGT].v - srclightuv[LOLFT].v);
+// 		lightuv[UPRGT].v = srclightuv[UPRGT].v + inter_x * (srclightuv[UPRGT].v - srclightuv[UPLFT].v);
+// 		lightuv[LORGT].v = srclightuv[LORGT].v + inter_x * (srclightuv[LORGT].v - srclightuv[LOLFT].v);
 	}
 
 	tcs[UPLFT].u = tcs[LOLFT].u = l_ul + texlength * glseg.fracleft;
@@ -1212,6 +1218,14 @@ bool HWWall::SetWallCoordinates(seg_t * seg, FTexCoordInfo *tci, float textureto
 	lightuv[LOLFT].u = srclightuv[LOLFT].u + (srclightuv[LORGT].u - srclightuv[LOLFT].u) * glseg.fracleft;
 	lightuv[UPRGT].u = srclightuv[UPLFT].u + (srclightuv[UPRGT].u - srclightuv[UPLFT].u) * glseg.fracright;
 	lightuv[LORGT].u = srclightuv[LOLFT].u + (srclightuv[LORGT].u - srclightuv[LOLFT].u) * glseg.fracright;
+
+	if (clipOfs)
+	{
+		lightuv[UPLFT].v += (srclightuv[UPLFT].v - srclightuv[LOLFT].v) * clipOfs[UPLFT];
+		lightuv[UPRGT].v += (srclightuv[UPRGT].v - srclightuv[LORGT].v) * clipOfs[UPRGT];
+		lightuv[LOLFT].v += (srclightuv[UPLFT].v - srclightuv[LOLFT].v) * clipOfs[LOLFT];
+		lightuv[LORGT].v += (srclightuv[UPRGT].v - srclightuv[LORGT].v) * clipOfs[LORGT];
+	}
 
 	if (texture != NULL)
 	{
@@ -1324,7 +1338,9 @@ void HWWall::DoTexture(HWWallDispatcher *di, int _type,seg_t * seg, int peg,
 					   float ceilingrefheight,float floorrefheight,
 					   float topleft,float topright,
 					   float bottomleft,float bottomright,
-					   float v_offset, float skew)
+					   float v_offset, float skew,
+                       float preclip_topleft, float preclip_topright,
+					   float preclip_bottomleft, float preclip_bottomright)
 {
 	if (topleft<=bottomleft && topright<=bottomright) return;
 
@@ -1365,8 +1381,25 @@ void HWWall::DoTexture(HWWallDispatcher *di, int _type,seg_t * seg, int peg,
 	float floatceilingref = ceilingrefheight + tci.RowOffset(seg->sidedef->GetTextureYOffset(texpos));
 	if (peg) floatceilingref += tci.mRenderHeight - flh - v_offset;
 
+	float clipOfs[4] = { 0 };
+
+	float cliphl = preclip_topleft - preclip_bottomleft;
+	float cliphr = preclip_topright - preclip_bottomright;
+	
+	if (cliphl != 0)
+	{
+		clipOfs[UPLFT] = (topleft - preclip_topleft) / cliphl;
+		clipOfs[LOLFT] = (bottomleft - preclip_bottomleft) / cliphl;
+	}
+
+	if (cliphr != 0)
+	{
+		clipOfs[UPRGT] = (topright - preclip_topright) / cliphr;
+		clipOfs[LORGT] = (bottomright - preclip_bottomright) / cliphr;
+	}
+
 	if (!SetWallCoordinates(seg, &tci, floatceilingref, topleft, topright, bottomleft, bottomright, 
-							seg->sidedef->GetTextureXOffset(texpos), skew)) return;
+							seg->sidedef->GetTextureXOffset(texpos), skew, clipOfs)) return;
 
 	if (seg->linedef->special == Line_Mirror && _type == RENDERWALL_M1S && gl_mirrors && !(di->Level->ib_compatflags & BCOMPATF_NOMIRRORS))
 	{
@@ -1408,6 +1441,16 @@ void HWWall::DoMidTexture(HWWallDispatcher *di, seg_t * seg, bool drawfogboundar
 	bool wrap = (seg->linedef->flags&ML_WRAP_MIDTEX) || (seg->sidedef->Flags&WALLF_WRAP_MIDTEX);
 	bool mirrory = false;
 	float rowoffset = 0;
+
+	if (seg->sidedef->lightmap)
+	{
+		uint8_t wallType = drawfogboundary ? RENDERWALL_M2SNF : RENDERWALL_M2S;
+		lightmap = &seg->sidedef->lightmap[wallType - RENDERWALL_TOP];
+	}
+	else
+	{
+		lightmap = nullptr;
+	}
 
 	//
 	//
@@ -1597,7 +1640,33 @@ void HWWall::DoMidTexture(HWWallDispatcher *di, seg_t * seg, bool drawfogboundar
 		// mid textures on portal lines need the same offsetting as mid textures on sky lines
 		flags |= HWF_SKYHACK;
 	}
-	SetWallCoordinates(seg, &tci, texturetop, topleft, topright, bottomleft, bottomright, t_ofs, skew);
+
+	float preclip_topleft = bch1;
+	float preclip_topright = bch2;
+	float preclip_bottomleft = bfh1;
+	float preclip_bottomright = bfh2;
+
+	float cliphl = preclip_topleft - preclip_bottomleft;
+	float cliphr = preclip_topright - preclip_bottomright;
+
+	float clipOfs[4] = { 0 };
+
+	if (!wrap) // Don't clip wrapped midtexture lightmap coords, since they take up the full space
+	{
+		if (cliphl != 0)
+		{
+			clipOfs[UPLFT] = (topleft - preclip_topleft) / cliphl;
+			clipOfs[LOLFT] = (bottomleft - preclip_bottomleft) / cliphl;
+		}
+
+		if (cliphr != 0)
+		{
+			clipOfs[UPRGT] = (topright - preclip_topright) / cliphr;
+			clipOfs[LORGT] = (bottomright - preclip_bottomright) / cliphr;
+		}
+	}
+
+	SetWallCoordinates(seg, &tci, texturetop, topleft, topright, bottomleft, bottomright, t_ofs, skew, clipOfs);
 
 	//
 	//
@@ -1723,6 +1792,7 @@ void HWWall::DoMidTexture(HWWallDispatcher *di, seg_t * seg, bool drawfogboundar
 	glseg=glsave;
 	flags&=~(HWF_CLAMPX|HWF_CLAMPY|HWF_NOSPLITUPPER|HWF_NOSPLITLOWER);
 	RenderStyle = STYLE_Normal;
+	lightmap = nullptr;
 }
 
 
@@ -1733,7 +1803,9 @@ void HWWall::DoMidTexture(HWWallDispatcher *di, seg_t * seg, bool drawfogboundar
 //==========================================================================
 void HWWall::BuildFFBlock(HWWallDispatcher *di, seg_t * seg, F3DFloor * rover, int roverIndex,
 	float ff_topleft, float ff_topright,
-	float ff_bottomleft, float ff_bottomright)
+	float ff_bottomleft, float ff_bottomright,
+	float preclip_topleft, float preclip_topright,
+	float preclip_bottomleft, float preclip_bottomright)
 {
 	side_t * mastersd = rover->master->sidedef[0];
 	float to;
@@ -1752,7 +1824,7 @@ void HWWall::BuildFFBlock(HWWallDispatcher *di, seg_t * seg, F3DFloor * rover, i
 		lightmap = seg->linedef->sidedef[0]->lightmap;
 
 	if (lightmap)
-		lightmap += 4 + roverIndex;
+		lightmap += 4 + rover->lmindex;
 
 	if (rover->flags&FF_FOG)
 	{
@@ -1834,6 +1906,25 @@ void HWWall::BuildFFBlock(HWWallDispatcher *di, seg_t * seg, F3DFloor * rover, i
 		lightuv[UPRGT].v = srclightuv[UPRGT].v;
 		lightuv[LOLFT].v = srclightuv[LOLFT].v;
 		lightuv[LORGT].v = srclightuv[LORGT].v;
+
+		float cliphl = preclip_topleft - preclip_bottomleft;
+		float cliphr = preclip_topright - preclip_bottomright;
+
+		if (cliphl != 0)
+		{
+			float clipOfTop = (ff_topleft - preclip_topleft) / cliphl;
+			float clipOfBottom = (ff_bottomleft - preclip_bottomleft) / cliphl;
+			lightuv[UPLFT].v += (srclightuv[UPLFT].v - srclightuv[LOLFT].v) * clipOfTop;
+			lightuv[LOLFT].v += (srclightuv[UPLFT].v - srclightuv[LOLFT].v) * clipOfBottom;
+		}
+
+		if (cliphr != 0)
+		{
+			float clipOfTop = (ff_topright - preclip_topright) / cliphr;
+			float clipOfBottom = (ff_bottomright - preclip_bottomright) / cliphr;
+			lightuv[UPRGT].v += (srclightuv[UPRGT].v - srclightuv[LORGT].v) * clipOfTop;
+			lightuv[LORGT].v += (srclightuv[UPRGT].v - srclightuv[LORGT].v) * clipOfBottom;
+		}
 	}
 
 	ztop[0] = ff_topleft;
@@ -1907,6 +1998,11 @@ void HWWall::InverseFloors(HWWallDispatcher *di, seg_t * seg, sector_t * frontse
 		GetPlanePos(&rover->top, ff_topleft, ff_topright);
 		GetPlanePos(&rover->bottom, ff_bottomleft, ff_bottomright);
 
+		float preclip_topleft = ff_topleft;
+		float preclip_topright = ff_topright;
+		float preclip_bottomleft = ff_bottomleft;
+		float preclip_bottomright = ff_bottomright;
+
 		// above ceiling
 		if (ff_bottomleft > topleft && ff_bottomright > topright) continue;
 
@@ -1923,7 +2019,7 @@ void HWWall::InverseFloors(HWWallDispatcher *di, seg_t * seg, sector_t * frontse
 		}
 		if (ff_topleft < ff_bottomleft || ff_topright < ff_bottomright) continue;
 
-		BuildFFBlock(di, seg, rover, i, ff_topleft, ff_topright, ff_bottomleft, ff_bottomright);
+		BuildFFBlock(di, seg, rover, i, ff_topleft, ff_topright, ff_bottomleft, ff_bottomright, preclip_topleft, preclip_topright, preclip_bottomleft, preclip_bottomright);
 		topleft = ff_bottomleft;
 		topright = ff_bottomright;
 
@@ -1968,6 +2064,11 @@ void HWWall::ClipFFloors(HWWallDispatcher *di, seg_t * seg, F3DFloor * ffloor, i
 		// above top line?
 		if (ff_bottomleft > topleft && ff_bottomright > topright) continue;
 
+		float preclip_topleft = ff_topleft;
+		float preclip_topright = ff_topright;
+		float preclip_bottomleft = ff_bottomleft;
+		float preclip_bottomright = ff_bottomright;
+
 		// overlapping the top line
 		if (ff_topleft >= topleft && ff_topright >= topright)
 		{
@@ -1987,7 +2088,7 @@ void HWWall::ClipFFloors(HWWallDispatcher *di, seg_t * seg, F3DFloor * ffloor, i
 		}
 		else if (ff_topleft <= topleft && ff_topright <= topright)
 		{
-			BuildFFBlock(di, seg, ffloor, ffloorIndex, topleft, topright, ff_topleft, ff_topright);
+			BuildFFBlock(di, seg, ffloor, ffloorIndex, topleft, topright, ff_topleft, ff_topright, preclip_topleft, preclip_topright, preclip_bottomleft, preclip_bottomright);
 			if (ff_bottomleft <= bottomleft && ff_bottomright <= bottomright) return;
 			topleft = ff_bottomleft;
 			topright = ff_bottomright;
@@ -2002,7 +2103,7 @@ void HWWall::ClipFFloors(HWWallDispatcher *di, seg_t * seg, F3DFloor * ffloor, i
 
 done:
 	// if the program reaches here there is one block left to draw
-	BuildFFBlock(di, seg, ffloor, ffloorIndex, topleft, topright, bottomleft, bottomright);
+	BuildFFBlock(di, seg, ffloor, ffloorIndex, topleft, topright, bottomleft, bottomright, topleft, topright, bottomleft, bottomright);
 }
 
 //==========================================================================
@@ -2059,6 +2160,11 @@ void HWWall::DoFFloorBlocks(HWWallDispatcher *di, seg_t * seg, sector_t * fronts
 		GetPlanePos(&rover->top, ff_topleft, ff_topright);
 		GetPlanePos(&rover->bottom, ff_bottomleft, ff_bottomright);
 
+		float preclip_topleft = ff_topleft;
+		float preclip_topright = ff_topright;
+		float preclip_bottomleft = ff_bottomleft;
+		float preclip_bottomright = ff_bottomright;
+
 		// completely above ceiling
 		if (ff_bottomleft > topleft && ff_bottomright > topright && !renderedsomething) continue;
 
@@ -2078,7 +2184,7 @@ void HWWall::DoFFloorBlocks(HWWallDispatcher *di, seg_t * seg, sector_t * fronts
 		if (rover->flags&(FF_SWIMMABLE | FF_TRANSLUCENT))
 			ClipFFloors(di, seg, rover, i, frontsector, ff_topleft, ff_topright, ff_bottomleft, ff_bottomright);
 		else
-			BuildFFBlock(di, seg, rover, i, ff_topleft, ff_topright, ff_bottomleft, ff_bottomright);
+			BuildFFBlock(di, seg, rover, i, ff_topleft, ff_topright, ff_bottomleft, ff_bottomright, preclip_topleft, preclip_topright, preclip_bottomleft, preclip_bottomright);
 
 		topleft = ff_bottomleft;
 		topright = ff_bottomright;
@@ -2279,7 +2385,8 @@ void HWWall::Process(HWWallDispatcher *di, seg_t *seg, sector_t * frontsector, s
 					skewflag == side_t::skew_front_floor ? ffh2 - ffh1 : 0.;
 				DoTexture(di, RENDERWALL_M1S, seg, (seg->linedef->flags & ML_DONTPEGBOTTOM) > 0,
 					crefz, frefz,	// must come from the original!
-					fch1, fch2, ffh1, ffh2, 0, skew);
+					fch1, fch2, ffh1, ffh2, 0, skew,
+					fch1, fch2, ffh1, ffh2);
 			}
 		}
 	}
@@ -2371,7 +2478,8 @@ void HWWall::Process(HWWallDispatcher *di, seg_t *seg, sector_t * frontsector, s
 					}
 					DoTexture(di, RENDERWALL_TOP, seg, (seg->linedef->flags & (ML_DONTPEGTOP)) == 0,
 						crefz, realback->GetPlaneTexZ(sector_t::ceiling),
-						fch1, fch2, bch1a, bch2a, 0, skew);
+						fch1, fch2, bch1a, bch2a, 0, skew,
+						fch1, fch2, bch1, bch2);
 				}
 				else if (!(seg->sidedef->Flags & WALLF_POLYOBJ))
 				{
@@ -2384,7 +2492,8 @@ void HWWall::Process(HWWallDispatcher *di, seg_t *seg, sector_t * frontsector, s
 						{
 							DoTexture(di, RENDERWALL_TOP, seg, (seg->linedef->flags & (ML_DONTPEGTOP)) == 0,
 								crefz, realback->GetPlaneTexZ(sector_t::ceiling),
-								fch1, fch2, bch1a, bch2a, 0, 0);
+								fch1, fch2, bch1a, bch2a, 0, 0,
+								fch1, fch2, bch1, bch2);
 						}
 					}
 					else
@@ -2516,7 +2625,8 @@ void HWWall::Process(HWWallDispatcher *di, seg_t *seg, sector_t * frontsector, s
 					bfh1, bfh2, ffh1, ffh2,
 					frontsector->GetTexture(sector_t::ceiling) == skyflatnum && backsector->GetTexture(sector_t::ceiling) == skyflatnum ?
 					frefz - realback->GetPlaneTexZ(sector_t::ceiling) :
-					frefz - crefz, skew);
+					frefz - crefz, skew,
+					bfh1a, bfh2a, ffh1, ffh2);
 			}
 			else if (!(seg->sidedef->Flags & WALLF_POLYOBJ))
 			{
@@ -2532,7 +2642,8 @@ void HWWall::Process(HWWallDispatcher *di, seg_t *seg, sector_t * frontsector, s
 					{
 						DoTexture(di, RENDERWALL_BOTTOM, seg, (seg->linedef->flags & ML_DONTPEGBOTTOM) > 0,
 							realback->GetPlaneTexZ(sector_t::floor), frefz,
-							bfh1, bfh2, ffh1, ffh2, frefz - crefz, 0);
+							bfh1, bfh2, ffh1, ffh2, frefz - crefz, 0,
+							bfh1a, bfh2a, ffh1, ffh2);
 					}
 				}
 				else if (backsector->GetTexture(sector_t::floor) != skyflatnum)
@@ -2605,7 +2716,7 @@ void HWWall::ProcessLowerMiniseg(HWWallDispatcher *di, seg_t *seg, sector_t * fr
 			FTexCoordInfo tci;
 			type = RENDERWALL_BOTTOM;
 			tci.GetFromTexture(texture, 1, 1, false);
-			SetWallCoordinates(seg, &tci, bfh, bfh, bfh, ffh, ffh, 0, 0);
+			SetWallCoordinates(seg, &tci, bfh, bfh, bfh, ffh, ffh, 0, 0, nullptr);
 			PutWall(di, false);
 		}
 	}

@@ -50,6 +50,7 @@
 #include "c_cvars.h"
 #include "hw_material.h"
 #include "cmdlib.h"
+#include "v_video.h"
 
 FTexture *CreateBrightmapTexture(FImageSource*);
 
@@ -251,6 +252,32 @@ void FGameTexture::CreateDefaultBrightmap()
 	}
 }
 
+bool FGameTexture::IsHardwareCacheQueued(int translation)
+{
+	for (FMaterial* mat : Material)
+	{
+		if (!mat || mat->IsHardwareCached(translation))
+		{
+			continue;
+		}
+
+		for (int i = 0; i < mat->NumLayers(); i++)
+		{
+			if (IHardwareTexture* hwtex = mat->GetLayer(i, translation))
+			{
+				auto hwState = hwtex->GetState();
+				if (hwState != IHardwareTexture::READY &&
+					hwState != IHardwareTexture::FAILED &&
+					hwState != IHardwareTexture::NONE)
+				{
+					return true;
+				}
+			}
+		}
+	}
+
+	return false;
+}
 
 //==========================================================================
 //

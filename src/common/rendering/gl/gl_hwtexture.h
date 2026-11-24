@@ -73,12 +73,14 @@ public:
 	void BindToFrameBuffer(int w, int h);
 
 	unsigned int Bind(int texunit, bool needmipmap);
-	bool BindOrCreate(FTexture* tex, int texunit, int clampmode, int translation, int flags);
+	bool BindOrCreate(FTexture* tex, int texunit, int clampmode, int translation, int flags, bool noMips = false);
 
 	void AllocateBuffer(int w, int h, int texelsize);
 	uint8_t* MapBuffer();
 
-	unsigned int CreateTexture(unsigned char* buffer, int w, int h, int texunit, bool mipmap, const char* name);
+	unsigned int CreateTexture(unsigned char* buffer, int w, int h, int texunit, bool mipmap, const char* name, bool noGLSwizzle = false);
+	unsigned int CreateCompressedTexture(unsigned char* buffer, int w, int h, int texunit, bool mipmap, CompressionFormat format, const char* name) override;
+	void Finalize() { }
 	unsigned int BackgroundCreateTexture(GLsync* fence, unsigned char* buffer, int w, int h, int texunit, bool mipmap, bool indexed, const char* name, bool forceNoMips = false);
 	unsigned int BackgroundCreateCompressedTexture(GLsync *fence, unsigned char* buffer, uint32_t dataSize, uint32_t totalSize, int w, int h, int format, int texunit, int numMips, const char* name, bool forceNoMips = false, bool allowQualityReduction = false);
 	unsigned int CreateCompressedTexture(unsigned char* buffer, uint32_t dataSize, uint32_t totalSize, int w, int h, int format, int texunit, int numMips, const char* name, bool forceNoMips = false, bool allowQualityReduction = false);

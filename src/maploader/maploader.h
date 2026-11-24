@@ -126,6 +126,7 @@ private:
 	TMap<int, EDLinedef> EDLines;
 	TMap<int, EDSector> EDSectors;
 	TMap<int, EDMapthing> EDThings;
+	uint8_t NodeChecksum[16];
 
 	// Polyobject init
 	TArray<int32_t> KnownPolySides;
@@ -235,6 +236,8 @@ private:
 	void CreateBlockMap();
 	void PO_Init(void);
 
+	void ProcessZDRayInfo(int index, FMapThing* mthing);
+
 	// During map init the items' own Index functions should not be used.
 	inline int Index(vertex_t *v) const
 	{
@@ -311,6 +314,7 @@ public:
 	void SetSubsectorLightmap(const LightmapSurface &surface);
 	void SetSideLightmap(const LightmapSurface &surface);
 	void LoadLightmap(MapData *map);
+	void LoadLightGroups(MapData* map);
 
 	void LoadLevel(MapData *map, const char *lumpname, int position);
 

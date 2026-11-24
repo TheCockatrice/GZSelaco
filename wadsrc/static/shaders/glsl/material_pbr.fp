@@ -78,7 +78,7 @@ vec3 ProcessMaterialLight(Material material, vec3 ambientLight)
 
 	vec3 F0 = mix(vec3(0.04), albedo, metallic);
 
-	vec3 Lo = uDynLightColor.rgb;
+	vec3 Lo = uDynLightColor.rgb + uLightProbeColor.rgb;
 
 	if (uLightIndex >= 0)
 	{

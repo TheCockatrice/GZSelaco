@@ -68,6 +68,7 @@ struct ParticleData
     native color        Color;
     native TextureID    Texture;
     native uint8        AnimFrame, AnimTick;
+    native int8         AnimFrameLengthTicks;
     native uint8        InvalidateTicks;
     native uint16       SleepFor;
     native int          Flags;
@@ -158,6 +159,8 @@ struct ParticleData
 
     native Actor SpawnActor(class<Actor> actor, double offsetX = 0.0, double offsetY = 0.0, double offsetZ = 0.0);
     native void PlaySound(Sound sound_id, float volume = 1, float attenuation = ATTN_NORM, float pitch = 0.0);
+    native Sector GetSector() const;
+    native bool CheckForSectorTag(int tag) const;   // @Cockatrice - Returns true if the current sector contains the specified tag
 }
 
 class ParticleDefinition native play
@@ -203,6 +206,12 @@ class ParticleDefinition native play
 	native float BounceSoundPitchMin, BounceSoundPitchMax;
 	native float BounceFudge;
 	native float MinBounceDeflect, MaxBounceDeflect;
+
+    native float AlphaFadeInTime;
+
+    native float MaxEmitDistanceStart, MaxEmitDistanceEnd;
+
+    native int MinAnimFrameLengthTicks, MaxAnimFrameLengthTicks;
 
     native int Flags;
 
@@ -260,6 +269,8 @@ class ParticleDefinition native play
     void BounceSoundPitchRange(float min, float max)        { BounceSoundPitchMin = min; BounceSoundPitchMax = max; }
     void RestorePitch(float min, float max, float speed)    { RestingPitchMin = min; RestingPitchMax = max; RestingPitchSpeed = speed; }
     void RestoreRoll(float min, float max, float speed)     { RestingRollMin = min; RestingRollMax = max; RestingRollSpeed = speed; }
+    void MaxEmitDistance(float start, float end)            { MaxEmitDistanceStart = start; MaxEmitDistanceEnd = end; }
+    void AnimFrameLengthTicks(int min, int max)             { MinAnimFrameLengthTicks = min; MaxAnimFrameLengthTicks = max; }
 
     virtual void Init() { }
     virtual void OnCreateParticle(in out ParticleData particle, Actor refActor) { }
@@ -307,21 +318,21 @@ class ParticleDefinition native play
     // Particles are removed immediately when going over this number
     static const int particleLimits[] = 
     { 
-        600,    // Low
-        900,    // Med
-        1700,   // High
-        2100,   // Ultra    
-        6000    // Insane
+        1500,   // Low
+        2000,   // Med
+        4000,   // High
+        5000,   // Ultra    
+        10000    // Insane
     };
 
     // Particles start to fade out where possible when going over this number
     static const int cullLimits[] = 
     { 
-        350,    // Low
-        500,    // Med
-        900,    // High
-        1100,   // Ultra   
-        3000    // Insane
+        700,    // Low
+        1000,   // Med
+        1800,   // High
+        2200,   // Ultra   
+        6000    // Insane
     };
 
     static int GetParticleLimit()

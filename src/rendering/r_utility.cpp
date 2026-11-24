@@ -68,7 +68,7 @@
 #include "i_interface.h"
 #include "d_main.h"
 
-const float MY_SQRT2    = 1.41421356237309504880; // sqrt(2)
+const float MY_SQRT2    = float(1.41421356237309504880); // sqrt(2)
 // EXTERNAL DATA DECLARATIONS ----------------------------------------------
 
 extern bool DrawFSHUD;		// [RH] Defined in d_main.cpp
@@ -94,8 +94,8 @@ struct InterpolationViewer
 
 // PRIVATE DATA DECLARATIONS -----------------------------------------------
 static TArray<InterpolationViewer> PastViewers;
-static FRandom pr_torchflicker ("TorchFlicker");
-static FRandom pr_hom;
+static FRandom pr_torchflicker ("TorchFlicker", true);
+static FRandom pr_hom(true);
 bool NoInterpolateView;	// GL needs access to this.
 static TArray<DVector3a> InterpolationPath;
 
@@ -928,6 +928,7 @@ static void R_DoActorTickerAngleChanges(player_t* const player, DRotator& angles
 EXTERN_CVAR(Float, chase_dist)
 EXTERN_CVAR(Float, chase_height)
 
+
 void R_SetupFrame(FRenderViewpoint& viewPoint, const FViewWindow& viewWindow, AActor* const actor)
 {
 	viewPoint.TicFrac = I_GetTimeFrac();
@@ -964,8 +965,17 @@ void R_SetupFrame(FRenderViewpoint& viewPoint, const FViewWindow& viewWindow, AA
 	iView->AngleOffsets.Zero();
 	if (iView->prevTic != -1 && curTic > iView->prevTic)
 	{
-		iView->prevTic = curTic;
-		iView->Old = iView->New;
+		// If it's been more than a tic since it was rendered, don't interpolate
+		// from whatever last position it had (it's probably no longer valid).
+		if (curTic - iView->prevTic > 1)
+		{
+			iView->prevTic = -1;
+		}
+		else
+		{
+			iView->prevTic = curTic;
+			iView->Old = iView->New;
+		}
 	}
 
 	const auto& mainView = r_viewpoint;

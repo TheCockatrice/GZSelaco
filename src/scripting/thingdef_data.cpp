@@ -357,6 +357,8 @@ static FFlagDef ActorFlagDefs[]=
 	DEFINE_FLAG(MF9, SHADOWAIMVERT, AActor, flags9),
 	DEFINE_FLAG(MF9, DECOUPLEDANIMATIONS, AActor, flags9),
 	DEFINE_FLAG(MF9, BLOCKLOS, AActor, flags9),
+	DEFINE_FLAG(MF9, MASTERLIGHTPROBES, AActor, flags9),
+	DEFINE_PROTECTED_FLAG(MF9, ISPUFF, AActor, flags9), //[AA] was spawned by SpawnPuff
 
 	// Effect flags
 	DEFINE_FLAG(FX, VISIBILITYPULSE, AActor, effects),
@@ -391,6 +393,8 @@ static FFlagDef ActorFlagDefs[]=
 	DEFINE_FLAG(RF2, NOMIPMAP, AActor, renderflags2),
 	DEFINE_FLAG(RF2, ISOMETRICSPRITES, AActor, renderflags2),
 	DEFINE_FLAG(RF2, SQUAREPIXELS, AActor, renderflags2),
+	DEFINE_FLAG(RF2, INTERPOLATESCALE, AActor, renderflags2),
+	DEFINE_FLAG(RF2, INTERPOLATEALPHA, AActor, renderflags2),
 
 	// Bounce flags
 	DEFINE_FLAG2(BOUNCE_Walls, BOUNCEONWALLS, AActor, BounceFlags),

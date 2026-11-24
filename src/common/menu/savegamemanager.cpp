@@ -259,7 +259,7 @@ void FSavegameManagerBase::DoSave(int Selected, const char *savegamestring, int 
 	if (Selected != 0)
 	{
 		auto node = SaveGames[Selected];
-		PerformSaveGame(node->Filename.GetChars(), savegamestring);
+		PerformSaveGame(node->Filename.GetChars(), savegamestring, flags);
 	}
 	else
 	{
@@ -275,7 +275,7 @@ void FSavegameManagerBase::DoSave(int Selected, const char *savegamestring, int 
 				break;
 			}
 		}
-		PerformSaveGame(filename.GetChars(), savegamestring);
+		PerformSaveGame(filename.GetChars(), savegamestring, flags);
 	}
 	M_ClearMenus();
 }

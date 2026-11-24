@@ -191,6 +191,7 @@ static const char *shaderBindings = R"(
 		vec4 uObjectColor;
 		vec4 uObjectColor2;
 		vec4 uDynLightColor;
+		vec4 uLightProbeColor;
 		vec4 uAddColor;
 		vec4 uTextureAddColor;
 		vec4 uTextureModulateColor;
@@ -216,7 +217,10 @@ static const char *shaderBindings = R"(
 
 		vec4 uDetailParms;
 		vec4 uNpotEmulation;
-		vec4 padding1, padding2, padding3;
+
+		int uHeavyProbeSampleCount, pad1, pad2, pad3;
+		mat4 uHeavyProbeSampleColors;
+		mat4 uHeavyProbeSampleDirs;
 	};
 
 	layout(set = 1, binding = 2, std140) uniform StreamUBO {
@@ -230,7 +234,7 @@ static const char *shaderBindings = R"(
 	};
 
 	// bone matrix buffers
-	layout(set = 1, binding = 4, std430) buffer BoneBufferSSO
+	layout(set = 1, binding = 4, std430) readonly buffer BoneBufferSSO
 	{
 	    mat4 bones[];
 	};
@@ -300,6 +304,7 @@ static const char *shaderBindings = R"(
 	#define uObjectColor data[uDataIndex].uObjectColor
 	#define uObjectColor2 data[uDataIndex].uObjectColor2
 	#define uDynLightColor data[uDataIndex].uDynLightColor
+	#define uLightProbeColor data[uDataIndex].uLightProbeColor
 	#define uAddColor data[uDataIndex].uAddColor
 	#define uTextureBlendColor data[uDataIndex].uTextureBlendColor
 	#define uTextureModulateColor data[uDataIndex].uTextureModulateColor
@@ -321,6 +326,9 @@ static const char *shaderBindings = R"(
 	#define uSplitBottomPlane data[uDataIndex].uSplitBottomPlane
 	#define uDetailParms data[uDataIndex].uDetailParms
 	#define uNpotEmulation data[uDataIndex].uNpotEmulation
+	#define uHeavyProbeSampleCount data[uDataIndex].uHeavyProbeSampleCount
+	#define uHeavyProbeSampleColors data[uDataIndex].uHeavyProbeSampleColors
+	#define uHeavyProbeSampleDirs data[uDataIndex].uHeavyProbeSampleDirs
 
 	#define SUPPORTS_SHADOWMAPS
 	#define VULKAN_COORDINATE_SYSTEM

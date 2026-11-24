@@ -77,7 +77,8 @@ enum EParticleEmitterFlags
     PE_ABSOLUTE_SPEED           = 1 << 7,	// Ignore random speed
     PE_ABSOLUTE_VELOCITY        = 1 << 8,	// Velocity is added in absolute coords, ignoring emitter orientation
     PE_NO_INSANE_PARTICLES      = 1 << 9,	// Do not spawn additional particles on INSANE
-    PE_ISBLOOD                  = 1 << 10	// Treat this particle as blood, same as bIsBlood on SelacoParticle
+    PE_ISBLOOD                  = 1 << 10,	// Treat this particle as blood, same as bIsBlood on SelacoParticle
+	PE_IGNORE_DISTANCE			= 1 << 11,	// Do not cull the particle based on distance from camera
 };
 
 struct particledata_t
@@ -87,6 +88,7 @@ struct particledata_t
 	uint8_t renderStyle;						// +1
 	int16_t life;								// +2 
 	int16_t startLife;							// +2 
+	int16_t tics;								// +2
 	int16_t driftTime;							// +2
 	DVector3 prevpos;							// +24
 	DVector3 pos;								// +24
@@ -95,7 +97,7 @@ struct particledata_t
 	float alpha, alphaStep;						// +8 
 	float fadeAlpha;							// +4
 	FVector2 scale, scaleStep, startScale;		// +24
-	FVector2 fadeScale;							// +8
+	FVector2 fadeScale, fadeScaleStep;			// +16
 	float angle, angleStep;						// +8
 	float pitch, pitchStep;						// +8
 	float roll, rollStep;						// +8 
@@ -105,6 +107,7 @@ struct particledata_t
 	int color;									// +4
 	FTextureID texture, lastTexture;			// +8
 	uint8_t animFrame, animTick;				// +2 
+	int8_t animFrameLengthTicks;				// +1
 	uint8_t invalidateTicks;					// +1
 	uint16_t sleepFor;							// +2
 	uint32_t flags;								// +4 
@@ -119,6 +122,8 @@ struct particledata_t
 	bool CheckWater(double* outSurfaceHeight);
 	float GetFloorHeight();
 	secplane_t* GetFloorPlane();
+	sector_t* GetSector() const;
+	bool CheckForSectorTag(int tag) const;
 	void UpdateUnderwater();
 	void UpdateDrift();
 
@@ -204,7 +209,12 @@ public:
 	float BounceFudge = 0.15f;
 	float MinBounceDeflect = -25, MaxBounceDeflect = 25;
 
-	float QualityChanceLow = 0.1f, QualityChanceMed = 0.25f, QualityChanceHigh = 0.6f, QualityChanceUlt = 1, QualityChanceInsane = 9999;
+	float AlphaFadeInTime = 0;
+	float MaxEmitDistanceStart = 0, MaxEmitDistanceEnd = 0;
+
+	int MinAnimFrameLengthTicks = -1, MaxAnimFrameLengthTicks = -1;
+
+	float QualityChanceLow = 0.1f, QualityChanceMed = 0.25f, QualityChanceHigh = 0.6f, QualityChanceUlt = 1, QualityChanceInsane = 1.25f;
 	float LifeMultLow = 0.07f, LifeMultMed = 0.1f, LifeMultHigh = 0.3f, LifeMultUlt = 1, LifeMultInsane = 3;
 
 	uint32_t Flags = 
@@ -249,9 +259,9 @@ public:
 	FBaseCVar* cvarParticleLifespan;
 	FBaseCVar* cvarBloodQuality;
 
-	FRandom randomEmit;
-	FRandom randomLife;
-	FRandom randomBounce;
+	FRandom randomEmit = FRandom(true);
+	FRandom randomLife = FRandom(true);
+	FRandom randomBounce = FRandom(true);
 };
 
 struct particlelevelpool_t

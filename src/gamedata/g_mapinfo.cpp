@@ -245,6 +245,7 @@ void level_info_t::Reset()
 	Description = "";
 	SkyPic1 = SkyPic2 = "-NOFLAT-";
 	invasiontier = 0;
+	minTechModules = 0;
 	tilt = tiltAngle = 0.0;
 	cluster = 0;
 	partime = 0;
@@ -1143,6 +1144,13 @@ DEFINE_MAP_OPTION(invasiontier, true)
 	parse.ParseAssign();
 	parse.sc.MustGetNumber();
 	info->invasiontier = parse.sc.Number;
+}
+
+DEFINE_MAP_OPTION(minTechModules, true)
+{
+	parse.ParseAssign();
+	parse.sc.MustGetNumber();
+	info->minTechModules = parse.sc.Number;
 }
 
 DEFINE_MAP_OPTION(tilt, true)

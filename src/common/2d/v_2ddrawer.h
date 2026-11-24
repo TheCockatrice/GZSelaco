@@ -339,11 +339,25 @@ class F2DVertexBuffer
 public:
 
 	F2DVertexBuffer();
+	F2DVertexBuffer(F2DVertexBuffer&& other) noexcept
+	{
+		mVertexBuffer = other.mVertexBuffer;
+		mIndexBuffer = other.mIndexBuffer;
+		other.mIndexBuffer = nullptr;
+		other.mVertexBuffer = nullptr;
+	}
 
 	~F2DVertexBuffer()
 	{
-		delete mIndexBuffer;
-		delete mVertexBuffer;
+		if (mIndexBuffer)
+		{
+			delete mIndexBuffer;
+		}
+
+		if (mVertexBuffer)
+		{
+			delete mVertexBuffer;
+		}
 	}
 
 	void UploadData(F2DDrawer::TwoDVertex *vertices, int vertcount, int *indices, int indexcount)

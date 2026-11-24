@@ -75,7 +75,7 @@ unsigned int FHardwareTexture::lastbound[FHardwareTexture::MAX_TEXTURES];
 //
 //===========================================================================
 
-unsigned int FHardwareTexture::CreateTexture(unsigned char * buffer, int w, int h, int texunit, bool mipmap, const char *name)
+unsigned int FHardwareTexture::CreateTexture(unsigned char * buffer, int w, int h, int texunit, bool mipmap, const char *name, bool noGLSwizzle /*= false*/)
 {
 	int rh,rw;
 	int texformat = GL_RGBA;// TexFormat[gl_texture_format];
@@ -185,6 +185,12 @@ unsigned int FHardwareTexture::CreateTexture(unsigned char * buffer, int w, int 
 	return glTexID;
 }
 
+
+unsigned int FHardwareTexture::CreateCompressedTexture(unsigned char* buffer, int w, int h, int texunit, bool mipmap, CompressionFormat format, const char* name)
+{
+	I_FatalError("FHardwareTexture::CreateCompressedTexture is not currently supported in OpenGLES!");
+	return 0;
+}
 
 void FHardwareTexture::AllocateBuffer(int w, int h, int texelsize) 
 {	

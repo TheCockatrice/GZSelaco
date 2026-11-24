@@ -151,6 +151,7 @@ class OpenGLFrameBuffer : public SystemGLFrameBuffer
 	typedef SystemGLFrameBuffer Super;
 
 	void RenderTextureView(FCanvasTexture* tex, std::function<void(IntRect &)> renderFunc) override;
+	void RenderLightmapSlice(int slice, std::function<void(IntRect&)> renderFunc) override;
 
 public:
 
@@ -178,6 +179,29 @@ public:
 	IHardwareTexture *CreateHardwareTexture(int numchannels) override;
 	void PrecacheMaterial(FMaterial *mat, int translation) override;
 	void PrequeueMaterial(FMaterial* mat, int translation) override;
+	
+	void PauseBackgroundCache(bool block) override {
+		if (mBGPaused && !block) return;
+
+		for (auto& t : bgTransferThreads) {
+			t->pause(block);
+		}
+		mBGPaused = true;
+	};
+
+	void ResumeBackgroundCache() override {
+		if (!mBGPaused) return;
+
+		for (auto& t : bgTransferThreads) {
+			t->resume();
+		}
+		mBGPaused = false;
+	};
+
+	bool BackgroundCachePaused() { return mBGPaused; }
+
+	void CancelBackgroundCache(FGameTexture* tex) override;
+
 	bool BackgroundLoadModel(FModel* model) override;
 	bool BackgroundCacheMaterial(FMaterial* mat, FTranslationID translation, bool makeSPI = false, bool secondary = false) override;
 	bool BackgroundCacheTextureMaterial(FGameTexture* tex, FTranslationID translation, int scaleFlags, bool makeSPI = false) override;
@@ -195,7 +219,7 @@ public:
 	IIndexBuffer *CreateIndexBuffer() override;
 	IDataBuffer *CreateDataBuffer(int bindingpoint, bool ssbo, bool needsresize) override;
 
-	void InitLightmap(int LMTextureSize, int LMTextureCount, TArray<uint16_t>& LMTextureData) override;
+	void InitLightmap(IVector2 LMTextureSize, int LMTextureCount, TArray<uint8_t>& LMTextureData, bool LMCompressed) override;
 
 	// Retrieves a buffer containing image data for a screenshot.
 	// Hint: Pitch can be negative for upside-down images, in which case buffer
@@ -247,7 +271,8 @@ private:
 
 	double fgTotalTime = 0, fgTotalCount = 0, fgMin = 0, fgMax = 0;		// Foreground integration time stats
 
-	bool isArc;															// @Cockatrice: Do some special fixes for ARC
+	bool isArc = false;													// @Cockatrice: Do some special fixes for ARC
+	bool mBGPaused = false;
 };
 
 }

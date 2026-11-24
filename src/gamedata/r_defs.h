@@ -42,6 +42,7 @@
 #include "p_effect.h"
 
 #include "hwrenderer/data/buffers.h"
+#include "common/2d/v_2ddrawer.h"
 
 // Some more or less basic data types
 // we depend on.
@@ -1027,6 +1028,16 @@ public:
 		return pos == floor? floorplane:ceilingplane;
 	}
 
+	void SetPlaneReflectivity(int pos, double val)
+	{
+		reflect[pos] = float(val);
+	}
+
+	double GetPlaneReflectivity(int pos)
+	{
+		return reflect[pos];
+	}
+
 	bool isSecret() const
 	{
 		return !!(Flags & SECF_SECRET);
@@ -1731,7 +1742,8 @@ struct LightmapSurface
 	SurfaceType Type;
 	subsector_t *Subsector;
 	side_t *Side;
-	sector_t *ControlSector;
+	sector_t *OwnerSector;
+	sector_t* ControlSector;
 	uint32_t LightmapNum;
 	float *TexCoords;
 };
@@ -1740,12 +1752,162 @@ struct LightProbe
 {
 	float X, Y, Z;
 	float Red, Green, Blue;
+
+	struct SubProbe
+	{
+		uint32_t groupID;
+		float Red, Green, Blue;
+	};
+
+	uint8_t numSubProbes;
+	SubProbe subProbes[4];
+
+	FVector3 CalculateColor(FLevelLocals* level) const;
 };
 
 struct LightProbeCell
 {
 	LightProbe* FirstProbe = nullptr;
 	int NumProbes = 0;
+};
+
+struct HeavyProbe
+{
+	int thingID;
+	float X, Y, Z;
+
+	struct Sample
+	{
+		uint32_t groupID;
+		float R, G, B;
+		float dirX, dirY, dirZ;
+	};
+
+	uint8_t numSamples;
+	Sample samples[4];
+
+	void CalculateSampleData(FLevelLocals* level, struct HeavyProbeSampleData* outSamples);
+};
+
+// Info for each lightgroup in a sector
+struct LMSectorLightGroupInfo
+{
+	int LightGroupIndex;
+	int LightmapIndex;
+	
+	// Which LightGroupMesh we want to render, as well as the start and end indices
+	int MeshIndex;
+	int MeshIndexStart;
+	int MeshIndexCount;
+
+	// Next lightgroup we want to render
+	LMSectorLightGroupInfo* RenderItNext = nullptr;
+};
+
+// A 2D mesh used to copy a dynamic lightgroup from the static lightmap textures into the dynamic (Master) lightmaps
+struct LightGroupMesh
+{
+	int LightGroupIndex;
+	uint32_t sourceLightmapIndex;
+	uint32_t targetLightmapIndex;
+
+	int indexCount;
+	F2DVertexBuffer buffers;
+
+	// Iterators for the sectors we want to render for this lightgroup
+	LMSectorLightGroupInfo* SectorItFirst = nullptr;
+	LMSectorLightGroupInfo* SectorItLast = nullptr;
+
+	// Next mesh we want to render
+	LightGroupMesh* RenderItNext = nullptr;
+};
+
+// Additional data for LightGroups, updated from the in-level LightGroup Things
+struct LightGroupData
+{
+	uint32_t GroupID;
+	uint16_t ThingID;
+	FVector3 BoundsMin;
+	FVector3 BoundsMax;
+
+	struct ColorRGB
+	{
+		float r;
+		float g;
+		float b;
+	};
+
+	ColorRGB TintColor = { 1, 1, 1 };
+	int RenderColor = -1;
+
+	TArray<int> MeshIDs;
+
+	bool Enabled;
+	float Intensity;
+	uint32_t LastUpdateFrame = 0;
+};
+
+// Dynamic lightmap information for a sector
+struct LMSectorInfo
+{
+	int SectorIndex = -1;
+	bool QueuedForRender = false;
+	uint32_t LastRenderFrame = 0;
+
+	// Iterator for the next LMSectorInfo we need to check
+	LMSectorInfo* NextIt = nullptr;
+
+	// Iterator for the next sector we want to render
+	LMSectorInfo* RenderItNext = nullptr;
+
+	// Infos for 
+	TArray<LMSectorLightGroupInfo> MasterInfos;
+	TArray<LMSectorLightGroupInfo> LightGroupInfos;
+};
+
+// Rendering info for a lightgroup per lightmap
+struct LightgroupLightmapInfo
+{
+	int LightmapIndex = -1;
+
+	// Info for this lightgroup per Master Lightmap
+	// We keep it this way to speed up rendering, so we don't have to
+	// look through each master lightmap to find the correct one
+	struct PerMasterInfo
+	{
+		// Iterators for the meshes we need to render to the master lightmap
+		LightGroupMesh* MeshItFirst = nullptr;
+		LightGroupMesh* MeshItLast = nullptr;
+
+		// Iterator for the next LightgroupLightmapInfo that we want to render
+		LightgroupLightmapInfo* RenderItNext = nullptr;
+
+		// Has this already been added to the master lightmap for this render?
+		bool AddedToMaster = false;
+	};
+
+	TArray<PerMasterInfo> MasterInfos;
+};
+
+// A 2D mesh for the master lightmap, mostly used to reset the dynamic lightmaps to the baseline so
+// we can render any active lightgroups over the top of them
+struct MasterLightmapInfo
+{
+	FGameTexture* base;
+
+	// The QuadBuffer is used if we just want to copy the entire lightmap over rather than just segments
+	F2DVertexBuffer quadBuffer;
+
+	int indexCount;
+	F2DVertexBuffer meshBuffers;
+
+	// Iterators for sectors that we want to render for this master lightmap
+	LMSectorLightGroupInfo* MasterRenderSectorItFirst = nullptr;
+	LMSectorLightGroupInfo* MasterRenderSectorItLast = nullptr;
+
+	// Iterators for lightgroups that we want to render to this master lightmap
+	LightgroupLightmapInfo* LightGroupLightmapItFirst = nullptr;
+	LightgroupLightmapInfo* LightGroupLightmapItLast = nullptr;
 };
 
 //

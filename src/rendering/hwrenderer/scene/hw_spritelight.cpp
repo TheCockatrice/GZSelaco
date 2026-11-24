@@ -38,6 +38,10 @@
 #include "hwrenderer/scene/hw_drawstructs.h"
 #include "models.h"
 #include <cmath>	// needed for std::floor on mac
+#include "hw_renderstate.h"
+
+EXTERN_CVAR(Bool, lm_lightprobes);
+EXTERN_CVAR(Bool, lm_heavyprobes);
 
 template<class T>
 T smoothstep(const T edge0, const T edge1, const T x)
@@ -46,37 +50,36 @@ T smoothstep(const T edge0, const T edge1, const T x)
 	return t * t * (3.0 - 2.0 * t);
 }
 
-LightProbe* FindLightProbe(FLevelLocals* level, float x, float y, float z)
+LightProbe* FindLightProbe(FLevelLocals* level, float x, float y, float z, float floorz /* = -FLT_MAX */)
 {
 	LightProbe* foundprobe = nullptr;
-	if (level->LightProbes.Size() > 0)
+	if (lm_lightprobes && level->LightProbes.Size() > 0)
 	{
 #if 1
 		double rcpCellSize = 1.0 / level->LPCellSize;
-		int gridCenterX = (int)std::floor(x * rcpCellSize) - level->LPMinX;
-		int gridCenterY = (int)std::floor(y * rcpCellSize) - level->LPMinY;
+		int gridX = (int)std::floor(x * rcpCellSize) - level->LPMinX;
+		int gridY = (int)std::floor(y * rcpCellSize) - level->LPMinY;
 		int gridWidth = level->LPWidth;
 		int gridHeight = level->LPHeight;
 		float lastdist = 0.0f;
-		for (int gridY = gridCenterY - 1; gridY <= gridCenterY + 1; gridY++)
+
+		if (gridX >= 0 && gridY >= 0 && gridX < gridWidth && gridY < gridHeight)
 		{
-			for (int gridX = gridCenterX - 1; gridX <= gridCenterX + 1; gridX++)
+			const LightProbeCell& cell = level->LPCells[gridX + (size_t)gridY * gridWidth];
+			for (int i = 0; i < cell.NumProbes; i++)
 			{
-				if (gridX >= 0 && gridY >= 0 && gridX < gridWidth && gridY < gridHeight)
+				LightProbe* probe = cell.FirstProbe + i;
+				// Check the probe isn't under the floor, which can happen with thin 3D floors
+				if (floorz < probe->Z)
 				{
-					const LightProbeCell& cell = level->LPCells[gridX + (size_t)gridY * gridWidth];
-					for (int i = 0; i < cell.NumProbes; i++)
+					float dx = probe->X - x;
+					float dy = probe->Y - y;
+					float dz = probe->Z - z;
+					float dist = dx * dx + dy * dy + dz * dz;
+					if (!foundprobe || dist < lastdist)
 					{
-						LightProbe* probe = cell.FirstProbe + i;
-						float dx = probe->X - x;
-						float dy = probe->Y - y;
-						float dz = probe->Z - z;
-						float dist = dx * dx + dy * dy + dz * dz;
-						if (!foundprobe || dist < lastdist)
-						{
-							foundprobe = probe;
-							lastdist = dist;
-						}
+						foundprobe = probe;
+						lastdist = dist;
 					}
 				}
 			}
@@ -101,6 +104,45 @@ LightProbe* FindLightProbe(FLevelLocals* level, float x, float y, float z)
 	return foundprobe;
 }
 
+bool TryGetLightProbeColor(FLevelLocals* level, AActor* actor, FVector3& out)
+{
+	if (!actor || (lm_heavyprobes && actor->HeavyProbeIndex >= 0))
+	{
+		return false;
+	}
+
+	AActor* sourceActor = (actor->flags9 & MF9_MASTERLIGHTPROBES) && actor->master != nullptr ? actor->master : actor;
+	DVector3 samplePos = sourceActor->GetLightProbeSamplePosition(level->LPCellSize);
+
+	return TryGetLightProbeColor(level, samplePos.X, samplePos.Y, samplePos.Z, out, sourceActor->floorz);
+}
+
+bool TryGetLightProbeColor(FLevelLocals* level, float x, float y, float z, FVector3& out, float floorz /* = -FLT_MAX */)
+{
+	if (LightProbe* probe = FindLightProbe(level, x, y, z, floorz))
+	{
+		out = probe->CalculateColor(level);
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+}
+
+void SetHeavyProbe(FRenderState& state, FLevelLocals* level, AActor* actor)
+{
+	if (lm_heavyprobes && actor->HeavyProbeIndex >= 0 && actor->HeavyProbeIndex < level->HeavyProbes.size())
+	{
+		HeavyProbe& heavyProbe = level->HeavyProbes[actor->HeavyProbeIndex];
+
+		HeavyProbeSampleData samples[4];
+		heavyProbe.CalculateSampleData(level, samples);
+		
+		state.SetHeavyProbe(heavyProbe.numSamples, samples);
+	}
+}
+
 //==========================================================================
 //
 // Sets a single light value from all dynamic lights affecting the specified location
@@ -114,14 +156,6 @@ void HWDrawInfo::GetDynSpriteLight(AActor *self, float x, float y, float z, FLig
 	float radius;
 	
 	out[0] = out[1] = out[2] = 0.f;
-
-	LightProbe* probe = FindLightProbe(Level, x, y, z);
-	if (probe)
-	{
-		out[0] = probe->Red;
-		out[1] = probe->Green;
-		out[2] = probe->Blue;
-	}
 
 	// Go through both light lists
 	while (node)

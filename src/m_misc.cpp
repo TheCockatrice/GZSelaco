@@ -467,7 +467,7 @@ void M_MigrateGlobalVars(const char* filename, const char *newFilename) {
 
 		if (globalStorage.CheckKey(pair->Key)) {
 			FString sData;
-			sData.Format("%d", max(data, globalStorage[pair->Key].ToLong()));
+			sData.Format("%ld", max(data, globalStorage[pair->Key].ToLong()));
 			globalStorage[pair->Key] = sData;
 		}
 		else {
@@ -508,7 +508,7 @@ void M_LoadGlobalVars(const char* filename) {
 void M_ReadGlobalVars(FileReader& fr, TMap<FString, FString>& map) {
 	const auto fileSize = fr.isOpen() ? fr.GetLength() : 0;
 
-	if (!fr.isOpen() || fileSize < sizeof(uint32_t))
+	if (!fr.isOpen() || (size_t)fileSize < sizeof(uint32_t))
 		return;
 
 	const uint32_t numEntries = fr.ReadUInt32();
@@ -520,7 +520,7 @@ void M_ReadGlobalVars(FileReader& fr, TMap<FString, FString>& map) {
 
 	for (uint32_t x = 0; x < numEntries && fr.isOpen() && fr.Tell() < fileSize; x++) {
 		char buf[256];
-		char bufLen = 0;
+		int bufLen = 0;
 		FString key, value;
 
 		// Length of key

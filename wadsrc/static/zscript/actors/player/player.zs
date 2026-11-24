@@ -2668,6 +2668,7 @@ class PSprite : Object native play
 	native int Frame;
 	//native readonly int RenderStyle;	had to be blocked because the internal representation was not ok. Renderstyle is still pending a proper solution.
 	native readonly int ID;
+	native int Flags;
 	native Bool processPending;
 	native double x;
 	native double y;

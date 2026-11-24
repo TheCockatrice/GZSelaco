@@ -185,6 +185,28 @@ public:
 	bool CompileNextShader() override;
 	void PrecacheMaterial(FMaterial *mat, int translation) override;
 	void PrequeueMaterial(FMaterial *mat, int translation) override;
+
+	void PauseBackgroundCache(bool block) override {
+		if (mBGPaused && !block) return;
+
+		for (auto &t : bgTransferThreads) {
+			t->pause(block);
+		}
+		mBGPaused = true;
+	};
+	
+	void ResumeBackgroundCache() override {
+		if (!mBGPaused) return;
+
+		for (auto& t : bgTransferThreads) {
+			t->resume();
+		}
+		mBGPaused = false;
+	};
+	
+	bool BackgroundCachePaused() { return mBGPaused; }
+
+	void CancelBackgroundCache(FGameTexture* tex) override;
 	bool BackgroundCacheMaterial(FMaterial *mat, FTranslationID translation, bool makeSPI = false, bool secondary = false) override;
 	bool BackgroundCacheTextureMaterial(FGameTexture *tex, FTranslationID translation, int scaleFlags, bool makeSPI = false) override;
 	bool BackgroundLoadModel(FModel* model) override;
@@ -203,7 +225,8 @@ public:
 	void SetTextureFilterMode() override;
 	void StartPrecaching() override;
 	void BeginFrame() override;
-	void InitLightmap(int LMTextureSize, int LMTextureCount, TArray<uint16_t>& LMTextureData) override;
+	void InitLightmap(IVector2 LMTextureSize, int LMTextureCount, TArray<uint8_t>& LMTextureData, bool LMCompressed) override;
+	void BlitLightmap(IHardwareTexture* lightmap, int lightmapIndex) override;
 	//void BlurScene(float amount) override;
 	void BlurScene(float amount, bool force = false) override;
 	void PostProcessScene(bool swscene, int fixedcm, float flash, const std::function<void()> &afterBloomDrawEndScene2D) override;
@@ -244,6 +267,7 @@ public:
 
 private:
 	void RenderTextureView(FCanvasTexture* tex, std::function<void(IntRect &)> renderFunc) override;
+	void RenderLightmapSlice(int slice, std::function<void(IntRect&)> renderFunc) override;
 	void PrintStartupLog();
 	void CopyScreenToBuffer(int w, int h, uint8_t *data) override;
 
@@ -293,6 +317,7 @@ private:
 	VkRenderBuffers *mActiveRenderBuffers = nullptr;
 
 	bool mVSync = false;
+	bool mBGPaused = false;
 };
 
 class CVulkanError : public CEngineError

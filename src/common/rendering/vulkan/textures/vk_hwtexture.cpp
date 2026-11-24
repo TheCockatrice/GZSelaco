@@ -273,6 +273,11 @@ void VkHardwareTexture::CreateTexture(int w, int h, int pixelsize, VkFormat form
 	hwState = READY;
 }
 
+void VkHardwareTexture::Finalize()
+{
+	CheckFinalTransition(fb->GetCommands()->GetTransferCommands(), false);
+}
+
 void VkHardwareTexture::CheckFinalTransition(VulkanCommandBuffer *cmd, bool background) {
 	assert(background ? mLoadedImage != nullptr : mImage != nullptr);
 
@@ -485,11 +490,41 @@ uint8_t *VkHardwareTexture::MapBuffer()
 	return mappedSWFB;
 }
 
-unsigned int VkHardwareTexture::CreateTexture(unsigned char * buffer, int w, int h, int texunit, bool mipmap, const char *name)
+unsigned int VkHardwareTexture::CreateTexture(unsigned char * buffer, int w, int h, int texunit, bool mipmap, const char *name, bool noGLSwizzle /*= false*/)
 {
 	// CreateTexture is used by the software renderer to create a screen output but without any screen data.
 	if (buffer)
 		CreateTexture(w, h, mTexelsize, mTexelsize == 4 ? VK_FORMAT_B8G8R8A8_UNORM : VK_FORMAT_R8_UNORM, buffer, mipmap);
+	return 0;
+}
+
+unsigned int VkHardwareTexture::CreateCompressedTexture(unsigned char* buffer, int w, int h, int texunit, bool mipmap, CompressionFormat format, const char* name)
+{
+	VkFormat vkFormat = VK_FORMAT_UNDEFINED;
+	int pixelDataSize = 0;
+
+	switch (format)
+	{
+		case COMPRESSION_NONE:
+			vkFormat = mTexelsize == 4 ? VK_FORMAT_B8G8R8A8_UNORM : VK_FORMAT_R8_UNORM;
+			pixelDataSize = w * h * 4;
+			break;
+
+		case COMPRESSION_BC7_UNORM:
+			vkFormat = VK_FORMAT_BC7_UNORM_BLOCK;
+			pixelDataSize = (w / 4) * (h / 4) * sizeof(uint64_t) * 2;
+			break;
+
+		default:
+			I_FatalError("Unsupported compression format in Vulkan: %d", format);
+			return 0;
+	}
+
+	if (buffer)
+	{
+		CreateTexture(fb->GetCommands(), mImage.get(), w, h, 4, vkFormat, buffer, false, false, pixelDataSize);
+	}
+
 	return 0;
 }
 

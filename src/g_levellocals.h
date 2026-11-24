@@ -466,19 +466,39 @@ public:
 	TArray<FSectorPortal> sectorPortals;
 	TArray<FLinePortal> linePortals;
 
-	// Lightmaps
+	int LMVersion = -1;
+	bool LMInvalidBake = false;
+	bool LMNeedsRebuild = true;
+	uint32_t LMRenderFrame = 0;
 	TArray<LightmapSurface> LMSurfaces;
 	TArray<float> LMTexCoords;
 	int LMTextureCount = 0;
-	int LMTextureSize = 0;
-	TArray<uint16_t> LMTextureData;
+	bool LMCompressed = false;
+	IVector2 LMMasterTextureSize;
+	TArray<uint8_t> LMMasterTextureData;
+	TArray<IVector2> LMMasterTextureActualSizes;
 	TArray<LightProbe> LightProbes;
+	TArray<HeavyProbe> HeavyProbes;
+	TArray<FGameTexture*> Lightmaps;
+	TArray<MasterLightmapInfo> MasterLightmaps;
+	TArray<LMSectorInfo> LMSectorInfos;
+	TArray<LightGroupData> LightGroups;
+	TArray<LightGroupMesh> LightGroupMeshes;
+	TArray<LightgroupLightmapInfo> LightGroupLightmapInfos;
 	int LPMinX = 0;
 	int LPMinY = 0;
 	int LPWidth = 0;
 	int LPHeight = 0;
-	static const int LPCellSize = 32;
+	int LPCellSize = 32;
 	TArray<LightProbeCell> LPCells;
+	FVector3 SunDirection = { 0.5f, 0.5f, -0.7071f };
+
+	// Iterators for dynamic lightmaps
+	LMSectorInfo* LMSectorItFirst = nullptr;
+	LMSectorInfo* LMSectorItLast = nullptr;
+
+	// Reset all information about rendering lightmaps so that they're built fresh
+	void ResetLightmapRenderInfo();
 
 	// Portal information.
 	FDisplacementTable Displacements;
@@ -536,7 +556,7 @@ public:
 	uint32_t	spawnindex;
 
 	level_info_t *info;
-	int			invasiontier;
+	int			invasiontier, minTechModules;
 	double		tilt, tiltAngle;
 	int			cluster;
 	int			clusterflags;
@@ -681,6 +701,7 @@ public:
 
 	particlelevelpool_t				DefinedParticlePool;
 	TArray<uint16_t>				DefinedParticlesInSubsec;
+	TArray<DParticleDefinition*>	ParticleDefinitions;
 	TMap<int, DParticleDefinition*>	ParticleDefinitionsByType;
 
 	TArray<DVector2>	Scrolls;		// NULL if no DScrollers in this level

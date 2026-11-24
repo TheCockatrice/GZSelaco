@@ -85,6 +85,7 @@ public:
 	TArray<PField *> Fields;
 	TArray<FName> SealedRestriction;
 	PClassType			*VMType = nullptr;
+	DObject				*LevelInstance = nullptr; // Pretty much only used by ParticleDefinitions; specifically to point to the instance of the ParticleDefinition used in the level
 
 	void (*ConstructNative)(void *);
 

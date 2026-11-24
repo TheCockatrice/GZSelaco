@@ -350,5 +350,6 @@ FName MapLoader::CheckCompatibility(MapData *map)
 	{
 		Level->ib_compatflags |= BCOMPATF_FLOATBOB;
 	}
-	return FName(hash, true);	// if this returns NAME_None it means there is no scripted compatibility handler.
+	return FName(hash);		// @Cockatrice - Always create a name for the hash, since we'll need it to fix compatibility in arbitrary maps in the LevelPostProcessor
+	//return FName(hash, true);	// if this returns NAME_None it means there is no scripted compatibility handler.
 }

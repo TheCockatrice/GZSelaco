@@ -289,6 +289,14 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck, int forceVersion)
 					{
 						index = ML_LIGHTMAP;
 					}
+					else if (!stricmp(lumpname, "LIGHTGRP"))
+					{
+						index = ML_LIGHTGRP;
+					}
+					else if (!stricmp(lumpname, "LMCHKSUM"))
+					{
+						index = ML_LMCHKSUM;
+					}
 					else if (!stricmp(lumpname, "ENDMAP"))
 					{
 						break;
@@ -332,7 +340,7 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck, int forceVersion)
 		map->MapLumps[0].Reader = map->resource->GetEntryReader(0, FileSys::READER_SHARED);
 		uppercopy(map->MapLumps[0].Name, map->resource->getName(0));
 
-		for(uint32_t i = 1; i < map->resource->EntryCount(); i++)
+		for(uint32_t i = 1; i < map->resource->EntryCountU(); i++)
 		{
 			const char* lumpname = map->resource->getName(i);
 
@@ -369,6 +377,10 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck, int forceVersion)
 					else if (!strnicmp(lumpname, "LIGHTMAP", 8))
 					{
 						index = ML_LIGHTMAP;
+					}
+					else if (!stricmp(lumpname, "LIGHTGRP"))
+					{
+						index = ML_LIGHTGRP;
 					}
 					else if (!strnicmp(lumpname, "ENDMAP",8))
 					{

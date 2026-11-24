@@ -67,10 +67,18 @@ void HWDecal::DrawDecal(HWDrawInfo *di, FRenderState &state)
 	{
 		double x, y;
 		decal->GetXY(decal->Side, x, y);
-		LightProbe *probe = FindLightProbe(di->Level, x, y, decal->GetRealZ(decal->Side) * 0.5);
-		if (probe)
+
+		// We use the normal to nudge out the LightProbe sample location, so it's less likely to be in a wall
+		FVector3 n = Normal * di->Level->LPCellSize;
+
+		FVector3 probeColor;
+		if (TryGetLightProbeColor(di->Level, x + n.X, y + n.Y, decal->GetRealZ(decal->Side), probeColor))
 		{
-			state.SetDynLight(probe->Red, probe->Green, probe->Blue);
+			state.SetLightProbe(probeColor.X, probeColor.Y, probeColor.Z);
+		}
+		else
+		{
+			state.SetLightProbe(0, 0, 0);
 		}
 	}
 
@@ -131,6 +139,7 @@ void HWDecal::DrawDecal(HWDrawInfo *di, FRenderState &state)
 	state.SetObjectColor(0xffffffff);
 	state.SetFog(fc, -1);
 	state.SetDynLight(0, 0, 0);
+	state.SetLightProbe(0, 0, 0);
 }
 
 //==========================================================================

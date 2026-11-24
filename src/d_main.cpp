@@ -120,6 +120,7 @@
 #include "shiftstate.h"
 #include "s_loader.h"
 #include "fs_findfile.h"
+#include "a_lightgroup.h"
 
 #include "statdb.h"
 
@@ -130,6 +131,8 @@
 
 using namespace FileSys;
 
+EXTERN_CVAR(Bool, enablemods)
+EXTERN_CVAR(Bool, modsexist)
 EXTERN_CVAR(Int, gl_texture_quality)
 EXTERN_CVAR(Int, vk_max_transfer_threads)
 EXTERN_CVAR(Bool, hud_althud)
@@ -180,6 +183,7 @@ bool M_SetSpecialMenu(FName& menu, int param);	// game specific checks
 
 const FIWADInfo *D_FindIWAD(TArray<FString> &wadfiles, const char *iwad, const char *basewad);
 void InitWidgetResources(const char* basewad);
+void CloseWidgetResources();
 
 // PUBLIC FUNCTION PROTOTYPES ----------------------------------------------
 
@@ -897,6 +901,7 @@ static void DrawOverlays()
 	C_DrawConsole ();
 	M_Drawer ();
 	DrawRateStuff();
+	DrawLightmapStatus();
 	if (!hud_toggled)
 		FStat::PrintStat (twod);
 }
@@ -1319,6 +1324,9 @@ void D_DoomLoop ()
 				Printf(PRINT_NONOTIFY | PRINT_BOLD, "\n%s\n", error.what());
 			}
 			D_ErrorCleanup();
+
+			// @Cockatrice - Inserted to restore joystick usage after error
+			lasttic = gametic;
 		}
 		catch (CVMAbortException &error)
 		{
@@ -1327,6 +1335,9 @@ void D_DoomLoop ()
 			error.MaybePrintMessage();
 			Printf(PRINT_NONOTIFY | PRINT_BOLD, "%s", error.stacktrace.GetChars());
 			D_ErrorCleanup();
+
+			// @Cockatrice - Inserted to restore joystick usage after error
+			lasttic = gametic;
 
 			FString fullError;
 			fullError.Format(TEXTCOLOR_RED "%s" TEXTCOLOR_NORMAL "\n%s", error.GetMessage(), error.stacktrace.GetChars());
@@ -1902,12 +1913,15 @@ FExecList *D_MultiExec (FArgs *list, FExecList *exec)
 static void GetCmdLineFiles(std::vector<std::string>& wadfiles)
 {
 	FString *args;
-	int i, argc;
+	int i;
+	int argc;
 
 	argc = Args->CheckParmList("-file", &args);
 
+	assert(wadfiles.size() < INT_MAX);
+
 	// [RL0] Check for array size to only add new wads
-	for (i = wadfiles.size(); i < argc; ++i)
+	for (i = int(wadfiles.size()); i < argc; ++i)
 	{
 		D_AddWildFile(wadfiles, args[i].GetChars(), ".wad", GameConfig);
 	}
@@ -2141,9 +2155,78 @@ static void AddModFilesFrom(FString path, std::vector<std::string>& allwads) {
 }
 
 
+static bool CheckModFilesFrom(FString path) {
+	FString findmask = path + "*.*";
+
+	FileSys::FileList list;
+
+	if (FileSys::ScanDirectory(list, path.GetChars(), "*.*", true))
+	{
+		for (auto& entry : list)
+		{
+			auto p = strrchr(entry.FileName.c_str(), '.');
+			if (p != nullptr && !entry.isDirectory)
+			{
+				// Only valid extensions
+				if (!stricmp(p, ".wad") || !stricmp(p, ".pk3") || !stricmp(p, ".pk7"))
+				{
+					return true;
+				}
+			}
+		}
+	}
+
+	return false;
+}
+
+
+// Do not add mod files for launching, but verify that some exist at all
+static bool CheckForModFiles() {
+	const char* modFolder = "Mods";
+	FStringf slasheddir("%s/%s/", progdir.GetChars(), modFolder);
+
+	// Check Mods folder and Mods/Workshop folder...
+	if (CheckModFilesFrom(slasheddir)) 
+		return true;
+	if (CheckModFilesFrom(slasheddir + "Workshop" + "/")) 
+		return true;
+
+	// Check the workshop.txt file, verify files exist
+	FString workshopPath = slasheddir + "workshop.txt";
+	FILE* ws = fopen(workshopPath.GetChars(), "r");
+	if (ws != NULL) {
+		char buff[1024];
+
+		// Skip first line
+		fgets(buff, 1024, ws);
+
+		while (fgets(buff, 1024, ws)) {
+			size_t len = strnlen(buff, 1024);
+			if (len > 4) {
+				buff[len - 1] = '\0';	// Remove nasty \n
+
+				auto p = strrchr(buff, '.');
+				if (p != nullptr) {
+					if (!strnicmp(p, ".pk3", 1024)) {
+						// Found mod file from workshop, signal true
+						fclose(ws);
+						return true;
+					}
+				}
+			}
+		}
+
+		fclose(ws);
+	}
+
+	return false;
+}
+
+
 static void AddModFiles(std::vector<std::string>& allwads) {
-	if (Args->CheckParm("-nomods")) {
+	if (Args->CheckParm("-nomods") || !enablemods) {
 		Printf("Skipping Mod Loading\n");
+
 		return;
 	}
 
@@ -3282,6 +3365,16 @@ static int FileSystemPrintf(FSMessageLevel level, const char* fmt, ...)
 	}
 	return (int)text.Len();
 }
+
+
+bool StrEndsWith(const std::string& str, const std::string& suffix) {
+	return str.size() >= suffix.size() &&
+		std::equal(suffix.rbegin(), suffix.rend(), str.rbegin(),
+			[](char a, char b) {
+				return std::tolower((unsigned char)a) == std::tolower((unsigned char)b);
+			});
+}
+
 //==========================================================================
 //
 // D_InitGame
@@ -3387,11 +3480,46 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 		FixMacHexen(fileSystem);
 		FindStrifeTeaserVoices(fileSystem);
 	};
-	allwads.insert(
-		allwads.end(),
-		std::make_move_iterator(pwads.begin()),
-		std::make_move_iterator(pwads.end())
-	);
+
+
+	// @Cockatrice - enablemods is designed as a Chapter2 gate so first launch disables mods, should they exist
+	// If we haven't found any mods, or there are no pwads to include let's just turn mods on since turning them off serves no purpose
+	const bool hasInstalledMods = CheckForModFiles();
+	modsexist = hasInstalledMods;
+
+	// For development purposes we need the files directory, so make that exempt from counting as a mod
+	if (!modsexist && pwads.size() > 0) {
+		for (auto& p : pwads) {
+			// Hack for development. If the string ends with any case of files, such as ./Files etc we will accept it
+			if (!StrEndsWith(p, "files")) {
+				modsexist = true;
+				break;
+			}
+		}
+	}
+
+	// Do the toggle if safe
+	if (!enablemods && !modsexist) {
+		enablemods = true;
+	}
+
+	
+	if (enablemods) {
+		allwads.insert(
+			allwads.end(),
+			std::make_move_iterator(pwads.begin()),
+			std::make_move_iterator(pwads.end())
+		);
+	}
+	else {
+		// Only add pwads that are sanctioned
+		// In this case, only add files
+		for (auto& p : pwads) {
+			if (StrEndsWith(p, "files")) {
+				allwads.push_back(p);
+			}
+		}
+	}
 
 	AddModFiles(allwads);
 
@@ -3521,6 +3649,10 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 
 	// [RH] Load sound environments
 	S_ParseReverbDef ();
+
+	// [NL] Load and initialize the AUDIOFX lump
+	S_ParseAudioFXDef ();
+	GSnd->InitAudioFX();
 
 	// [RH] Parse any SNDINFO lumps
 	if (!batchrun) Printf ("S_InitData: Load sound definitions.\n");
@@ -4065,6 +4197,7 @@ int GameMain()
 	M_SaveDefaultsFinal();
 	DeleteStartupScreen();
 	C_UninitCVars(); // must come last so that nothing will access the CVARs anymore after deletion.
+	CloseWidgetResources();
 	delete Args;
 	Args = nullptr;
 	return ret;
@@ -4160,7 +4293,7 @@ void D_Cleanup()
 //
 //==========================================================================
 
-UNSAFE_CCMD(restart)
+UNSAFE_CCMD(debug_restart)
 {
 	// remove command line args that would get in the way during restart
 	Args->RemoveArgs("-iwad");

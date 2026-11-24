@@ -122,6 +122,22 @@ CCMD(vk_listdevices)
 	}
 }
 
+CCMD(vk_debug_pause_loader)
+{
+	auto sc = dynamic_cast<VulkanRenderDevice*>(screen);
+	if (sc) {
+		sc->PauseBackgroundCache(true);
+	}
+}
+
+CCMD(vk_debug_resume_loader)
+{
+	auto sc = dynamic_cast<VulkanRenderDevice*>(screen);
+	if (sc) {
+		sc->ResumeBackgroundCache();
+	}
+}
+
 
 DEFINE_ACTION_FUNCTION(_Screen, GetDeviceList)
 {
@@ -557,6 +573,8 @@ bool VkModelLoadThread::loadResource(VkModelLoadIn& input, VkModelLoadOut& outpu
 // END Background Loader Stuff =====================================================
 
 void VulkanRenderDevice::FlushBackground() {
+	ResumeBackgroundCache();	// Force resume background cache, since it has to finish up!
+
 	int nq = primaryTexQueue.size() + secondaryTexQueue.size();
 	bool active = nq;
 
@@ -598,6 +616,7 @@ void VulkanRenderDevice::FlushBackground() {
 	check.Unclock();
 	Printf(TEXTCOLOR_GOLD"\tVulkanFrameBuffer::FlushBackground() took %f ms\n", check.TimeMS());
 }
+
 
 void VulkanRenderDevice::UpdateBackgroundCache(bool flush) {
 	// Check for completed cache items and link textures to the data
@@ -1125,6 +1144,35 @@ void VulkanRenderDevice::RenderTextureView(FCanvasTexture* tex, std::function<vo
 	tex->SetUpdated(true);
 }
 
+void VulkanRenderDevice::RenderLightmapSlice(int slice, std::function<void(IntRect&)> renderFunc)
+{
+	VkTextureManager* texman = GetTextureManager();
+	VkTextureImage* lightmap = &texman->Lightmap;
+
+	mRenderState->EndRenderPass();
+
+	VkImageTransition()
+		.AddImage(lightmap, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, false)
+		.Execute(mCommands->GetDrawCommands());
+
+	mRenderState->SetRenderTarget(&texman->LightmapSlices[slice], nullptr, lightmap->Image->width, lightmap->Image->height, VK_FORMAT_B8G8R8A8_UNORM, VK_SAMPLE_COUNT_1_BIT);
+
+	IntRect bounds;
+	bounds.left = bounds.top = 0;
+	bounds.width = lightmap->Image->width;
+	bounds.height = lightmap->Image->height;
+
+	renderFunc(bounds);
+
+	mRenderState->EndRenderPass();
+
+	VkImageTransition()
+		.AddImage(lightmap, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, false)
+		.Execute(mCommands->GetDrawCommands());
+
+	mRenderState->SetRenderTarget(&GetBuffers()->SceneColor, GetBuffers()->SceneDepthStencil.View.get(), GetBuffers()->GetWidth(), GetBuffers()->GetHeight(), VK_FORMAT_R16G16B16A16_SFLOAT, GetBuffers()->GetSceneSamples());
+}
+
 void VulkanRenderDevice::PostProcessScene(bool swscene, int fixedcm, float flash, const std::function<void()> &afterBloomDrawEndScene2D)
 {
 	if (!swscene) mPostprocess->BlitSceneToPostprocess(); // Copy the resulting scene to the current post process texture
@@ -1179,6 +1227,71 @@ bool VulkanRenderDevice::BackgroundLoadModel(FModel* model) {
 	modelInQueue.queue(modelLoad);
 
 	return true;
+}
+
+
+// @Cockatrice - This will cancel any current queued instance of the specified texture
+// This will cancel ALL instances of the texture being loaded if there are more than one
+// This will cancel all layers of a material if it exists, but will not unload anything
+// Will potentially block until the current threads have completed loading, so use this with care!
+void VulkanRenderDevice::CancelBackgroundCache(FGameTexture* tex) {
+	if (!tex || !tex->isValid()) return;
+
+	bool iPaused = !BackgroundCachePaused();
+	if (iPaused) PauseBackgroundCache(true);
+	
+	// Wait on the tex threads
+	for (auto& t : bgTransferThreads) {
+		t->waitForRun();
+	}
+
+	// Remove the texture from primary and secondary queues
+	// This probably needs a faster method than repeatedly dequeing
+	VkTexLoadIn in;
+	while( secondaryTexQueue.dequeueSearch(in, tex,
+		[](void* a, VkTexLoadIn& b)
+		{ return (FGameTexture*)a == b.gtex; })) {
+
+		if (in.tex != nullptr) {
+			in.tex->SetHardwareState(IHardwareTexture::HardwareState::NONE, 0);
+		}
+	}
+
+	while( primaryTexQueue.dequeueSearch(in, tex,
+		[](void* a, VkTexLoadIn& b)
+		{ return (FGameTexture*)a == b.gtex; })) {
+
+		if (in.tex != nullptr) {
+			in.tex->SetHardwareState(IHardwareTexture::HardwareState::NONE, 0);
+		}
+	}
+
+	// Search queued patches
+	QueuedPatch qp;
+	while( patchQueue.dequeueSearch(qp, tex,
+		[](void* a, QueuedPatch& b)
+		{ return (FGameTexture*)a == b.tex; })) {
+
+		// Check for a hardware texture and set state correctly
+		// There probably ISN'T a material or hardware textures yet, which is why this tex was in the queued patches to begin with!
+		FMaterial* mat = FMaterial::ValidateTexture(tex, qp.scaleFlags, false);
+		if (mat != nullptr) {
+			const int numLayers = mat->NumLayers();
+			for (int i = 0; i < numLayers; i++) {
+				MaterialLayerInfo* layer;
+				auto hwtex = static_cast<VkHardwareTexture*>(mat->GetLayer(i, qp.translation, &layer));
+				if (hwtex->GetState() != IHardwareTexture::HardwareState::READY) {
+					hwtex->SetHardwareState(IHardwareTexture::HardwareState::NONE, 0);
+				}
+			}
+		}
+	}
+
+	// Finalize any matching textures in the loaded queue
+	UpdateBackgroundCache(true);
+
+	// Don't resume background cache, it will resume next tick anyways!
+	//if (iPaused) ResumeBackgroundCache();
 }
 
 
@@ -1505,13 +1618,21 @@ void VulkanRenderDevice::BeginFrame()
 	UploadLoadedTextures();
 }
 
-void VulkanRenderDevice::InitLightmap(int LMTextureSize, int LMTextureCount, TArray<uint16_t>& LMTextureData)
+void VulkanRenderDevice::InitLightmap(IVector2 LMTextureSize, int LMTextureCount, TArray<uint8_t>& LMTextureData, bool LMCompressed)
 {
 	if (LMTextureData.Size() > 0)
 	{
-		GetTextureManager()->SetLightmap(LMTextureSize, LMTextureCount, LMTextureData);
+		GetTextureManager()->SetLightmap(LMTextureSize, LMTextureCount, LMTextureData, LMCompressed);
 		LMTextureData.Reset(); // We no longer need this, release the memory
+
+		// Update the lightmap bindings
+		mDescriptorSetManager->UpdateFixedSet();
 	}
+}
+
+void VulkanRenderDevice::BlitLightmap(IHardwareTexture* lightmap, int lightmapIndex)
+{
+	GetTextureManager()->BlitLightmap(dynamic_cast<VkHardwareTexture*>(lightmap), lightmapIndex);
 }
 
 void VulkanRenderDevice::Draw2D()

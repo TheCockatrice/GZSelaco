@@ -398,6 +398,71 @@ bool OpenGLFrameBuffer::BackgroundLoadModel(FModel* model) {
 }
 
 
+
+// @Cockatrice - This will cancel any current queued instance of the specified texture
+// This will cancel ALL instances of the texture being loaded if there are more than one
+// This will cancel all layers of a material if it exists, but will not unload anything
+// Will potentially block until the current threads have completed loading, so use this with care!
+void OpenGLFrameBuffer::CancelBackgroundCache(FGameTexture* tex) {
+	if (!tex || !tex->isValid()) return;
+
+	bool iPaused = !BackgroundCachePaused();
+	if (iPaused) PauseBackgroundCache(true);
+
+	// Wait on the tex threads
+	for (auto& t : bgTransferThreads) {
+		t->waitForRun();
+	}
+
+	// Remove the texture from primary and secondary queues
+	// This probably needs a faster method than repeatedly dequeing
+	GlTexLoadIn in;
+	while (secondaryTexQueue.dequeueSearch(in, tex,
+		[](void* a, GlTexLoadIn& b)
+		{ return (FGameTexture*)a == b.gtex; })) {
+
+		if (in.tex != nullptr) {
+			in.tex->SetHardwareState(IHardwareTexture::HardwareState::NONE, 0);
+		}
+	}
+
+	while (primaryTexQueue.dequeueSearch(in, tex,
+		[](void* a, GlTexLoadIn& b)
+		{ return (FGameTexture*)a == b.gtex; })) {
+
+		if (in.tex != nullptr) {
+			in.tex->SetHardwareState(IHardwareTexture::HardwareState::NONE, 0);
+		}
+	}
+
+	// Search queued patches
+	QueuedPatch qp;
+	while (patchQueue.dequeueSearch(qp, tex,
+		[](void* a, QueuedPatch& b)
+		{ return (FGameTexture*)a == b.tex; })) {
+
+		// Check for a hardware texture and set state correctly
+		// There probably ISN'T a material or hardware textures yet, which is why this tex was in the queued patches to begin with!
+		FMaterial* mat = FMaterial::ValidateTexture(tex, qp.scaleFlags, false);
+		if (mat != nullptr) {
+			const int numLayers = mat->NumLayers();
+			for (int i = 0; i < numLayers; i++) {
+				MaterialLayerInfo* layer;
+				auto hwtex = static_cast<FHardwareTexture*>(mat->GetLayer(i, qp.translation.index(), &layer));
+				if (hwtex->GetState(i) != IHardwareTexture::HardwareState::READY) {
+					hwtex->SetHardwareState(IHardwareTexture::HardwareState::NONE, i);
+				}
+			}
+		}
+	}
+
+	// Finalize any matching textures in the loaded queue
+	UpdateBackgroundCache(true);
+
+	if (iPaused) ResumeBackgroundCache();
+}
+
+
 // @Cockatrice - Cache a texture material, intended for use outside of the main thread
 bool OpenGLFrameBuffer::BackgroundCacheTextureMaterial(FGameTexture* tex, FTranslationID translation, int scaleFlags, bool makeSPI) {
 	if (!tex || !tex->isValid() || tex->GetID().GetIndex() == 0) return false;
@@ -575,6 +640,8 @@ void OpenGLFrameBuffer::StopBackgroundCache() {
 
 
 void OpenGLFrameBuffer::FlushBackground() {
+	ResumeBackgroundCache();	// Force resume background cache, since it has to finish up!
+
 	int nq = primaryTexQueue.size() + secondaryTexQueue.size();
 	bool active = nq;
 
@@ -834,7 +901,7 @@ OpenGLFrameBuffer::~OpenGLFrameBuffer()
 // Initializes the GL renderer
 //
 //==========================================================================
-static bool glIsArc() {
+static const bool glIsArc() {
 	const char* vendor = (const char*)glGetString(GL_VENDOR);
 	const char* renderer = (const char*)glGetString(GL_RENDERER);
 	if (!vendor || !renderer) return false;
@@ -847,12 +914,10 @@ static bool glIsArc() {
 	if (v.IndexOf("intel") < 0)
 		return false;
 
-	// Removed to return all Intel cards
-	/*if (r.IndexOf("arc") >= 0)
+	if (r.IndexOf("arc") >= 0)
 		return true;
 
-	return false;*/
-	return true;
+	return false;
 }
 
 
@@ -1028,6 +1093,31 @@ void OpenGLFrameBuffer::RenderTextureView(FCanvasTexture* tex, std::function<voi
 
 //===========================================================================
 //
+// Lightmap slice rendering
+//
+//===========================================================================
+
+void OpenGLFrameBuffer::RenderLightmapSlice(int slice, std::function<void(IntRect&)> renderFunc)
+{
+	GLRenderer->StartOffscreen();
+
+	gl_RenderState.ClearLastMaterial();
+	glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GLRenderer->mLightMapID, 0, slice);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, 0);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, 0);
+
+	IntRect bounds;
+	bounds.left = bounds.top = 0;
+	bounds.width = GLRenderer->mLightMapWidth;
+	bounds.height = GLRenderer->mLightMapHeight;
+
+	renderFunc(bounds);
+
+	GLRenderer->EndOffscreen();
+}
+
+//===========================================================================
+//
 // 
 //
 //===========================================================================
@@ -1120,12 +1210,12 @@ void OpenGLFrameBuffer::PrecacheMaterial(FMaterial *mat, int translation)
 	MaterialLayerInfo* layer;
 	auto base = static_cast<FHardwareTexture*>(mat->GetLayer(0, translation, &layer));
 
-	if (base->BindOrCreate(layer->layerTexture, 0, CLAMP_NONE, translation, layer->scaleFlags))
+	if (base->BindOrCreate(layer->layerTexture, 0, CLAMP_NONE, translation, layer->scaleFlags, mat->sourcetex->GetNoMipmaps()))
 	{
 		for (int i = 1; i < numLayers; i++)
 		{
 			auto systex = static_cast<FHardwareTexture*>(mat->GetLayer(i, 0, &layer));
-			systex->BindOrCreate(layer->layerTexture, i, CLAMP_NONE, 0, layer->scaleFlags);
+			systex->BindOrCreate(layer->layerTexture, i, CLAMP_NONE, 0, layer->scaleFlags, mat->sourcetex->GetNoMipmaps());
 		}
 	}
 	// unbind everything. 
@@ -1153,7 +1243,7 @@ void OpenGLFrameBuffer::BlurScene(float amount, bool force)
 	GLRenderer->BlurScene(amount, force);
 }
 
-void OpenGLFrameBuffer::InitLightmap(int LMTextureSize, int LMTextureCount, TArray<uint16_t>& LMTextureData)
+void OpenGLFrameBuffer::InitLightmap(IVector2 LMTextureSize, int LMTextureCount, TArray<uint8_t>& LMTextureData, bool LMCompressed)
 {
 	if (LMTextureData.Size() > 0)
 	{
@@ -1165,12 +1255,14 @@ void OpenGLFrameBuffer::InitLightmap(int LMTextureSize, int LMTextureCount, TArr
 			glGenTextures(1, (GLuint*)&GLRenderer->mLightMapID);
 
 		glBindTexture(GL_TEXTURE_2D_ARRAY, GLRenderer->mLightMapID);
-		glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGB16F, LMTextureSize, LMTextureSize, LMTextureCount, 0, GL_RGB, GL_HALF_FLOAT, &LMTextureData[0]);
+		glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA, LMTextureSize.X, LMTextureSize.Y, LMTextureCount, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
 
 		glActiveTexture(activeTex);
+
+		GLRenderer->mLightMapWidth = LMTextureSize.X;
+		GLRenderer->mLightMapHeight = LMTextureSize.Y;
 
 		LMTextureData.Reset(); // We no longer need this, release the memory
 	}

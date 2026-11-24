@@ -350,6 +350,28 @@ public:
 		}
 	}
 
+	void pause(bool block = false) {
+		mPaused.store(true);
+
+		if (block) {
+			std::lock_guard<std::mutex> lock(mRunLock);
+		}
+	}
+
+	void resume() {
+		mPaused.store(false);
+	}
+
+	bool isPaused() {
+		return mPaused.load();
+	}
+
+	// Only useful when paused or stopped
+	// Waits until meaningful work is done
+	void waitForRun() {
+		std::lock_guard<std::mutex> lock(mRunLock);
+	}
+
 	bool isActive() {
 		return mRunning.load();//&& mActive.load();
 	}
@@ -388,13 +410,14 @@ protected:
 
 	std::atomic<bool> mActive{ true };
 	std::atomic<bool> mRunning{ false };
+	std::atomic<bool> mPaused{ false };
 	std::atomic<int> mStatTotalLoaded{ 0 };
 	std::atomic<double> mStatAvgTime{ 0 }, mStatMinTime{ 999999 }, mStatMaxTime{ 0 };
 
 	double mStatLoadTime = 0, mStatLoadCount = 0;
 
 	std::thread mThread;
-	std::mutex mWakeLock, mStatsLock;
+	std::mutex mWakeLock, mStatsLock, mPausedLock, mRunLock;
 	std::condition_variable mWake;
 
 	TSQueue<IP>* mInputQ = nullptr;
@@ -410,8 +433,14 @@ protected:
 
 			// Process the queue
 			while (true) {
+				// Wait for paused
+				while (mPaused.load()) {
+					std::this_thread::sleep_for(std::chrono::milliseconds(1));
+				}
+
 				if (mInputQ->size() > 0 || (mInputQSecondary != nullptr && mInputQSecondary->size() > 0)) {
 					mRunning.store(true);
+					mRunLock.lock();
 
 					cycle_t lTime;
 					lTime.Reset();
@@ -424,6 +453,7 @@ protected:
 						// Always load from secondary queue only if the primary queue has no items
 						if (mInputQSecondary == nullptr || !mInputQSecondary->dequeue(input)) {
 							cancelLoad();
+							mRunLock.unlock();
 							continue;
 						}
 					}
@@ -444,6 +474,8 @@ protected:
 					mStatMinTime = std::min(mStatMinTime.load(), lTime.TimeMS());
 					mStatMaxTime = std::max(mStatMaxTime.load(), lTime.TimeMS());
 					mStatTotalLoaded++;
+
+					mRunLock.unlock();
 				}
 				else {
 					break;

@@ -84,6 +84,7 @@ enum MaterialShaderIndex
 	SHADER_NoiseFuzz,
 	SHADER_SmoothNoiseFuzz,
 	SHADER_SoftwareFuzz,
+	SHADER_LightmapComposite,
 	FIRST_USER_SHADER
 };
 

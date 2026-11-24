@@ -40,8 +40,9 @@
 #include "v_font.h"
 #include "types.h"
 #include "utf8.h"
-
-
+#include "m_argv.h"
+#include <filesystem>
+#include "printf.h"
 
 FString FStringFormat(VM_ARGS, int offset)
 {
@@ -648,4 +649,128 @@ DEFINE_ACTION_FUNCTION_NATIVE(FStringStruct, GetNextCodePoint, StringNextCodePoi
 	return numret;
 }
 
+
+
+
+bool isFilePathInsideAppDir(const char *path, bool mustExist = false) {
+    try {
+        // Resolve app directory and parent path
+		std::string pathStr(path);
+        std::filesystem::path appDir 		= std::filesystem::canonical(progdir.GetChars());
+        std::filesystem::path parentDir 	= std::filesystem::canonical(((std::filesystem::path)pathStr).parent_path());
+
+		if (!std::filesystem::exists(parentDir)) {
+			return false;
+		}
+
+		if (!std::filesystem::is_directory(parentDir)) {
+			return false;
+		}
+
+		if (mustExist && !std::filesystem::exists(std::filesystem::canonical(pathStr))) {
+			return false;
+		}
+
+		// Ensure parentDir starts with appDir
+        auto appDirIterator = appDir.begin();
+        auto parentIterator = parentDir.begin();
+
+        for (; appDirIterator != appDir.end(); ++appDirIterator, ++parentIterator) {
+            if (parentIterator == parentDir.end() || *appDirIterator != *parentIterator) {
+                return false;
+			}
+        }
+
+        return true;
+    } catch (const std::filesystem::filesystem_error &err) {
+        return false;
+    }
+}
+
+
+// @Cockatrice - The other chicken would hate me for making this exist, but it's necessary to allow CockUI to write interface files
+// And the in-game level editors to write files
+// Restricting this to only writing from string, and only writing inside the game directory and its subdirectories
+static int StringWriteOut(FString *self, const FString *path) {
+	if(!Args->CheckParm("-UNSAFE_ALLOW_FILESYSTEM_ACCESS")) {
+		ThrowAbortException(X_OTHER, "String.WriteOut is unavailable unless the game is launched with -UNSAFE_ALLOW_FILESYSTEM_ACCESS");
+	}
+
+	if(path == nullptr || path->IsEmpty()) {
+		ThrowAbortException(X_OTHER, "String.WriteOut requires a valid file path.");
+	}
+
+	FStringf fullPath("%s/%s", progdir.GetChars(), path->GetChars());
+
+	// Restrict the file path to the application directory and its subdirectories
+	if(!isFilePathInsideAppDir(fullPath.GetChars())) {
+		// Silently fail for security reasons
+		Printf(TEXTCOLOR_RED"Failed to write to %s\n", std::filesystem::weakly_canonical(fullPath.GetChars()).c_str());
+		return false;
+	}
+
+	// Write the text file
+	FILE *fl = fopen(fullPath.GetChars(), "wb");
+	if(fl == nullptr) {
+		return false;
+	}
+	size_t written = fwrite(self->GetChars(), sizeof(char), self->Len(), fl);
+	fclose(fl);
+
+	Printf(TEXTCOLOR_CYAN"Wrote %zu bytes to %s\n", written, std::filesystem::weakly_canonical(fullPath.GetChars()).c_str());
+
+	return written == self->Len();
+}
+
+
+DEFINE_ACTION_FUNCTION_NATIVE(FStringStruct, WriteOut, StringWriteOut) {
+	PARAM_SELF_STRUCT_PROLOGUE(FString);
+	PARAM_STRING(path);
+	ACTION_RETURN_BOOL((bool)StringWriteOut(self, &path));
+}
+
+
+static int StringReadIn(FString* self, const FString* path) {
+	if (!Args->CheckParm("-UNSAFE_ALLOW_FILESYSTEM_ACCESS")) {
+		ThrowAbortException(X_OTHER, "String.ReadIn is unavailable unless the game is launched with -UNSAFE_ALLOW_FILESYSTEM_ACCESS");
+	}
+
+	if (path == nullptr || path->IsEmpty()) {
+		ThrowAbortException(X_OTHER, "String.ReadIn requires a valid file path.");
+	}
+
+	FStringf fullPath("%s/%s", progdir.GetChars(), path->GetChars());
+
+	// Restrict the file path to the application directory and its subdirectories
+	if (!isFilePathInsideAppDir(fullPath.GetChars(), true)) {
+		// Silently fail for security reasons
+		Printf(TEXTCOLOR_RED"Failed to read from %s\n", std::filesystem::weakly_canonical(fullPath.GetChars()).c_str());
+		return false;
+	}
+
+	// Read the text file
+	FILE* fl = fopen(fullPath.GetChars(), "rb");
+	if (fl == nullptr) {
+		return false;
+	}
+	size_t size = 0;
+	fseek(fl, 0, SEEK_END);
+	size = ftell(fl);
+	fseek(fl, 0, SEEK_SET);
+
+	char *buff = self->LockNewBuffer(size);
+	size_t readSize = fread(buff, 1, size, fl);
+	fclose(fl);
+
+	Printf(TEXTCOLOR_CYAN"Read %zu bytes from %s\n", readSize, std::filesystem::weakly_canonical(fullPath.GetChars()).c_str());
+
+	return true;
+}
+
+
+DEFINE_ACTION_FUNCTION_NATIVE(FStringStruct, ReadIn, StringReadIn) {
+	PARAM_SELF_STRUCT_PROLOGUE(FString);
+	PARAM_STRING(path);
+	ACTION_RETURN_BOOL((bool)StringReadIn(self, &path));
+}
 

@@ -185,6 +185,21 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_PlaySound, A_PlaySound)
 	return 0;
 }
 
+DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_PlaySoundEffect, A_PlaySoundEffect)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	PARAM_INT(soundid);
+	PARAM_STRING(effect);
+	PARAM_INT(channel);
+	PARAM_FLOAT(volume);
+	PARAM_BOOL(looping);
+	PARAM_FLOAT(attenuation);
+	PARAM_BOOL(local);
+	PARAM_FLOAT(pitch);
+	ACTION_RETURN_INT(A_PlaySoundEffect(self, soundid, effect, channel, volume, looping, attenuation, local, pitch));
+	return 0;
+}
+
 DEFINE_ACTION_FUNCTION_NATIVE(AActor, StartSound, StartSound)
 {
 	PARAM_SELF_PROLOGUE(AActor);
@@ -214,6 +229,20 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_StartSound, A_StartSound)
 	return 0;
 }
 
+DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_StartSoundEffect, A_StartSoundEffect)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	PARAM_INT(soundid);
+	PARAM_STRING(effect);
+	PARAM_INT(channel);
+	PARAM_INT(flags);
+	PARAM_FLOAT(volume);
+	PARAM_FLOAT(attenuation);
+	PARAM_FLOAT(pitch);
+	PARAM_FLOAT(startTime);
+	ACTION_RETURN_INT(A_StartSoundEffect(self, soundid, effect, channel, flags, volume, attenuation, pitch, startTime));
+	return 0;
+}
 
 void A_StartSoundIfNotSame(AActor *self, int soundid, int checksoundid, int channel, int flags, double volume, double attenuation, double pitch, double startTime)
 {
@@ -1747,6 +1776,19 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, CopyBloodColor, CopyBloodColor)
 	return 0;
 }
 
+static void A_CopyHeavyProbeTo(AActor* self, AActor* other)
+{
+	other->HeavyProbeIndex = self->HeavyProbeIndex;
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_CopyHeavyProbeTo, A_CopyHeavyProbeTo)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	PARAM_OBJECT(other, AActor);
+	A_CopyHeavyProbeTo(self, other);
+	return 0;
+}
+
 //=====================================================================================
 //
 // Inventory exports
@@ -2021,6 +2063,7 @@ DEFINE_FIELD(AActor, strafecount)
 DEFINE_FIELD(AActor, target)
 DEFINE_FIELD(AActor, master)
 DEFINE_FIELD(AActor, tracer)
+DEFINE_FIELD(AActor, damagesource)
 DEFINE_FIELD(AActor, LastHeard)
 DEFINE_FIELD(AActor, lastenemy)
 DEFINE_FIELD(AActor, LastLookActor)
@@ -2051,6 +2094,7 @@ DEFINE_FIELD(AActor, DamageType)
 DEFINE_FIELD(AActor, DamageTypeReceived)
 DEFINE_FIELD(AActor, FloatBobPhase)
 DEFINE_FIELD(AActor, FloatBobStrength)
+DEFINE_FIELD(AActor, FloatBobFactor)
 DEFINE_FIELD(AActor, RipperLevel)
 DEFINE_FIELD(AActor, RipLevelMin)
 DEFINE_FIELD(AActor, RipLevelMax)
