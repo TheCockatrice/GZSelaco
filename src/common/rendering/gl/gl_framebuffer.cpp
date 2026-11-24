@@ -1210,12 +1210,12 @@ void OpenGLFrameBuffer::PrecacheMaterial(FMaterial *mat, int translation)
 	MaterialLayerInfo* layer;
 	auto base = static_cast<FHardwareTexture*>(mat->GetLayer(0, translation, &layer));
 
-	if (base->BindOrCreate(layer->layerTexture, 0, CLAMP_NONE, translation, layer->scaleFlags))
+	if (base->BindOrCreate(layer->layerTexture, 0, CLAMP_NONE, translation, layer->scaleFlags, mat->sourcetex->GetNoMipmaps()))
 	{
 		for (int i = 1; i < numLayers; i++)
 		{
 			auto systex = static_cast<FHardwareTexture*>(mat->GetLayer(i, 0, &layer));
-			systex->BindOrCreate(layer->layerTexture, i, CLAMP_NONE, 0, layer->scaleFlags);
+			systex->BindOrCreate(layer->layerTexture, i, CLAMP_NONE, 0, layer->scaleFlags, mat->sourcetex->GetNoMipmaps());
 		}
 	}
 	// unbind everything. 

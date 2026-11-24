@@ -349,7 +349,7 @@ void FGLRenderState::ApplyMaterial(FMaterial *mat, int clampmode, int translatio
 	MaterialLayerInfo* layer;
 	auto base = static_cast<FHardwareTexture*>(mat->GetLayer(0, translation, &layer));
 
-	if (base->BindOrCreate(tex->GetTexture(), 0, clampmode, translation, layer->scaleFlags))
+	if (base->BindOrCreate(tex->GetTexture(), 0, clampmode, translation, layer->scaleFlags, tex->GetNoMipmaps()))
 	{
 		if (!(layer->scaleFlags & CTF_Indexed))
 		{
@@ -357,7 +357,7 @@ void FGLRenderState::ApplyMaterial(FMaterial *mat, int clampmode, int translatio
 			{
 				auto systex = static_cast<FHardwareTexture*>(mat->GetLayer(i, 0, &layer));
 				// fixme: Upscale flags must be disabled for certain layers.
-				systex->BindOrCreate(layer->layerTexture, i, clampmode, 0, layer->scaleFlags);
+				systex->BindOrCreate(layer->layerTexture, i, clampmode, 0, layer->scaleFlags, tex->GetNoMipmaps());
 				maxbound = i;
 			}
 		}
